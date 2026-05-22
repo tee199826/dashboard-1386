@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create *)",
+      "Bash(mkdir -p /tmp/vite-scaffold)",
+      "Read(//tmp/**)",
+      "Bash(npm install *)",
+      "Bash(timeout 15 npm run dev)",
+      "Bash(npm run *)",
+      "Bash(node *)",
+      "WebFetch(domain:nakhon-risk.netlify.app)",
+      "Bash(Remove-Item *)",
+      "Bash(npx vite *)",
+      "Bash(curl -L -o \"C:/Users/Acer/dashboard-1386/public/bangkok-districts.geojson\" \"https://raw.githubusercontent.com/longwosion/geojson-thailand/master/json/amphoes/10.geojson\")",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(Get-Content *)",
+      "Bash(curl -L -o \"C:/Users/Acer/dashboard-1386/public/bangkok-districts.geojson\" \"https://raw.githubusercontent.com/cvitfolio/thailand_geojson/main/bangkok_district.geojson\")",
+      "Bash(curl -L -o \"C:/Users/Acer/dashboard-1386/public/bangkok-districts.geojson\" \"https://raw.githubusercontent.com/pcrete/gsvloader-demo/master/geojson/Bangkok.json\")",
+      "Bash(curl -L -o \"C:/Users/Acer/dashboard-1386/public/bangkok-districts.geojson\" \"https://raw.githubusercontent.com/apisit/thailand.json/master/thailand.json\")",
+      "Bash(curl -L -o \"C:/Users/Acer/dashboard-1386/public/bangkok-districts.geojson\" \"https://raw.githubusercontent.com/Leaflet/Leaflet/main/docs/examples/geojson/sample-geojson.js\")",
+      "Bash(curl -L --max-time 15 -o \"C:/Users/Acer/dashboard-1386/public/bangkok-districts.geojson\" \"https://raw.githubusercontent.com/tanapolbig/bangkok-geojson/main/bangkok_district.geojson\")",
+      "Bash(curl -L --max-time 20 -o \"C:/Users/Acer/dashboard-1386/public/bangkok-districts.geojson\" \"https://raw.githubusercontent.com/momik/bangkok-map/master/geojson/bangkok_amphoe.geojson\")",
+      "Bash(curl -L --max-time 20 -o \"C:/Users/Acer/dashboard-1386/public/bangkok-districts.geojson\" \"https://raw.githubusercontent.com/bact/thailand-geojson/master/json/amphoe/10.geojson\")",
+      "Bash(curl -L --max-time 20 -o \"C:/Users/Acer/dashboard-1386/public/bangkok-districts.geojson\" \"https://raw.githubusercontent.com/Mango0x45/thailand/main/10.geojson\")",
+      "Bash(curl -L --max-time 30 -o \"C:/Users/Acer/dashboard-1386/public/bangkok-districts.geojson\" \"https://raw.githubusercontent.com/apisit/thailand.json/master/amphoe_complete.json\")",
+      "Bash(curl -L --max-time 30 \"https://api.github.com/repos/apisit/thailand.json/contents/simplified\")",
+      "Bash(python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(x['name'], x['download_url']\\) for x in data]\")",
+      "Bash(curl -L --max-time 30 -o \"C:/Users/Acer/dashboard-1386/public/bangkok-districts.geojson\" \"https://raw.githubusercontent.com/envisionit/bangkok-districts-geojson/master/bangkok_districts.geojson\")",
+      "Bash(curl -L --max-time 30 -o \"C:/Users/Acer/dashboard-1386/public/bangkok-districts.geojson\" \"https://raw.githubusercontent.com/Flipped-over/Bangkok-Open-Data/master/Bangkok_Districts.geojson\")",
+      "Bash(npm list *)",
+      "Bash(Get-ChildItem src/pages/)",
+      "Bash(Sort-Object LastWriteTime -Descending)",
+      "Bash(Select-Object Name, LastWriteTime)",
+      "PowerShell(Get-Item *)",
+      "PowerShell($lines = Get-Content \"C:\\\\Users\\\\Acer\\\\.claude\\\\projects\\\\C--Users-Acer-dashboard-1386\\\\829dd2ab-80a8-415f-9209-0473fe59ecc1.jsonl\" -Tail 30; $lines | ForEach-Object { $obj = $_ | ConvertFrom-Json; if \\($obj.type -eq 'user' -or $obj.type -eq 'assistant'\\) { Write-Output \"[$\\($obj.type\\)]: $\\($_.Substring\\(0, [Math]::Min\\(200, $_.Length\\)\\)\\)\" } } 2>&1 | Select-Object -Last 30)",
+      "PowerShell($lines = Get-Content \"C:\\\\Users\\\\Acer\\\\.claude\\\\projects\\\\C--Users-Acer-dashboard-1386\\\\829dd2ab-80a8-415f-9209-0473fe59ecc1.jsonl\"; $userMsgs = @\\(\\); foreach \\($line in $lines\\) { try { $obj = $line | ConvertFrom-Json; if \\($obj.message.role -eq 'user'\\) { foreach \\($c in $obj.message.content\\) { if \\($c.type -eq 'text' -and $c.text.Length -gt 5\\) { $userMsgs += $c.text } } } } catch {} }; $userMsgs[-10..-1] | ForEach-Object { Write-Output \"USER: $_\"; Write-Output \"---\" })",
+      "PowerShell($lines = Get-Content \"C:\\\\Users\\\\Acer\\\\.claude\\\\projects\\\\C--Users-Acer-dashboard-1386\\\\829dd2ab-80a8-415f-9209-0473fe59ecc1.jsonl\"; $msgs = @\\(\\); foreach \\($line in $lines\\) { try { $obj = $line | ConvertFrom-Json; foreach \\($c in $obj.message.content\\) { if \\($c.type -eq 'text' -and $c.text.Length -gt 10\\) { $msgs += [pscustomobject]@{role=$obj.message.role; text=$c.text.Substring\\(0,[Math]::Min\\(300,$c.text.Length\\)\\)} } } } catch {} }; $msgs[-15..-1] | ForEach-Object { Write-Output \"$\\($_.role\\): $\\($_.text\\)\"; Write-Output \"---\" })",
+      "PowerShell($lines = Get-Content \"C:\\\\Users\\\\Acer\\\\.claude\\\\projects\\\\C--Users-Acer-dashboard-1386\\\\829dd2ab-80a8-415f-9209-0473fe59ecc1.jsonl\"; $msgs = @\\(\\); foreach \\($line in $lines\\) { try { $obj = $line | ConvertFrom-Json; $role = $obj.message.role; foreach \\($c in $obj.message.content\\) { if \\($c.type -eq 'text' -and $c.text.Length -gt 5\\) { $msgs += [pscustomobject]@{role=$role; text=$c.text} } } } catch {} }; Write-Output \"Total text messages: $\\($msgs.Count\\)\"; $msgs | Select-Object -Last 5 | ForEach-Object { Write-Output \"[$\\($_.role\\)]: $\\($_.text.Substring\\(0,[Math]::Min\\(400,$_.text.Length\\)\\)\\)\"; Write-Output \"---\" })",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\Acer\\\\dashboard-1386\"; $proc = Start-Process -FilePath \"cmd.exe\" -ArgumentList \"/c npm run dev\" -WorkingDirectory \"C:\\\\Users\\\\Acer\\\\dashboard-1386\" -WindowStyle Minimized -PassThru; Write-Output \"PID: $\\($proc.Id\\)\"; Start-Sleep 5; Invoke-WebRequest -Uri \"http://localhost:5173\" -UseBasicParsing -TimeoutSec 3 | Select-Object StatusCode)",
+      "PowerShell(Start-Sleep 5; try { $resp = Invoke-WebRequest -Uri \"http://localhost:5173\" -UseBasicParsing -TimeoutSec 5; Write-Output \"Status: $\\($resp.StatusCode\\)\" } catch { Write-Output \"Error: $_\" })"
+    ]
+  }
+}
