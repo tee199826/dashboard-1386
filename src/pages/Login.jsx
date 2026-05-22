@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate, Navigate } from 'react-router-dom'
 import { Lock, Mail, Shield, AlertCircle, Loader2 } from 'lucide-react'
+import logoOncb from '../assets/logo-oncb.png'
 
 const BG_IMAGE_URL =
   'https://images.unsplash.com/photo-1557597774-9d273605dfa9?auto=format&fit=crop&w=1920&q=80'
@@ -165,7 +166,7 @@ export default function Login() {
               }}
             >
               <img
-                src="/src/assets/logo-oncb.png"
+                src={logoOncb}
                 alt="ONCB Logo"
                 style={{ width: 52, height: 52, objectFit: 'contain' }}
               />
