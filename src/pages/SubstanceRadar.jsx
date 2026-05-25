@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip as MapTooltip, GeoJSON, useMap, Pane, Marker } from 'react-leaflet'
 import { supabase } from '../lib/supabase'
 import { MapPin, ArrowLeft, Search, Menu } from 'lucide-react'
@@ -327,25 +328,47 @@ export default function SubstanceRadar() {
   const showHeatmap = viewMode === 'heatmap' || (viewMode === 'district' && groupOverlay === 'heatmap')
 
   return (
-    <div className="flex h-screen" style={{ fontFamily: 'Sarabun, sans-serif' }}>
+    <div className="flex h-screen" style={{ height: '100dvh', fontFamily: 'Sarabun, sans-serif' }}>
       <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
 
-      {/* Mobile overlay */}
-      {sidebarOpen && (
+      {/* Mobile overlay — portal to body */}
+      {sidebarOpen && createPortal(
         <div
           onClick={() => setSidebarOpen(false)}
-          className="lg:hidden fixed inset-0 bg-black/40 z-50" />
+          className="lg:hidden"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9990 }}
+        />,
+        document.body
       )}
 
-      {/* Hamburger button — mobile only */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="lg:hidden fixed bottom-8 left-4 z-[1001] w-12 h-12 bg-blue-600 text-white rounded-full shadow-xl flex items-center justify-center">
-        <Menu size={22} />
-      </button>
+      {/* Hamburger button — portal to body (bypasses Leaflet touch interception) */}
+      {createPortal(
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(v => !v)}
+          aria-label="เปิดเมนู"
+          className="lg:hidden flex items-center justify-center bg-blue-600 text-white rounded-full shadow-xl"
+          style={{
+            position: 'fixed',
+            left: '16px',
+            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
+            width: '52px',
+            height: '52px',
+            zIndex: 9999,
+            pointerEvents: 'auto',
+            touchAction: 'manipulation',
+            WebkitTapHighlightColor: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          <Menu size={24} />
+        </button>,
+        document.body
+      )}
 
       {/* Sidebar */}
-      <div className={`fixed lg:static inset-y-0 left-0 z-40 w-80 bg-white border-r border-slate-200 overflow-y-auto flex-shrink-0 flex flex-col transform transition-transform duration-300 ${
+      <div className={`fixed lg:static inset-y-0 left-0 z-[9995] w-80 bg-white border-r border-slate-200 overflow-y-auto flex-shrink-0 flex flex-col transform transition-transform duration-300 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       }`}>
         <div className="bg-slate-800 border-b-2 border-blue-600 px-5 py-4 flex-shrink-0">
@@ -386,7 +409,7 @@ export default function SubstanceRadar() {
                       {res.sub && <div className="text-xs text-slate-500">{res.sub}</div>}
                     </div>
                     <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                      {res.count} จุด
+                      {res.count} เรื่อง
                     </span>
                   </div>
                 </button>
@@ -633,8 +656,8 @@ export default function SubstanceRadar() {
               <p className="text-xs text-slate-400">
                 {viewMode === 'district'
                   ? (groupFilter === 'all' ? 'แสดงทั้ง 6 กลุ่ม · 50 เขต' : `${DISTRICT_GROUPS[groupFilter]?.emoji} ${groupFilter} · ${DISTRICT_GROUPS[groupFilter]?.count} เขต`)
-                  : viewMode === 'point' ? `Point Map · ${points.length.toLocaleString()} จุด`
-                  : `Heat Map · ${points.length.toLocaleString()} จุด`
+                  : viewMode === 'point' ? `Point Map · ${points.length.toLocaleString()} เรื่อง`
+                  : `Heat Map · ${points.length.toLocaleString()} เรื่อง`
                 }
               </p>
             </div>
@@ -755,7 +778,7 @@ export default function SubstanceRadar() {
                             </div>
                             <div style="display:flex;justify-content:space-between;padding:2px 0">
                               <span style="color:#64748b">เรื่องยาเสพติด</span>
-                              <span style="font-weight:700;color:#dc2626">${stat.total} จุด</span>
+                              <span style="font-weight:700;color:#dc2626">${stat.total} เรื่อง</span>
                             </div>
                           </div>
                           <div style="border-top:1px solid #e2e8f0;padding-top:6px">
@@ -797,7 +820,7 @@ export default function SubstanceRadar() {
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
                       <span style={{ color: '#64748b' }}>พบทั้งหมด</span>
-                      <span style={{ fontWeight: 700, color: '#dc2626' }}>{searchPopup.count} จุด</span>
+                      <span style={{ fontWeight: 700, color: '#dc2626' }}>{searchPopup.count} เรื่อง</span>
                     </div>
                   </div>
                   <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '6px' }}>
