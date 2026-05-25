@@ -4,6 +4,7 @@ import { useData } from '../context/DataContext'
 import { supabase } from '../lib/supabase'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts'
 import { AlertCircle, CheckCircle2, Search as SearchIcon, XCircle, FileQuestion, X, Upload, FileSpreadsheet, AlertTriangle } from 'lucide-react'
+import Toast from '../components/Toast'
 import * as XLSX from 'xlsx'
 
 const CHANNELS = ['อินเตอร์เน็ต', 'สายด่วน 1386', 'ทางรัฐ', 'อื่นๆ']
@@ -53,6 +54,8 @@ export default function Operations() {
   const [filterMonth, setFilterMonth] = useState('all')
   const [showUpload, setShowUpload] = useState(false)
   const [showSourceInfo, setShowSourceInfo] = useState(false)
+  const [toast, setToast] = useState(null)
+  const showToast = (message, type = 'success') => setToast({ message, type })
 
   const loadRpt = async () => {
     setRptLoading(true)
@@ -167,13 +170,13 @@ export default function Operations() {
   const donutTotal = donutData.reduce((s, d) => s + d.value, 0)
 
   return (
-    <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-6" style={{ fontFamily: 'Sarabun, sans-serif' }}>
+    <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6" style={{ fontFamily: 'Sarabun, sans-serif' }}>
       <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
 
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">ผลการดำเนินงานจำแนกตามแหล่งข่าว</h1>
+          <h1 className="text-xl lg:text-2xl font-bold text-slate-800">ผลการดำเนินงานจำแนกตามแหล่งข่าว</h1>
           <p className="text-sm text-slate-500 mt-1">
             สรุปผลการตรวจสอบเรื่องร้องเรียน
             {rptData?.period && <span className="ml-2 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">{rptData.period}</span>}
@@ -340,7 +343,8 @@ export default function Operations() {
             </div>
           </div>
           <div className="p-6">
-            <table className="w-full">
+            <div className="overflow-x-auto">
+            <table className="min-w-[480px] w-full">
               <thead className="bg-slate-50 text-xs text-slate-700 uppercase">
                 <tr>
                   <th className="text-left px-4 py-3 font-bold">หมวด</th>
@@ -390,6 +394,7 @@ export default function Operations() {
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
         </div>
 
@@ -405,7 +410,8 @@ export default function Operations() {
             </div>
           </div>
           <div className="p-6">
-            <table className="w-full">
+            <div className="overflow-x-auto">
+            <table className="min-w-[480px] w-full">
               <thead className="bg-slate-50 text-xs text-slate-700 uppercase">
                 <tr>
                   <th className="text-left px-4 py-3 font-bold">หมวด</th>
@@ -456,11 +462,13 @@ export default function Operations() {
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       </div>
 
-      {showUpload && <UploadRptModal onClose={() => setShowUpload(false)} onSaved={() => { loadRpt(); setShowUpload(false) }} />}
+      {showUpload && <UploadRptModal onClose={() => setShowUpload(false)} onSaved={() => { loadRpt(); setShowUpload(false) }} showToast={showToast} />}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* Source Info Modal */}
       {showSourceInfo && (
@@ -647,12 +655,44 @@ function Modal({ children, onClose, title }) {
   )
 }
 
-function UploadRptModal({ onClose, onSaved }) {
+function ConfirmModal({ title, message, detail, onConfirm, onCancel, confirmLabel = 'ยืนยัน', danger = false }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className={`px-6 py-4 border-b ${danger ? 'bg-rose-50 border-rose-100' : 'bg-amber-50 border-amber-100'}`}>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{danger ? '⚠️' : '📋'}</span>
+            <h3 className={`font-bold text-base ${danger ? 'text-rose-800' : 'text-amber-800'}`}>{title}</h3>
+          </div>
+        </div>
+        <div className="px-6 py-5">
+          <p className="text-slate-700 text-sm leading-relaxed">{message}</p>
+          {detail && <p className="text-xs text-slate-500 mt-2 leading-relaxed">{detail}</p>}
+        </div>
+        <div className="flex gap-3 px-6 pb-6">
+          <button onClick={onCancel}
+            className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 text-sm font-medium transition">
+            ยกเลิก
+          </button>
+          <button onClick={onConfirm}
+            className={`flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-semibold transition ${
+              danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700'
+            }`}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function UploadRptModal({ onClose, onSaved, showToast }) {
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const handleFile = async (f) => {
     if (!f) return
@@ -709,7 +749,6 @@ function UploadRptModal({ onClose, onSaved }) {
 
   const handleUpload = async () => {
     if (!preview) return
-    if (!confirm('แทนที่ข้อมูล RPT_114 ปี ' + preview.year + ' ทั้งหมด?')) return
     setUploading(true)
     try {
       await supabase.from('operations_summary').delete().eq('channel', 'รวมทุกช่องทาง').eq('year', preview.year)
@@ -730,10 +769,10 @@ function UploadRptModal({ onClose, onSaved }) {
       ]
       const { error } = await supabase.from('operations_summary').insert(rows)
       if (error) throw error
-      alert('นำเข้าสำเร็จ! รวม ' + t.total + ' รายการ')
+      showToast?.('นำเข้า RPT_114 สำเร็จ รวม ' + t.total.toLocaleString() + ' รายการ')
       onSaved()
     } catch (err) {
-      alert('ไม่สำเร็จ: ' + err.message)
+      showToast?.('นำเข้าไม่สำเร็จ: ' + err.message, 'error')
       setUploading(false)
     }
   }
@@ -797,10 +836,21 @@ function UploadRptModal({ onClose, onSaved }) {
             </div>
             <div className="flex gap-3 justify-end">
               <button onClick={() => { setPreview(null); setFile(null) }} className="px-4 py-2 border rounded-lg">เลือกไฟล์ใหม่</button>
-              <button onClick={handleUpload} disabled={uploading} className="px-6 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50">
+              <button onClick={() => setConfirmOpen(true)} disabled={uploading} className="px-6 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50">
                 {uploading ? 'กำลังนำเข้า...' : 'ยืนยันนำเข้า'}
               </button>
             </div>
+            {confirmOpen && (
+              <ConfirmModal
+                title="ยืนยันการนำเข้า RPT_114"
+                message={`ต้องการแทนที่ข้อมูล RPT_114 ปี พ.ศ. ${preview.year} ทั้งหมดใช่หรือไม่?`}
+                detail={`ช่วงเวลา: ${preview.period} · รวม ${preview.totals.total.toLocaleString()} เรื่อง`}
+                onConfirm={() => { setConfirmOpen(false); handleUpload() }}
+                onCancel={() => setConfirmOpen(false)}
+                confirmLabel="นำเข้าข้อมูล"
+                danger={true}
+              />
+            )}
           </>
         )}
       </div>

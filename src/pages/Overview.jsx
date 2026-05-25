@@ -300,12 +300,12 @@ export default function Overview() {
   ]
 
   return (
-    <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-6">
+    <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6">
       <style>{`@keyframes pie-tip-in{from{opacity:0;transform:translateY(8px) scale(0.95)}to{opacity:1;transform:translateY(0) scale(1)}}`}</style>
       {/* Page Header */}
       <div>
         <div className="flex items-center gap-2 flex-wrap">
-          <h1 className="text-2xl font-bold text-slate-800">ภาพรวม</h1>
+          <h1 className="text-xl lg:text-2xl font-bold text-slate-800">ภาพรวม</h1>
           <button
             onClick={() => setShowSourceInfo(true)}
             className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-full text-xs font-medium text-blue-700 flex items-center gap-1">

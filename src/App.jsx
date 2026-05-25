@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { DataProvider } from './context/DataContext'
 import { AuthProvider } from './context/AuthContext'
@@ -12,13 +13,25 @@ import Operations from './pages/Operations'
 import PublicSidebar from './components/PublicSidebar'
 import Header from './components/Header'
 import SubstanceRadar from './pages/SubstanceRadar'
+import { Menu } from 'lucide-react'
 
 function MainLayout({ children }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Header />
-      <div className="flex flex-1">
-        <PublicSidebar />
+      <div className="flex flex-1 relative">
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="lg:hidden fixed top-3 left-3 z-50 w-10 h-10 bg-white rounded-lg shadow-md flex items-center justify-center">
+          <Menu size={20} />
+        </button>
+        {sidebarOpen && (
+          <div
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden fixed inset-0 bg-black/40 z-30" />
+        )}
+        <PublicSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
         <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
       </div>
     </div>

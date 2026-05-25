@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { UserPlus, Users as UsersIcon } from 'lucide-react'
+import { UserPlus, Users as UsersIcon, X } from 'lucide-react'
+import Toast from '../components/Toast'
 
 export default function UserManagement() {
   const [users, setUsers] = useState([])
   const [showAdd, setShowAdd] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [toast, setToast] = useState(null)
+  const showToast = (message, type = 'success') => setToast({ message, type })
 
   const load = async () => {
     setLoading(true)
@@ -36,7 +39,8 @@ export default function UserManagement() {
         {loading ? (
           <div className="p-8 text-center text-slate-500">กำลังโหลด...</div>
         ) : (
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="min-w-[480px] w-full">
             <thead className="bg-slate-50 text-xs text-slate-600 uppercase">
               <tr>
                 <th className="text-left px-5 py-3 font-semibold">อีเมล</th>
@@ -64,6 +68,7 @@ export default function UserManagement() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -71,22 +76,55 @@ export default function UserManagement() {
         <AddUserModal
           onClose={() => setShowAdd(false)}
           onAdded={() => { load(); setShowAdd(false) }}
+          showToast={showToast}
         />
       )}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   )
 }
 
-function AddUserModal({ onClose, onAdded }) {
+function ConfirmModal({ title, message, detail, onConfirm, onCancel, confirmLabel = 'ยืนยัน', danger = false }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className={`px-6 py-4 border-b ${danger ? 'bg-rose-50 border-rose-100' : 'bg-amber-50 border-amber-100'}`}>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{danger ? '🗑️' : '⚠️'}</span>
+            <h3 className={`font-bold text-base ${danger ? 'text-rose-800' : 'text-amber-800'}`}>{title}</h3>
+          </div>
+        </div>
+        <div className="px-6 py-5">
+          <p className="text-slate-700 text-sm leading-relaxed">{message}</p>
+          {detail && <p className="text-xs text-slate-500 mt-2 leading-relaxed">{detail}</p>}
+        </div>
+        <div className="flex gap-3 px-6 pb-6">
+          <button onClick={onCancel}
+            className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 text-sm font-medium transition">
+            ยกเลิก
+          </button>
+          <button onClick={onConfirm}
+            className={`flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-semibold transition ${
+              danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700'
+            }`}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AddUserModal({ onClose, onAdded, showToast }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [role, setRole] = useState('user')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const doSubmit = async () => {
     setError('')
     setBusy(true)
     try {
@@ -95,6 +133,7 @@ function AddUserModal({ onClose, onAdded }) {
         options: { data: { full_name: fullName, role } },
       })
       if (error) throw error
+      showToast?.(`เพิ่มผู้ใช้ "${email}" สำเร็จ`)
       onAdded()
     } catch (err) {
       setError(err.message)
@@ -102,10 +141,18 @@ function AddUserModal({ onClose, onAdded }) {
     }
   }
 
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    setConfirmOpen(true)
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-slate-200 font-bold text-slate-800">เพิ่มผู้ใช้ใหม่</div>
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <span className="font-bold text-slate-800">เพิ่มผู้ใช้ใหม่</span>
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-lg"><X size={18} /></button>
+        </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">อีเมล</label>
@@ -141,6 +188,16 @@ function AddUserModal({ onClose, onAdded }) {
           </div>
         </form>
       </div>
+      {confirmOpen && (
+        <ConfirmModal
+          title="ยืนยันการสร้างบัญชีผู้ใช้"
+          message={`ต้องการสร้างบัญชีสำหรับ "${email}" ใช่หรือไม่?`}
+          detail={`ชื่อ: ${fullName || '-'} · สิทธิ์: ${role === 'admin' ? '👑 Admin' : '👤 User'}`}
+          onConfirm={() => { setConfirmOpen(false); doSubmit() }}
+          onCancel={() => setConfirmOpen(false)}
+          confirmLabel="สร้างบัญชี"
+        />
+      )}
     </div>
   )
 }

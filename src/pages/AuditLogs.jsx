@@ -49,7 +49,8 @@ export default function AuditLogs() {
         ) : logs.length === 0 ? (
           <div className="p-12 text-center text-slate-500">ยังไม่มีบันทึก</div>
         ) : (
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="min-w-[600px] w-full">
             <thead className="bg-slate-50 text-xs text-slate-600 uppercase">
               <tr>
                 <th className="text-left px-5 py-3 font-semibold">เวลา</th>
@@ -80,6 +81,7 @@ export default function AuditLogs() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

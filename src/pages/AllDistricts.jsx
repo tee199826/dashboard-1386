@@ -17,7 +17,7 @@ export default function AllDistricts() {
   }, [districts, search])
 
   return (
-    <div className="p-6 md:p-8 max-w-[1400px] mx-auto">
+    <div className="p-4 md:p-6 lg:p-8 max-w-[1400px] mx-auto">
       <button
         onClick={() => navigate('/overview')}
         className="flex items-center gap-2 text-blue-600 hover:text-blue-700 mb-4 text-sm font-medium"

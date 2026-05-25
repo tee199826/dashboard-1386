@@ -4,6 +4,7 @@ import { createComplaint, updateComplaint, deleteComplaint, bulkInsertComplaints
 import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Search, Filter, Plus, Download, Eye, Pencil, Trash2, X, ChevronLeft, ChevronRight, RotateCcw, Upload, FileSpreadsheet, CheckCircle2, AlertCircle } from 'lucide-react'
+import Toast from '../components/Toast'
 import * as XLSX from 'xlsx'
 
 const ROWS_PER_PAGE = 10
@@ -40,6 +41,8 @@ export default function DataTable() {
   const [editRow, setEditRow] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
   const [deleteId, setDeleteId] = useState(null)
+  const [toast, setToast] = useState(null)
+  const showToast = (message, type = 'success') => setToast({ message, type })
 
   const allDistricts = useMemo(() => {
     const s = new Set()
@@ -97,8 +100,10 @@ export default function DataTable() {
       if (logAction) await logAction('delete', 'complaints', deleteId, { id: deleteId })
       setDeleteId(null)
       reload()
+      showToast('ลบข้อมูลสำเร็จ')
     } catch (err) {
-      alert('ลบไม่สำเร็จ: ' + err.message)
+      setDeleteId(null)
+      showToast('ลบไม่สำเร็จ: ' + err.message, 'error')
     }
   }
 
@@ -270,8 +275,8 @@ export default function DataTable() {
 
       {/* Modals */}
       {viewRow && <ViewModal row={viewRow} onClose={() => setViewRow(null)} />}
-      {editRow && <EditModal row={editRow} onClose={() => setEditRow(null)} onSaved={() => { reload(); setEditRow(null) }} logAction={logAction} />}
-      {showAdd && <AddDataModal onClose={() => setShowAdd(false)} onSaved={() => { reload(); setShowAdd(false) }} logAction={logAction} />}
+      {editRow && <EditModal row={editRow} onClose={() => setEditRow(null)} onSaved={() => { reload(); setEditRow(null) }} logAction={logAction} showToast={showToast} />}
+      {showAdd && <AddDataModal onClose={() => setShowAdd(false)} onSaved={() => { reload(); setShowAdd(false) }} logAction={logAction} showToast={showToast} />}
 
       {deleteId && (
         <Modal onClose={() => setDeleteId(null)} title="ยืนยันการลบ" size="sm">
@@ -284,6 +289,7 @@ export default function DataTable() {
           </div>
         </Modal>
       )}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   )
 }
@@ -310,6 +316,37 @@ function Modal({ children, onClose, title, size = 'md' }) {
           <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-lg"><X size={20} /></button>
         </div>
         <div className="overflow-y-auto flex-1">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function ConfirmModal({ title, message, detail, onConfirm, onCancel, confirmLabel = 'ยืนยัน', danger = false }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className={`px-6 py-4 border-b ${danger ? 'bg-rose-50 border-rose-100' : 'bg-amber-50 border-amber-100'}`}>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{danger ? '🗑️' : '⚠️'}</span>
+            <h3 className={`font-bold text-base ${danger ? 'text-rose-800' : 'text-amber-800'}`}>{title}</h3>
+          </div>
+        </div>
+        <div className="px-6 py-5">
+          <p className="text-slate-700 text-sm leading-relaxed">{message}</p>
+          {detail && <p className="text-xs text-slate-500 mt-2 leading-relaxed">{detail}</p>}
+        </div>
+        <div className="flex gap-3 px-6 pb-6">
+          <button onClick={onCancel}
+            className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 text-sm font-medium transition">
+            ยกเลิก
+          </button>
+          <button onClick={onConfirm}
+            className={`flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-semibold transition ${
+              danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700'
+            }`}>
+            {confirmLabel}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -358,9 +395,10 @@ function ViewModal({ row, onClose }) {
 
 /* ─── EditModal ─── */
 
-function EditModal({ row, onClose, onSaved, logAction }) {
+function EditModal({ row, onClose, onSaved, logAction, showToast }) {
   const [form, setForm] = useState(row)
   const [saving, setSaving] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const handleSave = async () => {
@@ -368,9 +406,10 @@ function EditModal({ row, onClose, onSaved, logAction }) {
     try {
       await updateComplaint(row.id, form)
       if (logAction) await logAction('update', 'complaints', row.id, { id: row.id })
+      showToast?.('แก้ไขข้อมูลสำเร็จ')
       onSaved()
     } catch (err) {
-      alert('บันทึกไม่สำเร็จ: ' + err.message)
+      showToast?.('บันทึกไม่สำเร็จ: ' + err.message, 'error')
     } finally {
       setSaving(false)
     }
@@ -414,17 +453,27 @@ function EditModal({ row, onClose, onSaved, logAction }) {
       </div>
       <div className="flex gap-3 justify-end px-6 py-4 border-t border-slate-200 bg-slate-50 flex-shrink-0">
         <button onClick={onClose} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-white">ยกเลิก</button>
-        <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
+        <button onClick={() => setConfirmOpen(true)} disabled={saving} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
           {saving ? 'กำลังบันทึก...' : 'บันทึก'}
         </button>
       </div>
+      {confirmOpen && (
+        <ConfirmModal
+          title="ยืนยันการแก้ไขข้อมูล"
+          message={`ต้องการบันทึกการแก้ไขรายการ ID: ${row.id} ใช่หรือไม่?`}
+          detail="ข้อมูลที่แก้ไขจะถูกอัปเดตในระบบทันที"
+          onConfirm={() => { setConfirmOpen(false); handleSave() }}
+          onCancel={() => setConfirmOpen(false)}
+          confirmLabel="บันทึกการแก้ไข"
+        />
+      )}
     </Modal>
   )
 }
 
 /* ─── AddDataModal (2 tabs) ─── */
 
-function AddDataModal({ onClose, onSaved, logAction }) {
+function AddDataModal({ onClose, onSaved, logAction, showToast }) {
   const [tab, setTab] = useState('manual')
 
   return (
@@ -449,8 +498,8 @@ function AddDataModal({ onClose, onSaved, logAction }) {
       </div>
 
       {tab === 'manual'
-        ? <ManualForm onSaved={onSaved} onClose={onClose} logAction={logAction} />
-        : <UploadForm onSaved={onSaved} onClose={onClose} logAction={logAction} />
+        ? <ManualForm onSaved={onSaved} onClose={onClose} logAction={logAction} showToast={showToast} />
+        : <UploadForm onSaved={onSaved} onClose={onClose} logAction={logAction} showToast={showToast} />
       }
     </Modal>
   )
@@ -458,12 +507,13 @@ function AddDataModal({ onClose, onSaved, logAction }) {
 
 /* ─── ManualForm ─── */
 
-function ManualForm({ onSaved, onClose, logAction }) {
+function ManualForm({ onSaved, onClose, logAction, showToast }) {
   const [form, setForm] = useState({
     group: 1, date: '', channel: '', district: '', subdistrict: '',
     community: '', actionUnit: '', status: 'ยังไม่ได้รับผล',
   })
   const [saving, setSaving] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const handleSave = async () => {
@@ -471,9 +521,10 @@ function ManualForm({ onSaved, onClose, logAction }) {
     try {
       const data = await createComplaint(form)
       if (logAction) await logAction('create', 'complaints', data?.id, { district: form.district, group: form.group })
+      showToast?.('เพิ่มข้อมูลสำเร็จ')
       onSaved()
     } catch (err) {
-      alert('บันทึกไม่สำเร็จ: ' + err.message)
+      showToast?.('บันทึกไม่สำเร็จ: ' + err.message, 'error')
     } finally {
       setSaving(false)
     }
@@ -517,17 +568,27 @@ function ManualForm({ onSaved, onClose, logAction }) {
       </div>
       <div className="flex gap-3 justify-end px-6 py-4 border-t border-slate-200 bg-slate-50 flex-shrink-0">
         <button onClick={onClose} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-white">ยกเลิก</button>
-        <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
+        <button onClick={() => setConfirmOpen(true)} disabled={saving} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
           {saving ? 'กำลังบันทึก...' : 'เพิ่มข้อมูล'}
         </button>
       </div>
+      {confirmOpen && (
+        <ConfirmModal
+          title="ยืนยันการเพิ่มข้อมูล"
+          message="ต้องการเพิ่มข้อมูลเรื่องร้องเรียนใหม่เข้าระบบใช่หรือไม่?"
+          detail={`เขต: ${form.district || '-'} · ช่องทาง: ${form.channel || '-'} · กลุ่ม: ${form.group}`}
+          onConfirm={() => { setConfirmOpen(false); handleSave() }}
+          onCancel={() => setConfirmOpen(false)}
+          confirmLabel="เพิ่มข้อมูล"
+        />
+      )}
     </>
   )
 }
 
 /* ─── UploadForm ─── */
 
-function UploadForm({ onSaved, onClose, logAction }) {
+function UploadForm({ onSaved, onClose, logAction, showToast }) {
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
   const [parsing, setParsing] = useState(false)
@@ -536,6 +597,7 @@ function UploadForm({ onSaved, onClose, logAction }) {
   const [mode, setMode] = useState('append')
   const [targetGroup, setTargetGroup] = useState(1)
   const [dragOver, setDragOver] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const handleFile = async (f) => {
     if (!f) return
@@ -561,16 +623,15 @@ function UploadForm({ onSaved, onClose, logAction }) {
 
   const handleUpload = async () => {
     if (!preview) return
-    if (!confirm(`ต้องการ${mode === 'replace' ? 'แทนที่' : 'เพิ่ม'}ข้อมูล ${preview.total} รายการใช่ไหม?`)) return
     setUploading(true)
     try {
       if (mode === 'replace') await deleteByGroup(targetGroup)
       await bulkInsertComplaints(preview.records)
       if (logAction) await logAction('create', 'complaints', null, { action: 'bulk_upload', mode, group: targetGroup, count: preview.total })
-      alert(`สำเร็จ! ${mode === 'replace' ? 'แทนที่' : 'เพิ่ม'}ข้อมูล ${preview.total} รายการเรียบร้อย`)
+      showToast?.(`${mode === 'replace' ? 'แทนที่' : 'เพิ่ม'}ข้อมูลสำเร็จ ${preview.total.toLocaleString()} รายการ`)
       onSaved()
     } catch (err) {
-      alert('อัปโหลดไม่สำเร็จ: ' + err.message)
+      showToast?.('อัปโหลดไม่สำเร็จ: ' + err.message, 'error')
       setUploading(false)
     }
   }
@@ -661,10 +722,23 @@ function UploadForm({ onSaved, onClose, logAction }) {
             <button onClick={() => { setPreview(null); setFile(null) }} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-sm">
               เลือกไฟล์ใหม่
             </button>
-            <button onClick={handleUpload} disabled={uploading} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 text-sm font-medium">
+            <button onClick={() => setConfirmOpen(true)} disabled={uploading} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 text-sm font-medium">
               {uploading ? 'กำลังอัปโหลด...' : `อัปโหลด ${preview.total.toLocaleString()} รายการ`}
             </button>
           </div>
+          {confirmOpen && (
+            <ConfirmModal
+              title={mode === 'replace' ? '⚠️ ยืนยันการแทนที่ข้อมูล' : 'ยืนยันการอัปโหลด'}
+              message={mode === 'replace'
+                ? `จะลบข้อมูลกลุ่ม ${targetGroup} ทั้งหมด แล้วแทนที่ด้วย ${preview.total.toLocaleString()} รายการใหม่`
+                : `ต้องการเพิ่มข้อมูล ${preview.total.toLocaleString()} รายการเข้ากลุ่ม ${targetGroup} ใช่หรือไม่?`}
+              detail={`ไฟล์: ${file?.name} · โหมด: ${mode === 'replace' ? 'แทนที่' : 'เพิ่ม'}`}
+              onConfirm={() => { setConfirmOpen(false); handleUpload() }}
+              onCancel={() => setConfirmOpen(false)}
+              confirmLabel={mode === 'replace' ? 'แทนที่ข้อมูล' : 'ยืนยันอัปโหลด'}
+              danger={mode === 'replace'}
+            />
+          )}
         </>
       )}
     </div>
