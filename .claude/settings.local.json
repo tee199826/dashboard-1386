@@ -40,7 +40,10 @@
       "PowerShell(Start-Sleep 5; try { $resp = Invoke-WebRequest -Uri \"http://localhost:5173\" -UseBasicParsing -TimeoutSec 5; Write-Output \"Status: $\\($resp.StatusCode\\)\" } catch { Write-Output \"Error: $_\" })",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Acer\\\\dashboard-1386\" -Recurse -Directory)",
       "Bash(Select-Object -ExpandProperty FullName)",
-      "Bash(Sort-Object)"
+      "Bash(Sort-Object)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Acer\\\\dashboard-1386\\\\src\" -Recurse -Filter \"*.js*\")",
+      "Bash(Select-Object FullName)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\Acer\\\\dashboard-1386\\\\\" -File | Where-Object {$_.Extension -match \"md|json|env|yaml\"} | Select-Object Name)"
     ]
   }
 }

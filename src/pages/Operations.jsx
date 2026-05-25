@@ -56,6 +56,7 @@ export default function Operations() {
   const [showSourceInfo, setShowSourceInfo] = useState(false)
   const [toast, setToast] = useState(null)
   const showToast = (message, type = 'success') => setToast({ message, type })
+  const [activeDonutIndex, setActiveDonutIndex] = useState(null)
 
   const loadRpt = async () => {
     setRptLoading(true)
@@ -284,20 +285,42 @@ export default function Operations() {
         </div>
 
         {donutData.length > 0 && donutTotal > 0 && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6" onClick={() => setActiveDonutIndex(null)}>
             <h3 className="text-base font-semibold text-slate-800 mb-1">สัดส่วนผลพิรุธการตรวจสอบ</h3>
             <p className="text-xs text-slate-500 mb-4">จาก RPT_114 · รวม {donutTotal.toLocaleString()} เรื่อง</p>
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
-                <Pie data={donutData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={2}>
-                  {donutData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                <Pie
+                  data={donutData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                  innerRadius={70} outerRadius={110} paddingAngle={2}
+                  activeIndex={activeDonutIndex}
+                  onClick={(_, index, e) => { e.stopPropagation(); setActiveDonutIndex(prev => prev === index ? null : index) }}
+                >
+                  {donutData.map((d, i) => (
+                    <Cell key={i} fill={d.color}
+                      style={{ opacity: activeDonutIndex === null || activeDonutIndex === i ? 1 : 0.35, transition: 'opacity 0.2s', cursor: 'pointer' }}
+                    />
+                  ))}
                 </Pie>
-                <Tooltip />
               </PieChart>
             </ResponsiveContainer>
+            {activeDonutIndex !== null && donutData[activeDonutIndex] && (
+              <div className="mb-3 p-3 rounded-xl text-center transition-all"
+                style={{ background: donutData[activeDonutIndex].color + '15', border: `1px solid ${donutData[activeDonutIndex].color}40` }}>
+                <div className="text-sm font-semibold mb-1" style={{ color: donutData[activeDonutIndex].color }}>
+                  {donutData[activeDonutIndex].name}
+                </div>
+                <div className="text-2xl font-extrabold text-slate-800">
+                  {donutData[activeDonutIndex].value.toLocaleString()}
+                </div>
+                <div className="text-sm text-slate-500">{percent(donutData[activeDonutIndex].value, donutTotal)}</div>
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-2 mt-4 text-center">
-              {donutData.map(d => (
-                <div key={d.name}>
+              {donutData.map((d, i) => (
+                <div key={d.name} className="cursor-pointer p-1.5 rounded-lg transition"
+                  style={activeDonutIndex === i ? { background: d.color + '18', outline: `2px solid ${d.color}60` } : {}}
+                  onClick={(e) => { e.stopPropagation(); setActiveDonutIndex(prev => prev === i ? null : i) }}>
                   <div className="text-lg font-bold" style={{ color: d.color }}>
                     {percent(d.value, donutTotal)}
                   </div>

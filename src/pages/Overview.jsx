@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -74,30 +74,6 @@ export default function Overview() {
   const [activeBehaviorIndex, setActiveBehaviorIndex] = useState(null)
   const [activeChannelIndex, setActiveChannelIndex] = useState(null)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
-  const behaviorLeaveRef = useRef(null)
-  const channelLeaveRef = useRef(null)
-
-  useEffect(() => () => {
-    clearTimeout(behaviorLeaveRef.current)
-    clearTimeout(channelLeaveRef.current)
-  }, [])
-
-  const onBehaviorEnter = useCallback((_, index, e) => {
-    clearTimeout(behaviorLeaveRef.current)
-    setActiveBehaviorIndex(index)
-    if (e) setMousePos({ x: e.clientX, y: e.clientY })
-  }, [])
-  const onBehaviorLeave = useCallback(() => {
-    behaviorLeaveRef.current = setTimeout(() => setActiveBehaviorIndex(null), 60)
-  }, [])
-  const onChannelEnter = useCallback((_, index, e) => {
-    clearTimeout(channelLeaveRef.current)
-    setActiveChannelIndex(index)
-    if (e) setMousePos({ x: e.clientX, y: e.clientY })
-  }, [])
-  const onChannelLeave = useCallback(() => {
-    channelLeaveRef.current = setTimeout(() => setActiveChannelIndex(null), 60)
-  }, [])
 
   const [rptData, setRptData] = useState(null)
   const [incidents, setIncidents] = useState([])
@@ -441,6 +417,7 @@ export default function Overview() {
           </div>
           <div
             className="relative"
+            onClick={() => setActiveChannelIndex(null)}
           >
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
@@ -449,8 +426,7 @@ export default function Overview() {
                   innerRadius={70} outerRadius={110} paddingAngle={2}
                   activeIndex={activeChannelIndex}
                   activeShape={renderChannelActiveShape}
-                  onMouseEnter={onChannelEnter}
-                  onMouseLeave={onChannelLeave}
+                  onClick={(_, index, e) => { e.stopPropagation(); setActiveChannelIndex(prev => prev === index ? null : index); if (e) setMousePos({ x: e.clientX, y: e.clientY }) }}
                 >
                   {channelsData.map((_, i) => (
                     <Cell
@@ -657,7 +633,7 @@ export default function Overview() {
                   {/* Donut chart */}
                   <div
                     className="relative"
-                    onMouseMove={e => setMousePos({ x: e.clientX, y: e.clientY })}
+                    onClick={() => setActiveBehaviorIndex(null)}
                   >
                     <ResponsiveContainer width="100%" height={320}>
                       <PieChart>
@@ -673,8 +649,7 @@ export default function Overview() {
                           labelLine={false}
                           activeIndex={activeBehaviorIndex}
                           activeShape={renderBehaviorActiveShape}
-                          onMouseEnter={onBehaviorEnter}
-                          onMouseLeave={onBehaviorLeave}
+                          onClick={(_, index, e) => { e.stopPropagation(); setActiveBehaviorIndex(prev => prev === index ? null : index); if (e) setMousePos({ x: e.clientX, y: e.clientY }) }}
                           label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
                             if (percent < 0.04 || index === activeBehaviorIndex) return null
                             const RADIAN = Math.PI / 180
