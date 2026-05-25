@@ -334,8 +334,15 @@ export default function SubstanceRadar() {
       {sidebarOpen && (
         <div
           onClick={() => setSidebarOpen(false)}
-          className="lg:hidden fixed inset-0 bg-black/40 z-30" />
+          className="lg:hidden fixed inset-0 bg-black/40 z-50" />
       )}
+
+      {/* Hamburger button — mobile only */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="lg:hidden fixed bottom-8 left-4 z-[1001] w-12 h-12 bg-blue-600 text-white rounded-full shadow-xl flex items-center justify-center">
+        <Menu size={22} />
+      </button>
 
       {/* Sidebar */}
       <div className={`fixed lg:static inset-y-0 left-0 z-40 w-80 bg-white border-r border-slate-200 overflow-y-auto flex-shrink-0 flex flex-col transform transition-transform duration-300 ${
@@ -610,13 +617,6 @@ export default function SubstanceRadar() {
 
       {/* Map area */}
       <div className="flex-1 relative">
-        {/* Hamburger button — mobile only */}
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="lg:hidden fixed bottom-8 left-4 z-[1001] w-12 h-12 bg-blue-600 text-white rounded-full shadow-xl flex items-center justify-center">
-          <Menu size={22} />
-        </button>
-
         <a href="/"
            className="absolute top-4 right-4 z-[1000] bg-white hover:bg-slate-50 rounded-lg shadow-lg px-4 py-2 border border-slate-200 flex items-center gap-2 text-sm font-medium text-slate-700 transition">
           <ArrowLeft size={16} /> กลับหน้าหลัก
