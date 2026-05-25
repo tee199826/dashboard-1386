@@ -344,10 +344,10 @@ export default function Overview() {
       </div>
 
       {/* แนวโน้มรายเดือน */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
           <div>
-            <h3 className="font-semibold text-lg text-slate-800 flex items-center gap-2 flex-wrap">
+            <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 flex-wrap">
               <TrendingUp size={20} className="text-blue-600" /> แนวโน้มรายเดือน
               <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">📁 จาก records {records.length} เรื่อง</span>
             </h3>
@@ -373,10 +373,10 @@ export default function Overview() {
       </div>
 
       {/* Top 10 เขต */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
           <div>
-            <h3 className="font-semibold text-lg text-slate-800 flex items-center gap-2 flex-wrap">
+            <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 flex-wrap">
               <MapPin size={20} className="text-blue-600" />
               {selectedDistricts.length === 0 ? '10 เขตที่มีเรื่องร้องเรียนมากที่สุด' : `เปรียบเทียบ ${selectedDistricts.length} เขต`}
               <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">📁 จาก records {records.length} เรื่อง</span>
@@ -415,12 +415,12 @@ export default function Overview() {
       </div>
 
       {/* Row: ช่องทาง + Top 5 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Donut ช่องทาง */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
           <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
             <div>
-              <h3 className="font-semibold text-lg text-slate-800 flex items-center gap-2 flex-wrap">
+              <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 flex-wrap">
                 ช่องทางการรับเรื่อง
                 <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">📁 จาก records {records.length} เรื่อง</span>
               </h3>
@@ -504,8 +504,8 @@ export default function Overview() {
         </div>
 
         {/* Top 5 เขต */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <h3 className="font-semibold text-lg text-slate-800 flex items-center gap-2 mb-5">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+          <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 mb-5">
             <Trophy size={20} className="text-amber-500" /> 5 อันดับเขตที่ร้องเรียนสูงสุด
           </h3>
           <div className="space-y-3">
@@ -536,7 +536,7 @@ export default function Overview() {
       </div>
 
       {/* สัดส่วนพฤติการณ์ */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         {/* gradient accent */}
         <div className="h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500" />
 
@@ -544,7 +544,7 @@ export default function Overview() {
           {/* Header */}
           <div className="flex items-start justify-between mb-6">
             <div>
-              <h3 className="font-bold text-xl text-slate-800 tracking-tight">สัดส่วนพฤติการณ์ยาเสพติด</h3>
+              <h3 className="text-base font-semibold text-slate-800">สัดส่วนพฤติการณ์ยาเสพติด</h3>
               <p className="text-sm text-slate-500 mt-0.5">จำแนกตามพฤติการณ์ · กรองตามพื้นที่</p>
             </div>
             <div className="text-right shrink-0 pl-4">
@@ -576,7 +576,7 @@ export default function Overview() {
                     value={bSearch}
                     onChange={e => setBSearch(e.target.value)}
                     placeholder="ค้นหาชุมชน / แขวง / เขต..."
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-50 outline-none transition"
+                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
                   />
                   {bSearchSuggestions.length > 0 && (
                     <>
@@ -631,7 +631,7 @@ export default function Overview() {
                       {active && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 ml-auto flex-shrink-0 animate-pulse" />}
                     </div>
                     <select value={value} onChange={onChange}
-                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:bg-white focus:border-blue-400 outline-none transition">
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
                       {opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
                     </select>
                   </div>
@@ -760,8 +760,8 @@ export default function Overview() {
       </div>
 
       {/* หน่วยดำเนินการ */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-        <h3 className="font-semibold text-lg text-slate-800 text-center mb-6">หน่วยดำเนินการ</h3>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        <h3 className="text-base font-semibold text-slate-800 text-center mb-6">หน่วยดำเนินการ</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {actions.map((a, i) => (
             <ActionIcon key={a.name} icon={ACTION_ICONS[i]?.icon} label={a.name}
@@ -774,7 +774,7 @@ export default function Overview() {
       {showSourceInfo && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowSourceInfo(false)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
-            <div className="bg-gradient-to-r from-blue-700 to-indigo-900 px-6 py-4 text-white flex items-center justify-between">
+            <div className="bg-blue-700 px-6 py-4 text-white flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">📊</div>
                 <div>
@@ -861,7 +861,7 @@ function DistrictMultiSelect({ districts, selected, onChange }) {
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium hover:bg-white hover:border-blue-300 flex items-center gap-2 min-w-[200px]"
+        className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 hover:border-blue-400 flex items-center gap-2 min-w-[200px] transition"
       >
         <span className="text-slate-500 text-xs">เปรียบเทียบเขต:</span>
         <span className="font-semibold text-slate-700">
@@ -879,7 +879,7 @@ function DistrictMultiSelect({ districts, selected, onChange }) {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="ค้นหาเขต..."
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 outline-none"
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
               />
             </div>
             <div className="flex items-center justify-between px-3 py-2 bg-slate-50 text-xs">
@@ -928,7 +928,7 @@ function CardFilter({ label, value, onChange, options }) {
       <select
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+        className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
       >
         {options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
       </select>
@@ -938,10 +938,10 @@ function CardFilter({ label, value, onChange, options }) {
 
 function StatCard({ icon, label, value, unit, color, onClick }) {
   const colors = {
-    blue:    { bg: '#00BCD4', footer: '#0097A7' },
-    emerald: { bg: '#4CAF50', footer: '#388E3C' },
-    amber:   { bg: '#FF9800', footer: '#F57C00' },
-    rose:    { bg: '#F44336', footer: '#D32F2F' },
+    blue:    { bg: '#2563EB', footer: '#1D4ED8' },
+    emerald: { bg: '#059669', footer: '#047857' },
+    amber:   { bg: '#D97706', footer: '#B45309' },
+    rose:    { bg: '#E11D48', footer: '#BE123C' },
   }
   const c = colors[color] || colors.blue
   const clickable = !!onClick
@@ -949,7 +949,7 @@ function StatCard({ icon, label, value, unit, color, onClick }) {
   return (
     <div
       onClick={onClick}
-      className={`rounded-lg shadow-md text-white overflow-hidden group transition-all duration-300 ${
+      className={`rounded-xl shadow-sm text-white overflow-hidden group transition-all duration-300 ${
         clickable
           ? 'cursor-pointer hover:shadow-2xl hover:-translate-y-1 active:translate-y-0 active:shadow-lg'
           : 'hover:shadow-lg'

@@ -184,7 +184,7 @@ export default function Operations() {
         </div>
         {isAdmin && (
           <button onClick={() => setShowUpload(true)}
-            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium flex items-center gap-2 shadow-sm">
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center gap-2 transition">
             <Upload size={16} /> นำเข้า RPT_114
           </button>
         )}
@@ -193,7 +193,7 @@ export default function Operations() {
       {/* Source Banner - 5 Cards */}
       <button
         onClick={() => setShowSourceInfo(true)}
-        className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 hover:border-blue-400 rounded-xl px-4 py-3 text-sm text-blue-800 flex items-center gap-3 transition group cursor-pointer">
+        className="w-full bg-blue-50 border border-blue-200 hover:border-blue-400 rounded-xl px-4 py-3 text-sm text-blue-800 flex items-center gap-3 transition group cursor-pointer">
         <div className="w-9 h-9 bg-blue-500 text-white rounded-lg flex items-center justify-center flex-shrink-0">
           📊
         </div>
@@ -219,7 +219,7 @@ export default function Operations() {
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">📅</div>
           <h3 className="font-semibold text-slate-800">ตัวกรองช่วงเวลา</h3>
@@ -233,12 +233,12 @@ export default function Operations() {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <select value={filterYear} onChange={e => setFilterYear(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium">
+            className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
             <option value="all">ทุกปี</option>
             {availableYears.map(y => <option key={y} value={y}>พ.ศ. {y}</option>)}
           </select>
           <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium">
+            className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
             <option value="all">ทุกเดือน</option>
             {THAI_MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
           </select>
@@ -248,7 +248,7 @@ export default function Operations() {
       {/* Source Banner - ส่วนล่าง */}
       <button
         onClick={() => setShowSourceInfo(true)}
-        className="w-full bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 hover:border-amber-400 rounded-xl px-4 py-3 text-sm flex items-center gap-3 transition group cursor-pointer">
+        className="w-full bg-amber-50 border border-amber-200 hover:border-amber-400 rounded-xl px-4 py-3 text-sm flex items-center gap-3 transition group cursor-pointer">
         <div className="w-9 h-9 bg-amber-500 text-white rounded-lg flex items-center justify-center flex-shrink-0">
           📁
         </div>
@@ -264,9 +264,9 @@ export default function Operations() {
       </button>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <h3 className="font-semibold text-lg text-slate-800 mb-1">สัดส่วนการจัดการแยกตามแหล่งข่าว</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+          <h3 className="text-base font-semibold text-slate-800 mb-1">สัดส่วนการจัดการแยกตามแหล่งข่าว</h3>
           <p className="text-xs text-slate-500 mb-4">เปรียบเทียบผลลัพธ์ 4 หมวด (รายเรื่อง · จาก complaints)</p>
           <ResponsiveContainer width="100%" height={400}>
             <BarChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 60 }}>
@@ -284,8 +284,8 @@ export default function Operations() {
         </div>
 
         {donutData.length > 0 && donutTotal > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-            <h3 className="font-semibold text-lg text-slate-800 mb-1">สัดส่วนผลพิรุธการตรวจสอบ</h3>
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+            <h3 className="text-base font-semibold text-slate-800 mb-1">สัดส่วนผลพิรุธการตรวจสอบ</h3>
             <p className="text-xs text-slate-500 mb-4">จาก RPT_114 · รวม {donutTotal.toLocaleString()} เรื่อง</p>
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
@@ -310,12 +310,12 @@ export default function Operations() {
       </div>
 
       {/* Sources Overview */}
-      <div className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
-        <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 px-6 py-4 text-white">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-slate-800 px-6 py-4 text-white">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">📊</div>
             <div>
-              <h3 className="font-bold text-lg">ภาพรวมสถิติจำแนกตามแหล่งข่าว</h3>
+              <h3 className="text-base font-semibold">ภาพรวมสถิติจำแนกตามแหล่งข่าว</h3>
               <p className="text-xs text-blue-200 mt-0.5">Sources Overview · จาก complaints {summary.totalAll.toLocaleString()} records</p>
             </div>
           </div>
@@ -330,14 +330,14 @@ export default function Operations() {
       </div>
 
       {/* ตารางผลจาก RPT_114 - 2 ตาราง */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* ตาราง 1: ผลการตรวจสอบพฤติการณ์ */}
-        <div className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-rose-600 to-pink-700 px-6 py-4 text-white">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-rose-600 px-6 py-4 text-white">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">🔍</div>
               <div>
-                <h3 className="font-bold text-lg">ผลการตรวจสอบพฤติการณ์</h3>
+                <h3 className="text-base font-semibold">ผลการตรวจสอบพฤติการณ์</h3>
                 <p className="text-xs text-pink-100 mt-0.5">จาก RPT_114 · ผลการลงพื้นที่ตรวจสอบ</p>
               </div>
             </div>
@@ -345,7 +345,7 @@ export default function Operations() {
           <div className="p-6">
             <div className="overflow-x-auto">
             <table className="min-w-[480px] w-full">
-              <thead className="bg-slate-50 text-xs text-slate-700 uppercase">
+              <thead className="bg-slate-50 text-xs text-slate-600 font-semibold uppercase">
                 <tr>
                   <th className="text-left px-4 py-3 font-bold">หมวด</th>
                   <th className="text-right px-4 py-3 font-bold">จำนวน</th>
@@ -366,16 +366,16 @@ export default function Operations() {
                   const pct = totalInvestigated ? ((v / totalInvestigated) * 100).toFixed(1) : 0
                   return (
                     <tr key={row.key} className={`border-t border-slate-100 ${idx % 2 ? 'bg-slate-50/50' : ''} hover:bg-rose-50/30 transition`}>
-                      <td className="px-4 py-3.5">
+                      <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <span className="text-base">{row.emoji}</span>
                           <span className="font-medium text-slate-800">{row.name}</span>
                         </div>
                       </td>
-                      <td className="text-right px-4 py-3.5">
+                      <td className="text-right px-4 py-3">
                         <span className="text-lg font-bold" style={{ color: row.color }}>{v.toLocaleString()}</span>
                       </td>
-                      <td className="text-right px-4 py-3.5">
+                      <td className="text-right px-4 py-3">
                         <span className="inline-block px-2.5 py-1 rounded-full text-xs font-bold"
                           style={{ background: row.color + '20', color: row.color }}>
                           {pct}%
@@ -384,7 +384,7 @@ export default function Operations() {
                     </tr>
                   )
                 })}
-                <tr className="bg-gradient-to-r from-rose-600 to-pink-700 text-white font-bold">
+                <tr className="bg-rose-600 text-white font-bold">
                   <td className="px-4 py-4 rounded-bl-lg">รวม</td>
                   <td className="text-right px-4 py-4 text-lg">
                     {['พบพฤติการณ์', 'ไม่พบพฤติการณ์', 'ไม่พบตัวในพื้นที่', 'อยู่ระหว่างสืบสวน', 'เสียชีวิต']
@@ -399,12 +399,12 @@ export default function Operations() {
         </div>
 
         {/* ตาราง 2: ผลดำเนินการ */}
-        <div className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-700 to-indigo-900 px-6 py-4 text-white">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-blue-700 px-6 py-4 text-white">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">⚖️</div>
               <div>
-                <h3 className="font-bold text-lg">ผลการดำเนินการ</h3>
+                <h3 className="text-base font-semibold">ผลการดำเนินการ</h3>
                 <p className="text-xs text-blue-200 mt-0.5">จาก RPT_114 · ผลลัพธ์การดำเนินคดี</p>
               </div>
             </div>
@@ -412,7 +412,7 @@ export default function Operations() {
           <div className="p-6">
             <div className="overflow-x-auto">
             <table className="min-w-[480px] w-full">
-              <thead className="bg-slate-50 text-xs text-slate-700 uppercase">
+              <thead className="bg-slate-50 text-xs text-slate-600 font-semibold uppercase">
                 <tr>
                   <th className="text-left px-4 py-3 font-bold">หมวด</th>
                   <th className="text-right px-4 py-3 font-bold">จำนวน</th>
@@ -434,16 +434,16 @@ export default function Operations() {
                   const pct = totalAction ? ((v / totalAction) * 100).toFixed(1) : 0
                   return (
                     <tr key={row.key} className={`border-t border-slate-100 ${idx % 2 ? 'bg-slate-50/50' : ''} hover:bg-blue-50/30 transition`}>
-                      <td className="px-4 py-3.5">
+                      <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <span className="text-base">{row.emoji}</span>
                           <span className="font-medium text-slate-800">{row.name}</span>
                         </div>
                       </td>
-                      <td className="text-right px-4 py-3.5">
+                      <td className="text-right px-4 py-3">
                         <span className="text-lg font-bold" style={{ color: row.color }}>{v.toLocaleString()}</span>
                       </td>
-                      <td className="text-right px-4 py-3.5">
+                      <td className="text-right px-4 py-3">
                         <span className="inline-block px-2.5 py-1 rounded-full text-xs font-bold"
                           style={{ background: row.color + '20', color: row.color }}>
                           {pct}%
@@ -452,7 +452,7 @@ export default function Operations() {
                     </tr>
                   )
                 })}
-                <tr className="bg-gradient-to-r from-blue-700 to-indigo-900 text-white font-bold">
+                <tr className="bg-blue-700 text-white font-bold">
                   <td className="px-4 py-4 rounded-bl-lg">รวม</td>
                   <td className="text-right px-4 py-4 text-lg">
                     {['จับกุม', 'บำบัด', 'กลั่นแกล้ง', 'สืบสวนเพิ่มเติม', 'ยุติเรื่อง', 'อื่นๆ']
@@ -474,11 +474,11 @@ export default function Operations() {
       {showSourceInfo && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowSourceInfo(false)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
-            <div className="bg-gradient-to-r from-blue-700 to-indigo-900 px-6 py-4 text-white flex items-center justify-between">
+            <div className="bg-blue-700 px-6 py-4 text-white flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">📊</div>
                 <div>
-                  <h2 className="font-bold text-lg">ที่มาของข้อมูล</h2>
+                  <h2 className="text-base font-semibold">ที่มาของข้อมูล</h2>
                   <p className="text-xs text-blue-200">Data Sources Explanation</p>
                 </div>
               </div>
@@ -565,7 +565,7 @@ function BigCard({ icon, label, value, pct, sub, color }) {
   }
   const c = colors[color] || colors.blue
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition relative overflow-hidden">
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition relative overflow-hidden">
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${c.bar}`}></div>
       <div className="flex items-start gap-2 mb-3">
         <div className={`w-9 h-9 ${c.bg} ${c.icon} rounded-lg flex items-center justify-center flex-shrink-0`}>{icon}</div>
@@ -599,12 +599,12 @@ function SourceCard({ rank, channel, count, total }) {
   const rankColor = RANK_COLORS[rank] || 'bg-slate-100 text-slate-500'
   const pct = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0'
   return (
-    <div className="group bg-white border-2 border-slate-100 rounded-2xl overflow-hidden hover:border-transparent hover:-translate-y-1 hover:shadow-xl transition-all duration-300 cursor-pointer">
+    <div className="group bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-blue-200 hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
       <div className={`h-1.5 bg-gradient-to-r ${theme.gradient}`} />
       <div className="p-5">
         {/* Icon + Rank */}
         <div className="flex items-start justify-between mb-4">
-          <div className={`w-14 h-14 ${theme.light} rounded-2xl flex items-center justify-center text-3xl group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300`}>
+          <div className={`w-14 h-14 ${theme.light} rounded-xl flex items-center justify-center text-3xl group-hover:scale-105 transition-transform duration-200`}>
             {theme.icon}
           </div>
           <div className={`text-xs font-bold px-2.5 py-1 rounded-full ${rankColor}`}>
@@ -616,7 +616,7 @@ function SourceCard({ rank, channel, count, total }) {
         <div className="text-sm text-slate-600 font-medium mb-1">{channel}</div>
 
         {/* Count */}
-        <div className={`text-4xl font-extrabold bg-gradient-to-r ${theme.gradient} bg-clip-text text-transparent mb-3`}>
+        <div className={`text-4xl font-extrabold ${theme.text} mb-3`}>
           {count.toLocaleString()}
         </div>
 

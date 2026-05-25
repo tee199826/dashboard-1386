@@ -508,6 +508,38 @@ export default function SubstanceRadar() {
 
           {viewMode === 'district' && (
             <div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
+                  <MapPin size={16} />
+                </div>
+                <h3 className="font-bold text-slate-800">กลุ่มยาเสพติด</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {Object.keys(DRUG_CATEGORIES).map(cat => (
+                  <button key={cat} onClick={() => setCategory(cat)}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium transition ${
+                      category === cat
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}>
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mb-5">
+                <select value={year} onChange={e => setYear(e.target.value)}
+                  className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                  <option value="all">ทุกปี</option>
+                  {years.map(y => <option key={y} value={y}>พ.ศ. {y}</option>)}
+                </select>
+                <select value={month} onChange={e => setMonth(e.target.value)}
+                  className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                  <option value="all">ทุกเดือน</option>
+                  {THAI_MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+                </select>
+              </div>
+
               <div className="text-xs text-slate-500 uppercase font-bold mb-2">กรองกลุ่มเขต</div>
               <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)}
                 className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs mb-4">
