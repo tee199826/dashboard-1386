@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { BarChart3, MapPin, LogIn, Database, ScrollText, Users, FileSpreadsheet, Map } from 'lucide-react'
+import { BarChart3, MapPin, LogIn, Database, ScrollText, Users, FileSpreadsheet, Map, Upload } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
@@ -39,6 +39,12 @@ export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
         {isAdmin && (
           <>
             <div className="px-3 py-1 mt-4 text-xs text-amber-300/80 uppercase tracking-wide">👑 ผู้ดูแลระบบ</div>
+            <NavLink to="/upload" onClick={close}
+              className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${
+                isActive ? 'bg-amber-500/20 text-amber-100 font-semibold' : 'hover:bg-white/10'
+              }`}>
+              <Upload size={18} /> นำเข้าข้อมูล
+            </NavLink>
             {adminMenus.map(m => (
               <NavLink key={m.to} to={m.to} onClick={close}
                 className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${

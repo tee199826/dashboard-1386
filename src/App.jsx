@@ -13,6 +13,7 @@ import Operations from './pages/Operations'
 import PublicSidebar from './components/PublicSidebar'
 import Header from './components/Header'
 import SubstanceRadar from './pages/SubstanceRadar'
+import UploadPage from './pages/UploadPage'
 import { Menu } from 'lucide-react'
 
 function MainLayout({ children }) {
@@ -50,6 +51,10 @@ export default function App() {
             <Route path="/" element={<MainLayout><Overview /></MainLayout>} />
             <Route path="/districts" element={<MainLayout><AllDistricts /></MainLayout>} />
             <Route path="/operations" element={<MainLayout><Operations /></MainLayout>} />
+
+            <Route path="/upload" element={
+              <ProtectedRoute><MainLayout><UploadPage /></MainLayout></ProtectedRoute>
+            } />
 
             <Route path="/admin/data" element={
               <ProtectedRoute><MainLayout><DataTable /></MainLayout></ProtectedRoute>

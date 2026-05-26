@@ -8,7 +8,7 @@ import {
 } from 'recharts'
 import {
   TrendingUp, CheckCircle2, Clock, MapPin,
-  User, Users, ArrowRightLeft, Ban, ArrowRight, Trophy, ChevronDown, Info, X, Search,
+  User, Users, ArrowRightLeft, Ban, ArrowRight, Trophy, ChevronDown, Info, X, Search, RefreshCw,
 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import * as stats from '../utils/statistics'
@@ -61,7 +61,7 @@ function renderChannelActiveShape(props) {
 }
 
 export default function Overview() {
-  const { records, isLoading } = useData()
+  const { records, isLoading, reload } = useData()
   const navigate = useNavigate()
   const { isAdmin } = useAuth()
 
@@ -75,34 +75,12 @@ export default function Overview() {
   const [activeChannelIndex, setActiveChannelIndex] = useState(null)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
 
-  const [rptData, setRptData] = useState(null)
   const [incidents, setIncidents] = useState([])
   const [bGroup, setBGroup] = useState('all')
   const [bDistrict, setBDistrict] = useState('all')
   const [bSubdistrict, setBSubdistrict] = useState('all')
   const [bCommunity, setBCommunity] = useState('all')
   const [bSearch, setBSearch] = useState('')
-
-  useEffect(() => {
-    supabase
-      .from('operations_summary')
-      .select('category, count')
-      .eq('channel', 'รวมทุกช่องทาง')
-      .then(({ data: rows, error }) => {
-        if (error) {
-          console.error('โหลด RPT ไม่ได้:', error)
-          return
-        }
-        if (rows && rows.length > 0) {
-          const map = {}
-          rows.forEach(r => { map[r.category] = r.count })
-          console.log('🔍 RPT data loaded:', map)
-          setRptData(map)
-        } else {
-          console.warn('⚠️ ไม่มีข้อมูล RPT_114 ใน DB')
-        }
-      })
-  }, [])
 
   useEffect(() => {
     const load = async () => {
@@ -129,27 +107,12 @@ export default function Overview() {
   const filteredRecords = data
 
   const totals = useMemo(() => {
-    console.log('🔍 records.length:', filteredRecords.length)
-    console.log('🔍 rptData:', rptData)
-
-    if (rptData && rptData['รวมทั้งหมด']) {
-      const total = rptData['รวมทั้งหมด']
-      const completed = rptData['ดำเนินการแล้ว'] || 0
-      const pending = total - completed
-      const pct = total > 0 ? ((completed / total) * 100).toFixed(2) : '0.00'
-      const result = { total, completed, pending, pct }
-      console.log('🔍 totals (from RPT):', result)
-      return result
-    }
-
-    const total = filteredRecords.length
+    const total     = filteredRecords.length
     const completed = filteredRecords.filter(r => r.status === 'ดำเนินการแล้ว').length
-    const pending = total - completed
-    const pct = total > 0 ? ((completed / total) * 100).toFixed(2) : '0.00'
-    const result = { total, completed, pending, pct }
-    console.log('🔍 totals (from records fallback):', result)
-    return result
-  }, [rptData, filteredRecords])
+    const pending   = total - completed   // ทุก status ที่ไม่ใช่ 'ดำเนินการแล้ว'
+    const pct       = total > 0 ? ((completed / total) * 100).toFixed(2) : '0.00'
+    return { total, completed, pending, pct }
+  }, [filteredRecords])
 
   const actions = useMemo(() => stats.getActions(data), [data])
 
@@ -287,6 +250,13 @@ export default function Overview() {
             className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-full text-xs font-medium text-blue-700 flex items-center gap-1">
             <Info size={12} /> แหล่งข้อมูล
           </button>
+          <button
+            onClick={reload}
+            disabled={isLoading}
+            title="โหลดข้อมูลใหม่จากฐานข้อมูล"
+            className="p-1.5 rounded-full text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition disabled:opacity-40">
+            <RefreshCw size={15} className={isLoading ? 'animate-spin' : ''} />
+          </button>
         </div>
         <p className="text-sm text-slate-500 mt-1">สถิติเรื่องร้องเรียนยาเสพติด · กรุงเทพมหานคร</p>
       </div>
@@ -297,7 +267,6 @@ export default function Overview() {
           icon={<TrendingUp />}
           label="เรื่องร้องเรียนทั้งหมด"
           value={totals.total.toLocaleString()}
-          unit="📊 จาก RPT_114"
           color="blue"
           onClick={isAdmin ? () => navigate('/admin/data') : null}
         />
@@ -305,7 +274,7 @@ export default function Overview() {
           icon={<CheckCircle2 />}
           label="ดำเนินการแล้ว"
           value={totals.completed.toLocaleString()}
-          unit={`${totals.pct}% · 📊 RPT_114`}
+          unit={`${totals.pct}%`}
           color="emerald"
           onClick={isAdmin ? () => navigate('/admin/data?status=ดำเนินการแล้ว') : null}
         />
@@ -313,7 +282,7 @@ export default function Overview() {
           icon={<Clock />}
           label="รอดำเนินการ"
           value={totals.pending.toLocaleString()}
-          unit={`${(100 - parseFloat(totals.pct)).toFixed(2)}% · 📊 RPT_114`}
+          unit={`${(100 - parseFloat(totals.pct)).toFixed(2)}%`}
           color="amber"
           onClick={isAdmin ? () => navigate('/admin/data?status=ยังไม่ได้รับผล') : null}
         />
