@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { DataProvider } from './context/DataContext'
 import { AuthProvider } from './context/AuthContext'
+import { PresentationProvider, usePresentation } from './context/PresentationContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import Overview from './pages/Overview'
 import AllDistricts from './pages/AllDistricts'
@@ -14,10 +15,21 @@ import PublicSidebar from './components/PublicSidebar'
 import Header from './components/Header'
 import SubstanceRadar from './pages/SubstanceRadar'
 import UploadPage from './pages/UploadPage'
+import BknPage from './pages/BknPage'
 import { Menu } from 'lucide-react'
 
 function MainLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { isPresentation } = usePresentation()
+
+  if (isPresentation) {
+    return (
+      <div className="h-screen bg-white flex flex-col overflow-hidden">
+        <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Header />
@@ -43,14 +55,16 @@ export default function App() {
   return (
     <AuthProvider>
       <DataProvider>
+        <PresentationProvider>
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/radar" element={<SubstanceRadar />} />
+            <Route path="/radar" element={<MainLayout><SubstanceRadar /></MainLayout>} />
 
             <Route path="/" element={<MainLayout><Overview /></MainLayout>} />
             <Route path="/districts" element={<MainLayout><AllDistricts /></MainLayout>} />
             <Route path="/operations" element={<MainLayout><Operations /></MainLayout>} />
+            <Route path="/bkn" element={<MainLayout><BknPage /></MainLayout>} />
 
             <Route path="/upload" element={
               <ProtectedRoute><MainLayout><UploadPage /></MainLayout></ProtectedRoute>
@@ -69,6 +83,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
+        </PresentationProvider>
       </DataProvider>
     </AuthProvider>
   )

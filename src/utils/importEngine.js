@@ -102,41 +102,47 @@ function normalizeValue(v) {
 // ─── 1. parseFile ─────────────────────────────────────────────────────────────
 
 /**
- * รับ File object (.xlsx/.xls/.csv) แล้วคืน array ของ plain object
- * แต่ละ object มี key = ชื่อ header, value = ค่าในเซลล์
- * ข้ามแถวที่ว่างทั้งหมด
+ * รับ File object (.xlsx/.xls/.csv) แล้วคืน { rows, workbook }
+ * rows = array ของ plain object (key = header, value = ค่าในเซลล์)
+ * workbook = raw workbook สำหรับ parser พิเศษ (เช่น parse115B)
  */
 export async function parseFile(file) {
   const buffer = await file.arrayBuffer()
   const workbook = XLSX.read(buffer, {
     type: 'array',
-    cellDates: true,   // ให้ SheetJS แปลง serial → Date อัตโนมัติ
+    cellDates: true,
     dateNF: 'yyyy-mm-dd',
   })
 
-  // อ่านชีทแรก
   const sheetName = workbook.SheetNames[0]
   const sheet = workbook.Sheets[sheetName]
 
   const rawRows = XLSX.utils.sheet_to_json(sheet, {
-    defval: null,      // เซลล์ว่างให้เป็น null แทน undefined
-    raw: false,        // ให้ SheetJS format ค่าออกมา (วันที่จะเป็น string)
+    defval: null,
+    raw: false,
   })
 
-  // ข้ามแถวที่ทุก value เป็น null/ว่าง
-  return rawRows.filter(row =>
+  const rows = rawRows.filter(row =>
     Object.values(row).some(v => v != null && String(v).trim() !== '')
   )
+
+  return { rows, workbook }
 }
 
 // ─── 2. detectType ────────────────────────────────────────────────────────────
 
 /**
- * เดาประเภทไฟล์จาก header
- * คืน 'complaints' | 'drug_incidents' | 'unknown'
+ * เดาประเภทไฟล์จากเนื้อหา
+ * คืน 'complaints' | 'drug_incidents' | 'bkn_summary' | 'unknown'
  */
 export function detectType(rows) {
   if (!rows || rows.length === 0) return 'unknown'
+
+  // bkn_summary: ตรวจหา "กลุ่ม 1" และ "บก.น." ในค่าทุก cell
+  const allVals = rows.flatMap(r => Object.values(r)).map(v => String(v ?? '').trim())
+  const hasGroup1 = allVals.some(v => /กลุ่ม\s*1/.test(v))
+  const hasBkn    = allVals.some(v => /^บก\.(น|สปพ)/.test(v))
+  if (hasGroup1 && hasBkn) return 'bkn_summary'
 
   const headers = Object.keys(rows[0]).map(h => h.trim().toLowerCase())
 
@@ -295,4 +301,111 @@ export function validateRows(rows, type) {
   const validCount = rows.length - invalidRows.size
 
   return { validCount, issues }
+}
+
+// ─── 6. parse115B ─────────────────────────────────────────────────────────────
+
+/**
+ * Parser สำหรับรายงานสรุป RPT_115_B (บก.น. 1-9 × กลุ่ม 1-5)
+ * รับ XLSX workbook โดยตรง (ไม่ใช่ rows จาก sheet_to_json)
+ * คืน array: [{ bkn, group_no, total, pending, done, period }]
+ *
+ * ยืดหยุ่น: ค้นหาแถว/คอลัมน์โดย pattern ไม่ผูกตำแหน่งตายตัว
+ */
+export function parse115B(workbook) {
+  const sheetName = workbook.SheetNames[0]
+  const ws = workbook.Sheets[sheetName]
+  if (!ws || !ws['!ref']) throw new Error('ไม่พบข้อมูลในชีต — กรุณาตรวจสอบไฟล์')
+
+  const range = XLSX.utils.decode_range(ws['!ref'])
+  const maxR = range.e.r
+  const maxC = range.e.c
+
+  function cellStr(r, c) {
+    const cell = ws[XLSX.utils.encode_cell({ r, c })]
+    return cell ? String(cell.v ?? '').trim() : ''
+  }
+
+  function cellNum(r, c) {
+    const cell = ws[XLSX.utils.encode_cell({ r, c })]
+    if (!cell) return 0
+    if (typeof cell.v === 'number') return cell.v
+    const n = parseInt(String(cell.v).replace(/,/g, ''))
+    return isNaN(n) ? 0 : n
+  }
+
+  // 1. หา period จากแถวหัวรายงาน (แถว 0-6)
+  let period = null
+  outer1:
+  for (let r = 0; r <= Math.min(6, maxR); r++) {
+    for (let c = 0; c <= maxC; c++) {
+      if (cellStr(r, c).includes('ระหว่างวันที่')) {
+        for (let dc = 1; dc <= 5; dc++) {
+          const v = cellStr(r, c + dc)
+          if (v && !v.includes('ระหว่างวันที่')) { period = v; break outer1 }
+        }
+      }
+    }
+  }
+
+  // 2. หาแถวหัวตาราง: แถวที่มี "หน่วยงาน" ที่ col 1
+  //    (แก้ bug เดิมที่ดักจาก title text "...กลุ่ม 1-5..." แถวแรก)
+  let headerRow = -1
+  const groupCols = {} // group_no (1-5) → คอลัมน์เริ่มต้นของกลุ่มนั้น
+
+  for (let r = 0; r <= Math.min(20, maxR); r++) {
+    // ตรวจ exact match เพื่อกันดัก title text ที่มี "หน่วยงาน" อยู่ด้วย
+    if (cellStr(r, 1) !== 'หน่วยงาน') continue
+    headerRow = r
+    for (let c = 2; c <= maxC; c++) {
+      const m = cellStr(r, c).match(/กลุ่ม\s*(\d)/)
+      if (m) groupCols[parseInt(m[1])] = c
+    }
+    break
+  }
+
+  if (headerRow === -1)
+    throw new Error('ไม่พบแถวหัวตาราง "หน่วยงาน" — ตรวจสอบว่าเป็นไฟล์รายงาน RPT_115_B')
+
+  for (let g = 1; g <= 5; g++) {
+    if (groupCols[g] === undefined)
+      throw new Error(`ไม่พบตำแหน่งคอลัมน์ "กลุ่ม ${g}" ในหัวตาราง`)
+  }
+
+  // 3. ตรวจลำดับ sub-column จากแถว headerRow+1 (sub-header)
+  //    ลำดับปกติ: จำนวนผู้ถูกร้องเรียน=total | ยังไม่ได้รับผล=pending | จำนวนผลดำเนินการ=done
+  let totalOff = 0, pendingOff = 1, doneOff = 2
+  const subR = headerRow + 1
+  const gc1 = groupCols[1]
+  for (let dc = 0; dc < 3; dc++) {
+    const lbl = cellStr(subR, gc1 + dc)
+    if (/ผู้ถูกร้องเรียน|เรื่องร้องเรียน/.test(lbl)) totalOff = dc
+    else if (/ยังไม่ได้รับผล/.test(lbl)) pendingOff = dc
+    else if (/ผลดำเนินการ/.test(lbl)) doneOff = dc
+  }
+
+  // 4. อ่านแถวข้อมูล: col 1 ขึ้นต้นด้วย "บก.น." หรือ "บก.สปพ"
+  const records = []
+  for (let r = headerRow + 2; r <= maxR; r++) {
+    const bkn = cellStr(r, 1)
+    if (!/^บก\.(น|สปพ)/.test(bkn)) continue
+    if (/รวม/.test(bkn)) continue // ข้ามแถวสรุป
+
+    for (let g = 1; g <= 5; g++) {
+      const gc = groupCols[g]
+      records.push({
+        bkn,
+        group_no: g,
+        total:   cellNum(r, gc + totalOff),
+        pending: cellNum(r, gc + pendingOff),
+        done:    cellNum(r, gc + doneOff),
+        period:  period ?? null,
+      })
+    }
+  }
+
+  if (records.length === 0)
+    throw new Error('ไม่พบแถวข้อมูล บก.น. ในไฟล์ — กรุณาตรวจสอบฟอร์แมต')
+
+  return records
 }

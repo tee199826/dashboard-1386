@@ -1,11 +1,54 @@
-import { LogOut, LogIn } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { LogOut, LogIn, AlertTriangle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import logoOncb from '../assets/logo-oncb.png'
+import { supabase } from '../lib/supabase'
+
+const MONTH_LONG = ['', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
+
+function toThaiDate(iso) {
+  if (!iso) return null
+  const d = new Date(iso)
+  return `${d.getDate()} ${MONTH_LONG[d.getMonth() + 1]} ${d.getFullYear() + 543}`
+}
 
 export default function Header() {
   const { user, profile, isAdmin, signOut } = useAuth()
   const navigate = useNavigate()
+  const [lastUpdate, setLastUpdate] = useState(undefined)
+
+  useEffect(() => {
+    const fetch = async () => {
+      // Primary: upload_batches (created_at = Supabase auto-column)
+      const { data: batches } = await supabase
+        .from('upload_batches')
+        .select('created_at')
+        .order('created_at', { ascending: false })
+        .limit(1)
+      if (batches?.[0]?.created_at) { setLastUpdate(batches[0].created_at); return }
+
+      // Fallback: complaints
+      const { data: c } = await supabase
+        .from('complaints')
+        .select('created_at')
+        .order('created_at', { ascending: false })
+        .limit(1)
+      if (c?.[0]?.created_at) { setLastUpdate(c[0].created_at); return }
+
+      // Fallback: drug_incidents
+      const { data: d } = await supabase
+        .from('drug_incidents')
+        .select('created_at')
+        .order('created_at', { ascending: false })
+        .limit(1)
+      if (d?.[0]?.created_at) { setLastUpdate(d[0].created_at); return }
+
+      setLastUpdate(null)
+    }
+    fetch()
+  }, [])
 
   const handleLogout = async () => {
     await signOut()
@@ -36,6 +79,19 @@ export default function Header() {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+          {/* Last-update badge — hidden on xs screens */}
+          {lastUpdate !== undefined && lastUpdate !== null && (() => {
+            const isStale = (Date.now() - new Date(lastUpdate).getTime()) > 30 * 24 * 3600 * 1000
+            return (
+              <div className={`hidden sm:flex flex-col items-end leading-tight ${isStale ? 'text-amber-300' : 'text-blue-100'}`}>
+                <span className="text-[10px]">ข้อมูลอัปเดตล่าสุด</span>
+                <span className={`text-[11px] font-semibold flex items-center gap-1 ${isStale ? 'text-amber-300' : 'text-white/80'}`}>
+                  {isStale && <AlertTriangle size={11} className="flex-shrink-0" />}
+                  {toThaiDate(lastUpdate)}
+                </span>
+              </div>
+            )
+          })()}
           {user ? (
             <>
               <div className="text-right text-sm hidden sm:block">

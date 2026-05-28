@@ -70,3 +70,66 @@ export async function upsertRecords(type, rows, batchInfo) {
 
   return { inserted, updated, failed, error: lastError }
 }
+
+/**
+ * Upsert รายงาน RPT_115_B เข้าตาราง bkn_summary
+ * conflict key: report_id, period, bkn, group_no
+ */
+export async function upsertBknSummary(rows, batchInfo) {
+  if (!rows || rows.length === 0) return { inserted: 0, updated: 0, failed: 0, error: null }
+
+  // ตรวจว่ามีข้อมูลช่วงนี้อยู่แล้วหรือไม่ (ใช้ period ของแถวแรก)
+  const period = rows[0]?.period ?? null
+  let isUpdate = false
+  try {
+    const { count } = await supabase
+      .from('bkn_summary')
+      .select('*', { count: 'exact', head: true })
+      .eq('report_id', '115_B')
+      .eq('period', period)
+    isUpdate = (count ?? 0) > 0
+  } catch { /* ถ้าตรวจไม่ได้ให้ถือว่าเป็น insert */ }
+
+  let inserted = 0, updated = 0, failed = 0, lastError = null
+
+  for (let i = 0; i < rows.length; i += UPSERT_BATCH) {
+    const batch = rows.slice(i, i + UPSERT_BATCH).map(r => ({
+      report_id:   '115_B',
+      period:      r.period,
+      bkn:         r.bkn,
+      group_no:    r.group_no,
+      total:       r.total,
+      pending:     r.pending,
+      done:        r.done,
+      batch_id:    batchInfo.batchId,
+      source_file: batchInfo.fileName,
+    }))
+
+    try {
+      const { error } = await supabase
+        .from('bkn_summary')
+        .upsert(batch, { onConflict: 'report_id,period,bkn,group_no' })
+      if (error) throw error
+      if (isUpdate) updated += batch.length
+      else          inserted += batch.length
+    } catch (err) {
+      console.error('[uploadService] bkn_summary batch failed:', err)
+      failed += batch.length
+      lastError = err.message
+    }
+  }
+
+  try {
+    await supabase.from('upload_batches').insert([{
+      batch_id:     batchInfo.batchId,
+      target_table: 'bkn_summary',
+      file_name:    batchInfo.fileName,
+      row_count:    rows.length,
+      status:       failed === 0 ? 'completed' : failed === rows.length ? 'failed' : 'partial',
+    }])
+  } catch (err) {
+    console.warn('[uploadService] บันทึก upload_batches ไม่ได้:', err.message)
+  }
+
+  return { inserted, updated, failed, error: lastError }
+}

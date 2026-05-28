@@ -1,13 +1,61 @@
 import { useData } from '../context/DataContext'
 import { useAuth } from '../context/AuthContext'
 import { createComplaint, updateComplaint, deleteComplaint, bulkInsertComplaints, deleteByGroup } from '../utils/dataLoader'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Search, Filter, Plus, Download, Eye, Pencil, Trash2, X, ChevronLeft, ChevronRight, RotateCcw, Upload, FileSpreadsheet, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Search, Filter, Plus, Download, Eye, Pencil, Trash2, X, ChevronLeft, ChevronRight, RotateCcw, Upload, FileSpreadsheet, CheckCircle2, AlertCircle, ArrowUpDown } from 'lucide-react'
 import Toast from '../components/Toast'
 import * as XLSX from 'xlsx'
+import { supabase } from '../lib/supabase'
 
 const ROWS_PER_PAGE = 10
+
+const SORT_OPTIONS = [
+  { v: 'created_at_desc',    label: 'เพิ่มล่าสุดก่อน',             col: 'created_at',    asc: false },
+  { v: 'created_at_asc',     label: 'เพิ่มเก่าสุดก่อน',            col: 'created_at',    asc: true  },
+  { v: 'received_date_desc', label: 'วันที่รับเรื่อง ล่าสุดก่อน',  col: 'received_date', asc: false },
+  { v: 'received_date_asc',  label: 'วันที่รับเรื่อง เก่าสุดก่อน', col: 'received_date', asc: true  },
+]
+
+const FETCH_COLS = 'id,group_no,received_date,completed_date,channel,district,subdistrict,community,province,person_type,sex,occupation,role,action_unit,urgency,status,drug,area_type'
+const FETCH_PAGE = 1000
+
+async function fetchSortedComplaints(sortVal) {
+  const opt = SORT_OPTIONS.find(o => o.v === sortVal)
+  if (!opt) return []
+  let all = []
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from('complaints')
+      .select(FETCH_COLS)
+      .order(opt.col, { ascending: opt.asc, nullsFirst: false })
+      .range(from, from + FETCH_PAGE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    all = [...all, ...data.map(r => ({
+      id: r.id,
+      group: r.group_no,
+      date: r.received_date,
+      completedDate: r.completed_date,
+      channel: r.channel,
+      district: r.district,
+      subdistrict: r.subdistrict,
+      community: r.community,
+      province: r.province,
+      personType: r.person_type,
+      actionUnit: r.action_unit,
+      urgency: r.urgency,
+      status: r.status,
+      drug: r.drug,
+      areaType: r.area_type,
+    }))]
+    if (data.length < FETCH_PAGE) break
+    from += FETCH_PAGE
+  }
+  return all
+}
+
 const GROUPS = [
   { v: 1, l: '1 - พบพฤติการณ์' },
   { v: 2, l: '2 - มีตัวตน ไม่พบประวัติ' },
@@ -20,10 +68,30 @@ const STATUSES = ['ดำเนินการแล้ว', 'ยังไม่
 const ACTION_UNITS = ['ส่งต่อ', 'ดำเนินการเอง', 'ทำร่วม']
 
 export default function DataTable() {
-  const { records, isLoading, reload } = useData()
+  const { reload } = useData()
   const { isAdmin, logAction } = useAuth()
   const [searchParams] = useSearchParams()
 
+  // ── Sort state (drives direct Supabase query with .order()) ──────────────
+  const [sortOrder, setSortOrder] = useState('created_at_desc')
+  const [tableRecords, setTableRecords] = useState([])
+  const [tableLoading, setTableLoading] = useState(false)
+
+  const fetchData = useCallback(async () => {
+    setTableLoading(true)
+    try {
+      const rows = await fetchSortedComplaints(sortOrder)
+      setTableRecords(rows)
+    } catch (e) {
+      console.error('[DataTable] fetchSorted error:', e)
+    } finally {
+      setTableLoading(false)
+    }
+  }, [sortOrder])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  // ── Filter state ──────────────────────────────────────────────────────────
   const [filterDate, setFilterDate] = useState('')
   const [filterDistrict, setFilterDistrict] = useState('all')
   const [filterGroup, setFilterGroup] = useState('all')
@@ -46,12 +114,12 @@ export default function DataTable() {
 
   const allDistricts = useMemo(() => {
     const s = new Set()
-    records.forEach(r => { if (r.district) s.add(r.district) })
+    tableRecords.forEach(r => { if (r.district) s.add(r.district) })
     return Array.from(s).sort()
-  }, [records])
+  }, [tableRecords])
 
   const filtered = useMemo(() => {
-    return records.filter(r => {
+    return tableRecords.filter(r => {
       if (filterDate && r.date !== filterDate) return false
       if (filterDistrict !== 'all' && r.district !== filterDistrict) return false
       if (filterGroup !== 'all' && String(r.group) !== filterGroup) return false
@@ -68,7 +136,7 @@ export default function DataTable() {
       }
       return true
     })
-  }, [records, filterDate, filterDistrict, filterGroup, filterChannel, filterStatus, search])
+  }, [tableRecords, filterDate, filterDistrict, filterGroup, filterChannel, filterStatus, search])
 
   const totalPages = Math.ceil(filtered.length / ROWS_PER_PAGE) || 1
   const pageData = filtered.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE)
@@ -100,6 +168,7 @@ export default function DataTable() {
       if (logAction) await logAction('delete', 'complaints', deleteId, { id: deleteId })
       setDeleteId(null)
       reload()
+      fetchData()
       showToast('ลบข้อมูลสำเร็จ')
     } catch (err) {
       setDeleteId(null)
@@ -135,7 +204,7 @@ export default function DataTable() {
           <Filter size={18} className="text-blue-600" />
           <h3 className="font-bold text-slate-800">ค้นหาและคัดกรองข้อมูล</h3>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">📅 วันที่รับเรื่อง</label>
             <input type="date" value={filterDate} onChange={e => { setFilterDate(e.target.value); setPage(1) }}
@@ -165,6 +234,18 @@ export default function DataTable() {
               {CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+              <ArrowUpDown size={11} className="text-blue-500" /> เรียงลำดับ
+            </label>
+            <select
+              value={sortOrder}
+              onChange={e => { setSortOrder(e.target.value); setPage(1) }}
+              className="w-full px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 outline-none text-blue-800 font-medium"
+            >
+              {SORT_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+            </select>
+          </div>
           <div className="flex items-end">
             <button onClick={clearFilters}
               className="w-full px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 transition">
@@ -192,7 +273,7 @@ export default function DataTable() {
           <div className="col-span-1 text-center">จัดการ</div>
         </div>
 
-        {isLoading ? (
+        {tableLoading ? (
           <div className="p-16 text-center text-slate-500">กำลังโหลด...</div>
         ) : pageData.length === 0 ? (
           <div className="p-16 text-center text-slate-400">ไม่พบข้อมูล</div>
@@ -275,8 +356,8 @@ export default function DataTable() {
 
       {/* Modals */}
       {viewRow && <ViewModal row={viewRow} onClose={() => setViewRow(null)} />}
-      {editRow && <EditModal row={editRow} onClose={() => setEditRow(null)} onSaved={() => { reload(); setEditRow(null) }} logAction={logAction} showToast={showToast} />}
-      {showAdd && <AddDataModal onClose={() => setShowAdd(false)} onSaved={() => { reload(); setShowAdd(false) }} logAction={logAction} showToast={showToast} />}
+      {editRow && <EditModal row={editRow} onClose={() => setEditRow(null)} onSaved={() => { reload(); fetchData(); setEditRow(null) }} logAction={logAction} showToast={showToast} />}
+      {showAdd && <AddDataModal onClose={() => setShowAdd(false)} onSaved={() => { reload(); fetchData(); setShowAdd(false) }} logAction={logAction} showToast={showToast} />}
 
       {deleteId && (
         <Modal onClose={() => setDeleteId(null)} title="ยืนยันการลบ" size="sm">

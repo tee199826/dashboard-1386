@@ -4,8 +4,8 @@ import {
   Upload, FileText, AlertTriangle, CheckCircle2,
   X, ChevronDown, RefreshCw, Info, LayoutDashboard,
 } from 'lucide-react'
-import { parseFile, detectType, mapColumns, buildBatch, validateRows } from '../utils/importEngine'
-import { upsertRecords } from '../utils/uploadService'
+import { parseFile, detectType, mapColumns, buildBatch, validateRows, parse115B } from '../utils/importEngine'
+import { upsertRecords, upsertBknSummary } from '../utils/uploadService'
 import { useData } from '../context/DataContext'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -15,10 +15,10 @@ const ACCEPT = '.xlsx,.xls,.csv'
 const TYPE_LABELS = {
   complaints:     '📋 เรื่องร้องเรียน (complaints)',
   drug_incidents: '🗺️ เหตุการณ์ยาเสพติด (drug_incidents)',
+  bkn_summary:    '📊 สรุป บก.น. 1–9 (RPT_115_B)',
 }
 
 const COL_LABELS = {
-  // complaints
   group_no: 'กลุ่มเรื่อง', received_date: 'วันที่รับเรื่อง',
   completed_date: 'วันที่รับผล', channel: 'แหล่งข่าว',
   district: 'เขต', subdistrict: 'แขวง', community: 'หมู่บ้าน/ชุมชน',
@@ -26,18 +26,22 @@ const COL_LABELS = {
   occupation: 'อาชีพ', role: 'บทบาท', action_unit: 'การดำเนินการ',
   urgency: 'ระดับความเร่งด่วน', status: 'ผลการดำเนินการ',
   drug: 'ยาเสพติด', area_type: 'ประเภทพื้นที่',
-  // drug_incidents
   behaviors: 'พฤติการณ์', primary_drug: 'ยาหลัก',
   primary_action: 'ผลดำเนินการ', police_station: 'สน.',
   lat: 'Latitude', lng: 'Longitude',
-  // batch (ไม่แสดงในตาราง แต่เก็บ label ไว้)
   record_uid: 'Record UID',
 }
 
-// คอลัมน์ที่ไม่ต้องแสดงในตัวอย่าง
 const HIDE_COLS = new Set(['batch_id', 'source_file', 'row_index', 'record_uid'])
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function genBatchId() {
+  const now = new Date()
+  const p = (n, l = 2) => String(n).padStart(l, '0')
+  return [now.getFullYear(), p(now.getMonth() + 1), p(now.getDate())].join('') +
+    '-' + [p(now.getHours()), p(now.getMinutes()), p(now.getSeconds())].join('')
+}
 
 function computePreview(raw, type, fileName) {
   const mapped = mapColumns(raw, type)
@@ -46,22 +50,39 @@ function computePreview(raw, type, fileName) {
   return { mapped, batch: b, validation: v }
 }
 
+const GROUP_NAMES = {
+  1: 'กลุ่ม 1: พบพฤติการณ์',
+  2: 'กลุ่ม 2: มีตัวตน ไม่พบประวัติ',
+  3: 'กลุ่ม 3: พิสูจน์ทราบไม่ได้',
+  4: 'กลุ่ม 4: สถานที่',
+  5: 'กลุ่ม 5: พื้นที่',
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function UploadPage() {
-  // state machine: idle → preview → uploading → done
-  const [phase, setPhase]             = useState('idle')
-  const [file, setFile]               = useState(null)
-  const [rawRows, setRawRows]         = useState([])
+  const [phase, setPhase]               = useState('idle')
+  const [file, setFile]                 = useState(null)
+  const [rawRows, setRawRows]           = useState([])
+  const [storedWorkbook, setStoredWorkbook] = useState(null)
   const [detectedType, setDetectedType] = useState('unknown')
   const [selectedType, setSelectedType] = useState('complaints')
-  const [mappedRows, setMappedRows]   = useState([])
-  const [batch, setBatch]             = useState(null)
-  const [validation, setValidation]   = useState(null)
+
+  // complaints / drug_incidents state
+  const [mappedRows, setMappedRows]     = useState([])
+  const [batch, setBatch]               = useState(null)
+  const [validation, setValidation]     = useState(null)
+
+  // bkn_summary state
+  const [bkn115Rows, setBkn115Rows]     = useState([])
+  const [bkn115BatchId, setBkn115BatchId] = useState(null)
+  const [bkn115Error, setBkn115Error]   = useState(null)
+
   const [uploadResult, setUploadResult] = useState(null)
-  const [isDragging, setIsDragging]   = useState(false)
-  const [isLoading, setIsLoading]     = useState(false)
-  const [loadError, setLoadError]     = useState(null)
+  const [uploadProgress, setUploadProgress] = useState('')
+  const [isDragging, setIsDragging]     = useState(false)
+  const [isLoading, setIsLoading]       = useState(false)
+  const [loadError, setLoadError]       = useState(null)
   const fileInputRef = useRef(null)
   const navigate = useNavigate()
   const { reload } = useData()
@@ -77,21 +98,43 @@ export default function UploadPage() {
 
     setIsLoading(true)
     setLoadError(null)
+    setBkn115Error(null)
+
     try {
-      const raw = await parseFile(f)
+      const { rows: raw, workbook: wb } = await parseFile(f)
       if (!raw || raw.length === 0) throw new Error('ไม่พบข้อมูลในไฟล์หรือไฟล์ว่างเปล่า')
 
-      const detected     = detectType(raw)
+      const detected      = detectType(raw)
       const effectiveType = detected === 'unknown' ? 'complaints' : detected
-      const { mapped, batch: b, validation: v } = computePreview(raw, effectiveType, f.name)
 
       setFile(f)
       setRawRows(raw)
+      setStoredWorkbook(wb)
       setDetectedType(detected)
       setSelectedType(effectiveType)
-      setMappedRows(mapped)
-      setBatch(b)
-      setValidation(v)
+
+      if (effectiveType === 'bkn_summary') {
+        try {
+          const bknData = parse115B(wb)
+          setBkn115Rows(bknData)
+          setBkn115BatchId(genBatchId())
+          setBkn115Error(null)
+        } catch (parseErr) {
+          setBkn115Rows([])
+          setBkn115Error(parseErr.message)
+        }
+        setMappedRows([])
+        setBatch(null)
+        setValidation(null)
+      } else {
+        const { mapped, batch: b, validation: v } = computePreview(raw, effectiveType, f.name)
+        setMappedRows(mapped)
+        setBatch(b)
+        setValidation(v)
+        setBkn115Rows([])
+        setBkn115Error(null)
+      }
+
       setPhase('preview')
     } catch (err) {
       setLoadError('อ่านไฟล์ไม่สำเร็จ: ' + err.message)
@@ -104,11 +147,34 @@ export default function UploadPage() {
   const handleTypeChange = (e) => {
     const newType = e.target.value
     setSelectedType(newType)
-    if (!rawRows.length || !file) return
-    const { mapped, batch: b, validation: v } = computePreview(rawRows, newType, file.name)
-    setMappedRows(mapped)
-    setBatch(b)
-    setValidation(v)
+    if (!file) return
+    setBkn115Error(null)
+
+    if (newType === 'bkn_summary') {
+      if (storedWorkbook) {
+        try {
+          const bknData = parse115B(storedWorkbook)
+          setBkn115Rows(bknData)
+          setBkn115BatchId(genBatchId())
+          setBkn115Error(null)
+        } catch (err) {
+          setBkn115Rows([])
+          setBkn115Error(err.message)
+        }
+        setMappedRows([])
+        setBatch(null)
+        setValidation(null)
+      }
+    } else {
+      if (rawRows.length) {
+        const { mapped, batch: b, validation: v } = computePreview(rawRows, newType, file.name)
+        setMappedRows(mapped)
+        setBatch(b)
+        setValidation(v)
+      }
+      setBkn115Rows([])
+      setBkn115Error(null)
+    }
   }
 
   // ─── Drag & drop ─────────────────────────────────────────────
@@ -124,9 +190,13 @@ export default function UploadPage() {
     setPhase('idle')
     setFile(null)
     setRawRows([])
+    setStoredWorkbook(null)
     setMappedRows([])
     setBatch(null)
     setValidation(null)
+    setBkn115Rows([])
+    setBkn115BatchId(null)
+    setBkn115Error(null)
     setUploadResult(null)
     setLoadError(null)
     setDetectedType('unknown')
@@ -136,27 +206,47 @@ export default function UploadPage() {
 
   // ─── ยืนยันอัปโหลด ───────────────────────────────────────────
   const handleConfirm = async () => {
-    if (!batch || !file) return
+    if (!file) return
     setPhase('uploading')
-    const result = await upsertRecords(selectedType, batch.rows, {
-      batchId:  batch.batchId,
-      fileName: file.name,
-    })
+    const totalRows = confirmCount
+    setUploadProgress(selectedType === 'bkn_summary'
+      ? `กำลังอัปโหลด ${totalRows.toLocaleString()} record (บก.น. × กลุ่ม)...`
+      : `กำลังอัปโหลด ${totalRows.toLocaleString()} แถว...`)
+
+    let result
+    if (selectedType === 'bkn_summary') {
+      result = await upsertBknSummary(bkn115Rows, {
+        batchId:  bkn115BatchId || genBatchId(),
+        fileName: file.name,
+      })
+    } else {
+      if (!batch) { setPhase('preview'); return }
+      result = await upsertRecords(selectedType, batch.rows, {
+        batchId:  batch.batchId,
+        fileName: file.name,
+      })
+    }
+
     setUploadResult(result)
     setPhase('done')
   }
 
-  // คอลัมน์ที่จะแสดงในตัวอย่าง (ตัด batch meta ออก)
+  // ─── derived ─────────────────────────────────────────────────
   const previewCols = mappedRows.length > 0
     ? Object.keys(mappedRows[0]).filter(k => !HIDE_COLS.has(k))
     : []
 
+  const confirmCount = selectedType === 'bkn_summary'
+    ? bkn115Rows.length
+    : rawRows.length
+
+  const canConfirm = selectedType === 'bkn_summary'
+    ? bkn115Rows.length > 0
+    : !!batch
+
   // ─── Render ───────────────────────────────────────────────────
   return (
-    <div
-      className="p-4 sm:p-6 max-w-5xl mx-auto"
-      style={{ fontFamily: 'Sarabun, sans-serif' }}
-    >
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto" style={{ fontFamily: 'Sarabun, sans-serif' }}>
       {/* Page header */}
       <div className="mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-3">
@@ -166,7 +256,7 @@ export default function UploadPage() {
           นำเข้าข้อมูลจากไฟล์ Excel / CSV
         </h1>
         <p className="text-sm text-slate-500 mt-2 ml-[52px]">
-          รองรับ .xlsx · .xls · .csv — ตรวจสอบข้อมูลก่อนบันทึกเข้าฐานข้อมูล
+          รองรับ .xlsx · .xls · .csv — รองรับ 3 ประเภท: เรื่องร้องเรียน / เหตุการณ์ยาเสพติด / สรุป บก.น. (RPT_115_B)
         </p>
       </div>
 
@@ -234,13 +324,12 @@ export default function UploadPage() {
       )}
 
       {/* ════════════ PREVIEW ════════════ */}
-      {phase === 'preview' && file && batch && validation && (
+      {phase === 'preview' && file && (
         <div className="space-y-4">
 
           {/* ── Info card ── */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
 
-            {/* ชื่อไฟล์ + ปุ่มปิด */}
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -249,15 +338,12 @@ export default function UploadPage() {
                 <div className="min-w-0">
                   <p className="font-semibold text-slate-800 text-sm truncate">{file.name}</p>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    {rawRows.length.toLocaleString()} แถว · {(file.size / 1024).toFixed(1)} KB
+                    {(file.size / 1024).toFixed(1)} KB
                   </p>
                 </div>
               </div>
-              <button
-                onClick={handleReset}
-                title="เลือกไฟล์ใหม่"
-                className="text-slate-400 hover:text-slate-600 transition flex-shrink-0 p-1"
-              >
+              <button onClick={handleReset} title="เลือกไฟล์ใหม่"
+                className="text-slate-400 hover:text-slate-600 transition flex-shrink-0 p-1">
                 <X size={18} />
               </button>
             </div>
@@ -265,7 +351,6 @@ export default function UploadPage() {
             {/* ประเภทข้อมูล */}
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-slate-600 font-medium">ประเภทข้อมูล:</span>
-
               {detectedType !== 'unknown' ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium border border-blue-200">
                   <CheckCircle2 size={13} />
@@ -277,13 +362,11 @@ export default function UploadPage() {
                   <AlertTriangle size={14} className="text-amber-500 flex-shrink-0" />
                   <span className="text-xs text-amber-700">ตรวจประเภทไม่ได้ กรุณาเลือกเอง:</span>
                   <div className="relative">
-                    <select
-                      value={selectedType}
-                      onChange={handleTypeChange}
-                      className="appearance-none pl-3 pr-8 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
-                    >
+                    <select value={selectedType} onChange={handleTypeChange}
+                      className="appearance-none pl-3 pr-8 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400">
                       <option value="complaints">📋 เรื่องร้องเรียน</option>
                       <option value="drug_incidents">🗺️ เหตุการณ์ยาเสพติด</option>
+                      <option value="bkn_summary">📊 สรุป บก.น. (RPT_115_B)</option>
                     </select>
                     <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-amber-600 pointer-events-none" />
                   </div>
@@ -292,28 +375,52 @@ export default function UploadPage() {
             </div>
 
             {/* สรุปตัวเลข */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-slate-50 rounded-xl p-3 text-center">
-                <p className="text-2xl font-bold text-slate-700">{rawRows.length.toLocaleString()}</p>
-                <p className="text-xs text-slate-500 mt-0.5">แถวทั้งหมด</p>
+            {selectedType === 'bkn_summary' ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-slate-700">{bkn115Rows.length}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">record (บก.น. × กลุ่ม)</p>
+                </div>
+                <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-emerald-700">
+                    {new Set(bkn115Rows.map(r => r.bkn)).size}
+                  </p>
+                  <p className="text-xs text-emerald-600 mt-0.5">หน่วยงาน (บก.น.)</p>
+                </div>
               </div>
-              <div className="bg-emerald-50 rounded-xl p-3 text-center">
-                <p className="text-2xl font-bold text-emerald-700">{validation.validCount.toLocaleString()}</p>
-                <p className="text-xs text-emerald-600 mt-0.5">ผ่านการตรวจ</p>
+            ) : validation ? (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-slate-50 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-slate-700">{rawRows.length.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">แถวทั้งหมด</p>
+                </div>
+                <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-emerald-700">{validation.validCount.toLocaleString()}</p>
+                  <p className="text-xs text-emerald-600 mt-0.5">ผ่านการตรวจ</p>
+                </div>
+                <div className={`rounded-xl p-3 text-center ${validation.issues.length > 0 ? 'bg-amber-50' : 'bg-slate-50'}`}>
+                  <p className={`text-2xl font-bold ${validation.issues.length > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                    {validation.issues.length}
+                  </p>
+                  <p className={`text-xs mt-0.5 ${validation.issues.length > 0 ? 'text-amber-600' : 'text-slate-400'}`}>แจ้งเตือน</p>
+                </div>
               </div>
-              <div className={`rounded-xl p-3 text-center ${validation.issues.length > 0 ? 'bg-amber-50' : 'bg-slate-50'}`}>
-                <p className={`text-2xl font-bold ${validation.issues.length > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
-                  {validation.issues.length}
-                </p>
-                <p className={`text-xs mt-0.5 ${validation.issues.length > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
-                  แจ้งเตือน
-                </p>
-              </div>
-            </div>
+            ) : null}
           </div>
 
-          {/* ── Issues (orange, not red) ── */}
-          {validation.issues.length > 0 && (
+          {/* ── bkn_summary parse error ── */}
+          {selectedType === 'bkn_summary' && bkn115Error && (
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-start gap-3">
+              <AlertTriangle size={16} className="text-rose-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-rose-800">อ่านไฟล์ไม่สำเร็จ</p>
+                <p className="text-sm text-rose-700 mt-0.5">{bkn115Error}</p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Issues (complaints/drug_incidents) ── */}
+          {selectedType !== 'bkn_summary' && validation?.issues.length > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
               <h3 className="text-sm font-semibold text-amber-800 flex items-center gap-2 mb-3">
                 <AlertTriangle size={15} className="flex-shrink-0" />
@@ -323,12 +430,8 @@ export default function UploadPage() {
               <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
                 {validation.issues.map((issue, i) => (
                   <div key={i} className="flex items-baseline gap-2 text-xs">
-                    <span className="font-bold text-amber-600 flex-shrink-0 w-16">
-                      แถว {issue.rowIndex}
-                    </span>
-                    <span className="text-amber-700 font-semibold flex-shrink-0">
-                      [{issue.field}]
-                    </span>
+                    <span className="font-bold text-amber-600 flex-shrink-0 w-16">แถว {issue.rowIndex}</span>
+                    <span className="text-amber-700 font-semibold flex-shrink-0">[{issue.field}]</span>
                     <span className="text-amber-800">{issue.message}</span>
                   </div>
                 ))}
@@ -336,68 +439,116 @@ export default function UploadPage() {
             </div>
           )}
 
-          {/* ── ตัวอย่าง 10 แถว ── */}
+          {/* ── ตัวอย่างข้อมูล ── */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <h3 className="text-sm font-semibold text-slate-700">
-                ตัวอย่าง 10 แถวแรก (หลัง map คอลัมน์แล้ว)
+                {selectedType === 'bkn_summary'
+                  ? `ตัวอย่างข้อมูล (ทั้งหมด ${bkn115Rows.length} record)`
+                  : 'ตัวอย่าง 10 แถวแรก (หลัง map คอลัมน์แล้ว)'}
               </h3>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400">{previewCols.length} คอลัมน์</span>
-                <div className="group relative">
-                  <Info size={14} className="text-slate-400 cursor-help" />
-                  <div className="hidden group-hover:block absolute right-0 top-5 z-10 w-56 bg-slate-800 text-white text-xs rounded-lg p-2.5 shadow-lg">
-                    แสดงข้อมูลหลัง map ชื่อคอลัมน์แล้ว ก่อนอัปโหลดจริง
+              {selectedType !== 'bkn_summary' && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400">{previewCols.length} คอลัมน์</span>
+                  <div className="group relative">
+                    <Info size={14} className="text-slate-400 cursor-help" />
+                    <div className="hidden group-hover:block absolute right-0 top-5 z-10 w-56 bg-slate-800 text-white text-xs rounded-lg p-2.5 shadow-lg">
+                      แสดงข้อมูลหลัง map ชื่อคอลัมน์แล้ว ก่อนอัปโหลดจริง
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-slate-100">
-                    <th className="px-3 py-2.5 text-left text-slate-400 font-medium bg-slate-50 sticky left-0 border-r border-slate-100 whitespace-nowrap">#</th>
-                    {previewCols.map(col => (
-                      <th key={col} className="px-3 py-2.5 text-left text-slate-600 font-semibold whitespace-nowrap bg-slate-50">
-                        {COL_LABELS[col] || col}
-                        <span className="block text-[10px] font-normal text-slate-400">{col}</span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {mappedRows.slice(0, 10).map((row, i) => (
-                    <tr key={i} className="border-b border-slate-100 hover:bg-blue-50/40 transition">
-                      <td className="px-3 py-2 text-slate-400 sticky left-0 bg-white border-r border-slate-100">{i + 1}</td>
-                      {previewCols.map(col => (
-                        <td key={col} className="px-3 py-2 text-slate-700 whitespace-nowrap">
-                          {row[col] == null
-                            ? <span className="text-slate-300">—</span>
-                            : <span className="max-w-[200px] truncate block">{String(row[col])}</span>
-                          }
+
+            {selectedType === 'bkn_summary' ? (
+              // ── bkn_summary preview table ──
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50">
+                      <th className="px-3 py-2.5 text-left text-slate-400 font-medium">#</th>
+                      <th className="px-3 py-2.5 text-left text-slate-600 font-semibold whitespace-nowrap">หน่วยงาน (บก.น.)</th>
+                      <th className="px-3 py-2.5 text-left text-slate-600 font-semibold whitespace-nowrap">กลุ่ม</th>
+                      <th className="px-3 py-2.5 text-right text-slate-600 font-semibold whitespace-nowrap">จำนวนผู้ถูกร้องเรียน</th>
+                      <th className="px-3 py-2.5 text-right text-slate-600 font-semibold whitespace-nowrap">ยังไม่ได้รับผล</th>
+                      <th className="px-3 py-2.5 text-right text-emerald-700 font-semibold whitespace-nowrap">จำนวนผลดำเนินการ</th>
+                      <th className="px-3 py-2.5 text-left text-slate-600 font-semibold whitespace-nowrap">ช่วงเวลา (period)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bkn115Rows.slice(0, 20).map((row, i) => (
+                      <tr key={i} className="border-b border-slate-100 hover:bg-blue-50/40 transition">
+                        <td className="px-3 py-2 text-slate-400">{i + 1}</td>
+                        <td className="px-3 py-2 font-semibold text-indigo-700">{row.bkn}</td>
+                        <td className="px-3 py-2 text-slate-600">
+                          <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] font-medium">
+                            {GROUP_NAMES[row.group_no] ?? `กลุ่ม ${row.group_no}`}
+                          </span>
                         </td>
+                        <td className="px-3 py-2 text-right text-slate-700 font-medium">{row.total.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right text-amber-700 font-medium">{row.pending.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right text-emerald-700 font-medium">{row.done.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-slate-400 text-[11px]">{row.period ?? '–'}</td>
+                      </tr>
+                    ))}
+                    {bkn115Rows.length > 20 && (
+                      <tr>
+                        <td colSpan={7} className="px-3 py-2 text-center text-xs text-slate-400">
+                          … และอีก {bkn115Rows.length - 20} record
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              // ── complaints / drug_incidents preview table ──
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="px-3 py-2.5 text-left text-slate-400 font-medium bg-slate-50 sticky left-0 border-r border-slate-100 whitespace-nowrap">#</th>
+                      {previewCols.map(col => (
+                        <th key={col} className="px-3 py-2.5 text-left text-slate-600 font-semibold whitespace-nowrap bg-slate-50">
+                          {COL_LABELS[col] || col}
+                          <span className="block text-[10px] font-normal text-slate-400">{col}</span>
+                        </th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {mappedRows.slice(0, 10).map((row, i) => (
+                      <tr key={i} className="border-b border-slate-100 hover:bg-blue-50/40 transition">
+                        <td className="px-3 py-2 text-slate-400 sticky left-0 bg-white border-r border-slate-100">{i + 1}</td>
+                        {previewCols.map(col => (
+                          <td key={col} className="px-3 py-2 text-slate-700 whitespace-nowrap">
+                            {row[col] == null
+                              ? <span className="text-slate-300">—</span>
+                              : <span className="max-w-[200px] truncate block">{String(row[col])}</span>
+                            }
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* ── Action buttons ── */}
           <div className="flex flex-col-reverse sm:flex-row gap-3 justify-end pt-1">
-            <button
-              onClick={handleReset}
-              className="px-6 py-2.5 border border-slate-300 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition"
-            >
+            <button onClick={handleReset}
+              className="px-6 py-2.5 border border-slate-300 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition">
               ยกเลิก
             </button>
             <button
               onClick={handleConfirm}
-              className="px-7 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-sm font-bold transition-all shadow flex items-center justify-center gap-2"
+              disabled={!canConfirm}
+              className="px-7 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-sm font-bold transition-all shadow flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Upload size={15} />
-              ยืนยันอัปโหลด {rawRows.length.toLocaleString()} แถว
+              ยืนยันอัปโหลด {confirmCount.toLocaleString()} {selectedType === 'bkn_summary' ? 'record' : 'แถว'}
             </button>
           </div>
         </div>
@@ -408,9 +559,8 @@ export default function UploadPage() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-16 text-center">
           <div className="inline-block w-14 h-14 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-5" />
           <p className="text-lg font-bold text-slate-700">กำลังอัปโหลดข้อมูล...</p>
-          <p className="text-sm text-slate-400 mt-2">
-            กรุณารอสักครู่ อาจใช้เวลาสักพักหากมีข้อมูลจำนวนมาก
-          </p>
+          <p className="text-sm text-blue-600 font-medium mt-2">{uploadProgress}</p>
+          <p className="text-xs text-slate-400 mt-1.5">กรุณารอสักครู่ อาจใช้เวลาสักพักหากมีข้อมูลจำนวนมาก</p>
         </div>
       )}
 
@@ -424,7 +574,6 @@ export default function UploadPage() {
               ? 'bg-rose-50 border-rose-200'
               : 'bg-amber-50 border-amber-200'
           }`}>
-            {/* Result header */}
             <div className="flex items-center gap-3 mb-6">
               <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow ${
                 uploadResult.failed === 0 ? 'bg-emerald-500'
@@ -446,7 +595,6 @@ export default function UploadPage() {
               </div>
             </div>
 
-            {/* Result counts */}
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div className="bg-white rounded-xl p-4 text-center shadow-sm">
                 <p className="text-3xl font-bold text-emerald-600">{uploadResult.inserted.toLocaleString()}</p>
@@ -464,7 +612,6 @@ export default function UploadPage() {
               </div>
             </div>
 
-            {/* Error message */}
             {uploadResult.error && (
               <div className="flex items-start gap-2 text-sm text-rose-700 bg-rose-50 rounded-xl px-4 py-3 border border-rose-200">
                 <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
@@ -474,10 +621,8 @@ export default function UploadPage() {
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row gap-3 justify-end">
-            <button
-              onClick={handleReset}
-              className="px-6 py-2.5 border border-slate-300 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition flex items-center justify-center gap-2"
-            >
+            <button onClick={handleReset}
+              className="px-6 py-2.5 border border-slate-300 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition flex items-center justify-center gap-2">
               <RefreshCw size={15} />
               อัปโหลดไฟล์ใหม่
             </button>

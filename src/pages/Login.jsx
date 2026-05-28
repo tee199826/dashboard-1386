@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate, Navigate } from 'react-router-dom'
-import { Lock, Mail, Shield, AlertCircle, Loader2 } from 'lucide-react'
+import { Lock, Mail, Shield, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
 import logoOncb from '../assets/logo-oncb.png'
 
 const BG_IMAGE_URL =
@@ -14,6 +14,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   if (loading) return null
   if (user && isAdmin) return <Navigate to="/admin/data" replace />
@@ -215,7 +216,7 @@ export default function Login() {
             <div>
               <label
                 className="block text-xs font-semibold tracking-wider uppercase mb-2"
-                style={{ color: 'rgba(255,255,255,0.55)', letterSpacing: '0.1em' }}
+                style={{ color: 'rgba(255,255,255,0.72)', letterSpacing: '0.1em' }}
               >
                 อีเมล
               </label>
@@ -223,7 +224,7 @@ export default function Login() {
                 <Mail
                   size={15}
                   className="absolute left-3.5 top-1/2 -translate-y-1/2"
-                  style={{ color: 'rgba(255,255,255,0.35)' }}
+                  style={{ color: 'rgba(255,255,255,0.55)' }}
                 />
                 <input
                   type="email"
@@ -253,7 +254,7 @@ export default function Login() {
             <div>
               <label
                 className="block text-xs font-semibold tracking-wider uppercase mb-2"
-                style={{ color: 'rgba(255,255,255,0.55)', letterSpacing: '0.1em' }}
+                style={{ color: 'rgba(255,255,255,0.72)', letterSpacing: '0.1em' }}
               >
                 รหัสผ่าน
               </label>
@@ -261,15 +262,15 @@ export default function Login() {
                 <Lock
                   size={15}
                   className="absolute left-3.5 top-1/2 -translate-y-1/2"
-                  style={{ color: 'rgba(255,255,255,0.35)' }}
+                  style={{ color: 'rgba(255,255,255,0.55)' }}
                 />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-4 py-2.5 text-sm text-white rounded-lg outline-none transition-all"
+                  className="w-full pl-10 pr-10 py-2.5 text-sm text-white rounded-lg outline-none transition-all"
                   style={{
                     background: 'rgba(255,255,255,0.07)',
                     border: '1px solid rgba(255,255,255,0.12)',
@@ -284,6 +285,15 @@ export default function Login() {
                     e.target.style.background = 'rgba(255,255,255,0.07)'
                   }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  tabIndex={-1}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center"
+                  style={{ color: 'rgba(255,255,255,0.55)', width: 32, height: 32 }}
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
               </div>
             </div>
 

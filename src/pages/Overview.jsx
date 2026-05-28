@@ -8,10 +8,12 @@ import {
 } from 'recharts'
 import {
   TrendingUp, CheckCircle2, Clock, MapPin,
-  User, Users, ArrowRightLeft, Ban, ArrowRight, Trophy, ChevronDown, Info, X, Search, RefreshCw,
+  User, Users, ArrowRightLeft, Ban, ArrowRight, Trophy, ChevronDown, Info, X, Search, RefreshCw, AlertTriangle,
 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import * as stats from '../utils/statistics'
+import { usePresentation } from '../context/PresentationContext'
+import PresentationBar, { PresentationEnterButton } from '../components/PresentationBar'
 
 const BEHAVIOR_COLORS = { 'เสพ': '#3B82F6', 'ค้า': '#EF4444', 'เสพ/ค้า': '#F59E0B', 'ผลิต': '#8B5CF6' }
 
@@ -61,9 +63,10 @@ function renderChannelActiveShape(props) {
 }
 
 export default function Overview() {
-  const { records, isLoading, reload } = useData()
+  const { records, isLoading, reload, error: dataError } = useData()
   const navigate = useNavigate()
   const { isAdmin } = useAuth()
+  const { isPresentation } = usePresentation()
 
   const [trendYear, setTrendYear] = useState('all')
   const [channelYear, setChannelYear] = useState('all')
@@ -81,9 +84,12 @@ export default function Overview() {
   const [bSubdistrict, setBSubdistrict] = useState('all')
   const [bCommunity, setBCommunity] = useState('all')
   const [bSearch, setBSearch] = useState('')
+  const [incidentError, setIncidentError] = useState(null)
+  const [incidentRetry, setIncidentRetry] = useState(0)
 
   useEffect(() => {
     const load = async () => {
+      setIncidentError(null)
       let all = []
       let from = 0
       while (true) {
@@ -91,7 +97,8 @@ export default function Overview() {
           .from('drug_incidents')
           .select('district, subdistrict, community, behaviors')
           .range(from, from + 999)
-        if (error || !data || data.length === 0) break
+        if (error) { setIncidentError('ไม่สามารถโหลดข้อมูลพฤติการณ์ได้ กรุณาลองใหม่'); break }
+        if (!data || data.length === 0) break
         all = all.concat(data)
         if (data.length < 1000) break
         from += 1000
@@ -99,7 +106,7 @@ export default function Overview() {
       setIncidents(all)
     }
     load()
-  }, [])
+  }, [incidentRetry])
 
   const data = records ?? []
   const years = useMemo(() => stats.getYears(data), [data])
@@ -230,6 +237,21 @@ export default function Overview() {
     </div>
   )
 
+  if (!isLoading && dataError && records.length === 0) return (
+    <div className="p-8">
+      <div className="max-w-md mx-auto mt-8 bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
+        <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <AlertTriangle size={24} className="text-red-500" />
+        </div>
+        <h2 className="text-base font-bold text-red-800 mb-2">ไม่สามารถโหลดข้อมูลได้</h2>
+        <p className="text-sm text-red-600 mb-4">ไม่สามารถเชื่อมต่อกับฐานข้อมูลได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือลองใหม่</p>
+        <button onClick={reload} className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold transition">
+          ลองอีกครั้ง
+        </button>
+      </div>
+    </div>
+  )
+
   const DONUT_COLORS = ['#1E40AF', '#3B82F6', '#10B981', '#FACC15']
   const ACTION_ICONS = [
     { icon: <User size={36} />, color: 'amber' },
@@ -239,9 +261,12 @@ export default function Overview() {
   ]
 
   return (
+    <>
+    {isPresentation && <PresentationBar title="ภาพรวม" />}
     <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6">
       <style>{`@keyframes pie-tip-in{from{opacity:0;transform:translateY(8px) scale(0.95)}to{opacity:1;transform:translateY(0) scale(1)}}`}</style>
       {/* Page Header */}
+      {!isPresentation && (
       <div>
         <div className="flex items-center gap-2 flex-wrap">
           <h1 className="text-xl lg:text-2xl font-bold text-slate-800">ภาพรวม</h1>
@@ -254,12 +279,14 @@ export default function Overview() {
             onClick={reload}
             disabled={isLoading}
             title="โหลดข้อมูลใหม่จากฐานข้อมูล"
-            className="p-1.5 rounded-full text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition disabled:opacity-40">
+            className="p-2.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition disabled:opacity-40">
             <RefreshCw size={15} className={isLoading ? 'animate-spin' : ''} />
           </button>
+          <PresentationEnterButton />
         </div>
         <p className="text-sm text-slate-500 mt-1">สถิติเรื่องร้องเรียนยาเสพติด · กรุงเทพมหานคร</p>
       </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -512,6 +539,16 @@ export default function Overview() {
                 )}
               </div>
 
+              {incidentError && (
+                <div className="mb-3 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                  <AlertTriangle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-red-700 font-medium">โหลดข้อมูลพฤติการณ์ไม่สำเร็จ</p>
+                    <button onClick={() => setIncidentRetry(c => c + 1)} className="text-xs text-red-600 hover:text-red-800 font-semibold mt-1">ลองอีกครั้ง</button>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2.5">
                 {/* Search */}
                 <div className="relative">
@@ -586,11 +623,11 @@ export default function Overview() {
               {/* Active tags */}
               {bHasFilter && (
                 <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-1">
-                  {bGroup !== 'all' && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-600 text-white rounded-full text-xs font-semibold">{BKK_GROUPS[bGroup]} {bGroup}<button onMouseDown={() => { setBGroup('all'); setBDistrict('all'); setBSubdistrict('all'); setBCommunity('all') }} className="opacity-75 hover:opacity-100 ml-0.5">×</button></span>}
-                  {bDistrict !== 'all' && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-600 text-white rounded-full text-xs font-semibold">{bDistrict}<button onMouseDown={() => { setBDistrict('all'); setBSubdistrict('all'); setBCommunity('all') }} className="opacity-75 hover:opacity-100 ml-0.5">×</button></span>}
-                  {bSubdistrict !== 'all' && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-600 text-white rounded-full text-xs font-semibold">{bSubdistrict}<button onMouseDown={() => { setBSubdistrict('all'); setBCommunity('all') }} className="opacity-75 hover:opacity-100 ml-0.5">×</button></span>}
-                  {bCommunity !== 'all' && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-600 text-white rounded-full text-xs font-semibold">{bCommunity}<button onMouseDown={() => setBCommunity('all')} className="opacity-75 hover:opacity-100 ml-0.5">×</button></span>}
-                  {bSearch && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-700 text-white rounded-full text-xs font-semibold">🔍 {bSearch}<button onMouseDown={() => setBSearch('')} className="opacity-75 hover:opacity-100 ml-0.5">×</button></span>}
+                  {bGroup !== 'all' && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-600 text-white rounded-full text-xs font-semibold">{BKK_GROUPS[bGroup]} {bGroup}<button onMouseDown={() => { setBGroup('all'); setBDistrict('all'); setBSubdistrict('all'); setBCommunity('all') }} className="w-5 h-5 flex items-center justify-center opacity-75 hover:opacity-100 hover:bg-white/20 rounded-full ml-0.5 flex-shrink-0">×</button></span>}
+                  {bDistrict !== 'all' && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-600 text-white rounded-full text-xs font-semibold">{bDistrict}<button onMouseDown={() => { setBDistrict('all'); setBSubdistrict('all'); setBCommunity('all') }} className="w-5 h-5 flex items-center justify-center opacity-75 hover:opacity-100 hover:bg-white/20 rounded-full ml-0.5 flex-shrink-0">×</button></span>}
+                  {bSubdistrict !== 'all' && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-600 text-white rounded-full text-xs font-semibold">{bSubdistrict}<button onMouseDown={() => { setBSubdistrict('all'); setBCommunity('all') }} className="w-5 h-5 flex items-center justify-center opacity-75 hover:opacity-100 hover:bg-white/20 rounded-full ml-0.5 flex-shrink-0">×</button></span>}
+                  {bCommunity !== 'all' && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-600 text-white rounded-full text-xs font-semibold">{bCommunity}<button onMouseDown={() => setBCommunity('all')} className="w-5 h-5 flex items-center justify-center opacity-75 hover:opacity-100 hover:bg-white/20 rounded-full ml-0.5 flex-shrink-0">×</button></span>}
+                  {bSearch && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-700 text-white rounded-full text-xs font-semibold">🔍 {bSearch}<button onMouseDown={() => setBSearch('')} className="w-5 h-5 flex items-center justify-center opacity-75 hover:opacity-100 hover:bg-white/20 rounded-full ml-0.5 flex-shrink-0">×</button></span>}
                 </div>
               )}
             </div>
@@ -791,6 +828,7 @@ export default function Overview() {
         </div>
       )}
     </div>
+    </>
   )
 }
 
@@ -979,7 +1017,7 @@ function PieTooltipCard({ label, value, pct, color, total, rank, rankOfTotal, mo
         }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ color: '#fff', fontSize: 14, fontWeight: 800, lineHeight: 1.3, letterSpacing: '-0.01em' }}>{label}</div>
-          <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 11, marginTop: 2 }}>
+          <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11, marginTop: 2 }}>
             {rankLabel} อันดับ {rank} จาก {rankOfTotal}
           </div>
         </div>
@@ -996,10 +1034,10 @@ function PieTooltipCard({ label, value, pct, color, total, rank, rankOfTotal, mo
 
       {/* Value */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-        <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>จำนวน</span>
+        <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12 }}>จำนวน</span>
         <span style={{ color: '#fff', fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}>
           {typeof value === 'number' ? value.toLocaleString() : value}
-          <span style={{ fontSize: 11, fontWeight: 400, opacity: 0.45, marginLeft: 5 }}>เรื่อง</span>
+          <span style={{ fontSize: 11, fontWeight: 400, opacity: 0.65, marginLeft: 5 }}>เรื่อง</span>
         </span>
       </div>
 
@@ -1016,7 +1054,7 @@ function PieTooltipCard({ label, value, pct, color, total, rank, rankOfTotal, mo
 
       {/* vs average row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>เทียบค่าเฉลี่ย ({avgPct.toFixed(1)}%)</span>
+        <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11 }}>เทียบค่าเฉลี่ย ({avgPct.toFixed(1)}%)</span>
         <span style={{
           fontSize: 12, fontWeight: 700,
           color: diff >= 0 ? '#4ade80' : '#f87171',

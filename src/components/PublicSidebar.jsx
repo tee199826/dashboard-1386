@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { BarChart3, MapPin, LogIn, Database, ScrollText, Users, FileSpreadsheet, Map, Upload } from 'lucide-react'
+import { BarChart3, MapPin, LogIn, Database, ScrollText, Users, FileSpreadsheet, Map, Upload, Shield } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
@@ -12,6 +12,7 @@ export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
     { to: '/districts', icon: <MapPin size={18} />, label: 'รายเขต' },
     { to: '/radar', icon: <Map size={18} />, label: 'แผนที่ยาเสพติด' },
     { to: '/operations', icon: <FileSpreadsheet size={18} />, label: 'ผลการดำเนินงาน' },
+    { to: '/bkn', icon: <Shield size={18} />, label: 'สถิติ บก.น.' },
   ]
 
   const adminMenus = [
