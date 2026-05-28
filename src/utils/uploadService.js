@@ -133,3 +133,59 @@ export async function upsertBknSummary(rows, batchInfo) {
 
   return { inserted, updated, failed, error: lastError }
 }
+
+/**
+ * Upsert รายงาน RPT_114 เข้าตาราง report_114
+ * conflict key: report_id, fiscal_year, group_name
+ */
+export async function upsertRpt114(rows, batchInfo) {
+  if (!rows || rows.length === 0) return { inserted: 0, updated: 0, failed: 0, error: null }
+
+  const fiscal_year = rows[0]?.fiscal_year ?? null
+  let isUpdate = false
+  try {
+    const { count } = await supabase
+      .from('report_114')
+      .select('*', { count: 'exact', head: true })
+      .eq('report_id', '114')
+      .eq('fiscal_year', fiscal_year)
+    isUpdate = (count ?? 0) > 0
+  } catch { /* ถ้าตรวจไม่ได้ให้ถือว่าเป็น insert */ }
+
+  let inserted = 0, updated = 0, failed = 0, lastError = null
+
+  for (let i = 0; i < rows.length; i += UPSERT_BATCH) {
+    const batch = rows.slice(i, i + UPSERT_BATCH).map(r => ({
+      ...r,
+      batch_id:    batchInfo.batchId,
+      source_file: batchInfo.fileName,
+    }))
+
+    try {
+      const { error } = await supabase
+        .from('report_114')
+        .upsert(batch, { onConflict: 'report_id,fiscal_year,group_name' })
+      if (error) throw error
+      if (isUpdate) updated += batch.length
+      else          inserted += batch.length
+    } catch (err) {
+      console.error('[uploadService] report_114 batch failed:', err)
+      failed += batch.length
+      lastError = err.message
+    }
+  }
+
+  try {
+    await supabase.from('upload_batches').insert([{
+      batch_id:     batchInfo.batchId,
+      target_table: 'report_114',
+      file_name:    batchInfo.fileName,
+      row_count:    rows.length,
+      status:       failed === 0 ? 'completed' : failed === rows.length ? 'failed' : 'partial',
+    }])
+  } catch (err) {
+    console.warn('[uploadService] บันทึก upload_batches ไม่ได้:', err.message)
+  }
+
+  return { inserted, updated, failed, error: lastError }
+}

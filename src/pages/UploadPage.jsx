@@ -4,8 +4,8 @@ import {
   Upload, FileText, AlertTriangle, CheckCircle2,
   X, ChevronDown, RefreshCw, Info, LayoutDashboard,
 } from 'lucide-react'
-import { parseFile, detectType, mapColumns, buildBatch, validateRows, parse115B } from '../utils/importEngine'
-import { upsertRecords, upsertBknSummary } from '../utils/uploadService'
+import { parseFile, detectType, mapColumns, buildBatch, validateRows, parse115B, parse114 } from '../utils/importEngine'
+import { upsertRecords, upsertBknSummary, upsertRpt114 } from '../utils/uploadService'
 import { useData } from '../context/DataContext'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -16,6 +16,7 @@ const TYPE_LABELS = {
   complaints:     '📋 เรื่องร้องเรียน (complaints)',
   drug_incidents: '🗺️ เหตุการณ์ยาเสพติด (drug_incidents)',
   bkn_summary:    '📊 สรุป บก.น. 1–9 (RPT_115_B)',
+  report_114:     '📑 รายงาน RPT_114 (การดำเนินการตามร้องเรียน)',
 }
 
 const COL_LABELS = {
@@ -78,6 +79,11 @@ export default function UploadPage() {
   const [bkn115BatchId, setBkn115BatchId] = useState(null)
   const [bkn115Error, setBkn115Error]   = useState(null)
 
+  // report_114 state
+  const [rpt114Rows, setRpt114Rows]     = useState([])
+  const [rpt114BatchId, setRpt114BatchId] = useState(null)
+  const [rpt114Error, setRpt114Error]   = useState(null)
+
   const [uploadResult, setUploadResult] = useState(null)
   const [uploadProgress, setUploadProgress] = useState('')
   const [isDragging, setIsDragging]     = useState(false)
@@ -99,6 +105,7 @@ export default function UploadPage() {
     setIsLoading(true)
     setLoadError(null)
     setBkn115Error(null)
+    setRpt114Error(null)
 
     try {
       const { rows: raw, workbook: wb } = await parseFile(f)
@@ -126,6 +133,23 @@ export default function UploadPage() {
         setMappedRows([])
         setBatch(null)
         setValidation(null)
+        setRpt114Rows([])
+        setRpt114Error(null)
+      } else if (effectiveType === 'report_114') {
+        try {
+          const rptData = parse114(wb)
+          setRpt114Rows(rptData)
+          setRpt114BatchId(genBatchId())
+          setRpt114Error(null)
+        } catch (parseErr) {
+          setRpt114Rows([])
+          setRpt114Error(parseErr.message)
+        }
+        setMappedRows([])
+        setBatch(null)
+        setValidation(null)
+        setBkn115Rows([])
+        setBkn115Error(null)
       } else {
         const { mapped, batch: b, validation: v } = computePreview(raw, effectiveType, f.name)
         setMappedRows(mapped)
@@ -133,6 +157,8 @@ export default function UploadPage() {
         setValidation(v)
         setBkn115Rows([])
         setBkn115Error(null)
+        setRpt114Rows([])
+        setRpt114Error(null)
       }
 
       setPhase('preview')
@@ -149,6 +175,7 @@ export default function UploadPage() {
     setSelectedType(newType)
     if (!file) return
     setBkn115Error(null)
+    setRpt114Error(null)
 
     if (newType === 'bkn_summary') {
       if (storedWorkbook) {
@@ -165,6 +192,25 @@ export default function UploadPage() {
         setBatch(null)
         setValidation(null)
       }
+      setRpt114Rows([])
+      setRpt114Error(null)
+    } else if (newType === 'report_114') {
+      if (storedWorkbook) {
+        try {
+          const rptData = parse114(storedWorkbook)
+          setRpt114Rows(rptData)
+          setRpt114BatchId(genBatchId())
+          setRpt114Error(null)
+        } catch (err) {
+          setRpt114Rows([])
+          setRpt114Error(err.message)
+        }
+        setMappedRows([])
+        setBatch(null)
+        setValidation(null)
+      }
+      setBkn115Rows([])
+      setBkn115Error(null)
     } else {
       if (rawRows.length) {
         const { mapped, batch: b, validation: v } = computePreview(rawRows, newType, file.name)
@@ -174,6 +220,8 @@ export default function UploadPage() {
       }
       setBkn115Rows([])
       setBkn115Error(null)
+      setRpt114Rows([])
+      setRpt114Error(null)
     }
   }
 
@@ -197,6 +245,9 @@ export default function UploadPage() {
     setBkn115Rows([])
     setBkn115BatchId(null)
     setBkn115Error(null)
+    setRpt114Rows([])
+    setRpt114BatchId(null)
+    setRpt114Error(null)
     setUploadResult(null)
     setLoadError(null)
     setDetectedType('unknown')
@@ -209,14 +260,23 @@ export default function UploadPage() {
     if (!file) return
     setPhase('uploading')
     const totalRows = confirmCount
-    setUploadProgress(selectedType === 'bkn_summary'
-      ? `กำลังอัปโหลด ${totalRows.toLocaleString()} record (บก.น. × กลุ่ม)...`
-      : `กำลังอัปโหลด ${totalRows.toLocaleString()} แถว...`)
+    setUploadProgress(
+      selectedType === 'bkn_summary'
+        ? `กำลังอัปโหลด ${totalRows.toLocaleString()} record (บก.น. × กลุ่ม)...`
+        : selectedType === 'report_114'
+        ? `กำลังอัปโหลด ${totalRows.toLocaleString()} record (RPT_114)...`
+        : `กำลังอัปโหลด ${totalRows.toLocaleString()} แถว...`
+    )
 
     let result
     if (selectedType === 'bkn_summary') {
       result = await upsertBknSummary(bkn115Rows, {
         batchId:  bkn115BatchId || genBatchId(),
+        fileName: file.name,
+      })
+    } else if (selectedType === 'report_114') {
+      result = await upsertRpt114(rpt114Rows, {
+        batchId:  rpt114BatchId || genBatchId(),
         fileName: file.name,
       })
     } else {
@@ -238,10 +298,14 @@ export default function UploadPage() {
 
   const confirmCount = selectedType === 'bkn_summary'
     ? bkn115Rows.length
+    : selectedType === 'report_114'
+    ? rpt114Rows.length
     : rawRows.length
 
   const canConfirm = selectedType === 'bkn_summary'
     ? bkn115Rows.length > 0
+    : selectedType === 'report_114'
+    ? rpt114Rows.length > 0
     : !!batch
 
   // ─── Render ───────────────────────────────────────────────────
@@ -256,7 +320,7 @@ export default function UploadPage() {
           นำเข้าข้อมูลจากไฟล์ Excel / CSV
         </h1>
         <p className="text-sm text-slate-500 mt-2 ml-[52px]">
-          รองรับ .xlsx · .xls · .csv — รองรับ 3 ประเภท: เรื่องร้องเรียน / เหตุการณ์ยาเสพติด / สรุป บก.น. (RPT_115_B)
+          รองรับ .xlsx · .xls · .csv — รองรับ 4 ประเภท: เรื่องร้องเรียน / เหตุการณ์ยาเสพติด / สรุป บก.น. (RPT_115_B) / RPT_114
         </p>
       </div>
 
@@ -367,6 +431,7 @@ export default function UploadPage() {
                       <option value="complaints">📋 เรื่องร้องเรียน</option>
                       <option value="drug_incidents">🗺️ เหตุการณ์ยาเสพติด</option>
                       <option value="bkn_summary">📊 สรุป บก.น. (RPT_115_B)</option>
+                      <option value="report_114">📑 รายงาน RPT_114</option>
                     </select>
                     <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-amber-600 pointer-events-none" />
                   </div>
@@ -386,6 +451,17 @@ export default function UploadPage() {
                     {new Set(bkn115Rows.map(r => r.bkn)).size}
                   </p>
                   <p className="text-xs text-emerald-600 mt-0.5">หน่วยงาน (บก.น.)</p>
+                </div>
+              </div>
+            ) : selectedType === 'report_114' ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-slate-700">{rpt114Rows.length}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">record (กลุ่ม)</p>
+                </div>
+                <div className="bg-purple-50 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-purple-700">{rpt114Rows[0]?.fiscal_year ?? '–'}</p>
+                  <p className="text-xs text-purple-600 mt-0.5">ปีงบประมาณ (พ.ศ.)</p>
                 </div>
               </div>
             ) : validation ? (
@@ -419,8 +495,19 @@ export default function UploadPage() {
             </div>
           )}
 
-          {/* ── Issues (complaints/drug_incidents) ── */}
-          {selectedType !== 'bkn_summary' && validation?.issues.length > 0 && (
+          {/* ── report_114 parse error ── */}
+          {selectedType === 'report_114' && rpt114Error && (
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-start gap-3">
+              <AlertTriangle size={16} className="text-rose-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-rose-800">อ่านไฟล์ไม่สำเร็จ</p>
+                <p className="text-sm text-rose-700 mt-0.5">{rpt114Error}</p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Issues (complaints/drug_incidents only) ── */}
+          {selectedType !== 'bkn_summary' && selectedType !== 'report_114' && validation?.issues.length > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
               <h3 className="text-sm font-semibold text-amber-800 flex items-center gap-2 mb-3">
                 <AlertTriangle size={15} className="flex-shrink-0" />
@@ -445,9 +532,11 @@ export default function UploadPage() {
               <h3 className="text-sm font-semibold text-slate-700">
                 {selectedType === 'bkn_summary'
                   ? `ตัวอย่างข้อมูล (ทั้งหมด ${bkn115Rows.length} record)`
+                  : selectedType === 'report_114'
+                  ? `ตัวอย่างข้อมูล (ทั้งหมด ${rpt114Rows.length} record)`
                   : 'ตัวอย่าง 10 แถวแรก (หลัง map คอลัมน์แล้ว)'}
               </h3>
-              {selectedType !== 'bkn_summary' && (
+              {selectedType !== 'bkn_summary' && selectedType !== 'report_114' && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-400">{previewCols.length} คอลัมน์</span>
                   <div className="group relative">
@@ -501,6 +590,42 @@ export default function UploadPage() {
                   </tbody>
                 </table>
               </div>
+            ) : selectedType === 'report_114' ? (
+              // ── report_114 preview table ──
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50">
+                      <th className="px-3 py-2.5 text-left text-slate-400 font-medium">#</th>
+                      <th className="px-3 py-2.5 text-left text-slate-600 font-semibold whitespace-nowrap">กลุ่ม</th>
+                      <th className="px-3 py-2.5 text-right text-slate-600 font-semibold whitespace-nowrap">ร้องเรียน</th>
+                      <th className="px-3 py-2.5 text-right text-emerald-700 font-semibold whitespace-nowrap">ดำเนินการแล้ว</th>
+                      <th className="px-3 py-2.5 text-right text-slate-600 font-semibold whitespace-nowrap">ร้อยละ</th>
+                      <th className="px-3 py-2.5 text-right text-blue-700 font-semibold whitespace-nowrap">พบพฤติการณ์</th>
+                      <th className="px-3 py-2.5 text-right text-slate-600 font-semibold whitespace-nowrap">จับกุม</th>
+                      <th className="px-3 py-2.5 text-left text-purple-700 font-semibold whitespace-nowrap">ปีงบประมาณ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rpt114Rows.map((row, i) => (
+                      <tr key={i} className={`border-b border-slate-100 hover:bg-purple-50/30 transition ${row.group_no === null ? 'bg-slate-50 font-semibold' : ''}`}>
+                        <td className="px-3 py-2 text-slate-400">{i + 1}</td>
+                        <td className="px-3 py-2 text-slate-700">
+                          <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${row.group_no === null ? 'bg-slate-200 text-slate-600' : 'bg-purple-100 text-purple-700'}`}>
+                            {row.group_name}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-700">{row.complaints?.toLocaleString() ?? '–'}</td>
+                        <td className="px-3 py-2 text-right text-emerald-700 font-medium">{row.processed?.toLocaleString() ?? '–'}</td>
+                        <td className="px-3 py-2 text-right text-slate-500">{row.percent != null ? `${row.percent}%` : '–'}</td>
+                        <td className="px-3 py-2 text-right text-blue-700">{row.found?.toLocaleString() ?? '–'}</td>
+                        <td className="px-3 py-2 text-right text-slate-600">{row.arrested?.toLocaleString() ?? '–'}</td>
+                        <td className="px-3 py-2 text-purple-700 font-semibold">{row.fiscal_year ?? '–'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
               // ── complaints / drug_incidents preview table ──
               <div className="overflow-x-auto">
@@ -548,7 +673,7 @@ export default function UploadPage() {
               className="px-7 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-sm font-bold transition-all shadow flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Upload size={15} />
-              ยืนยันอัปโหลด {confirmCount.toLocaleString()} {selectedType === 'bkn_summary' ? 'record' : 'แถว'}
+              ยืนยันอัปโหลด {confirmCount.toLocaleString()} {selectedType === 'bkn_summary' || selectedType === 'report_114' ? 'record' : 'แถว'}
             </button>
           </div>
         </div>

@@ -14,6 +14,7 @@ import { useData } from '../context/DataContext'
 import * as stats from '../utils/statistics'
 import { usePresentation } from '../context/PresentationContext'
 import PresentationBar, { PresentationEnterButton } from '../components/PresentationBar'
+import PresentationSlides from '../components/PresentationSlides'
 
 const BEHAVIOR_COLORS = { 'เสพ': '#3B82F6', 'ค้า': '#EF4444', 'เสพ/ค้า': '#F59E0B', 'ผลิต': '#8B5CF6' }
 
@@ -263,7 +264,7 @@ export default function Overview() {
   return (
     <>
     {isPresentation && <PresentationBar title="ภาพรวม" />}
-    <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6">
+    <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto'}>
       <style>{`@keyframes pie-tip-in{from{opacity:0;transform:translateY(8px) scale(0.95)}to{opacity:1;transform:translateY(0) scale(1)}}`}</style>
       {/* Page Header */}
       {!isPresentation && (
@@ -287,6 +288,8 @@ export default function Overview() {
         <p className="text-sm text-slate-500 mt-1">สถิติเรื่องร้องเรียนยาเสพติด · กรุงเทพมหานคร</p>
       </div>
       )}
+
+      <PresentationSlides isPresentation={isPresentation} normalClassName="max-w-[1600px] mx-auto space-y-6">
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -740,6 +743,10 @@ export default function Overview() {
         </div>
       </div>
 
+      </PresentationSlides>
+
+      {!isPresentation && (
+      <div className="max-w-[1600px] mx-auto">
       {/* หน่วยดำเนินการ */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
         <h3 className="text-base font-semibold text-slate-800 text-center mb-6">หน่วยดำเนินการ</h3>
@@ -750,6 +757,8 @@ export default function Overview() {
           ))}
         </div>
       </div>
+      </div>
+      )}
 
       {/* Source Info Modal */}
       {showSourceInfo && (

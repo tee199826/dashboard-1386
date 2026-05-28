@@ -12,6 +12,7 @@ import IncidentMap from '../components/IncidentMap'
 import { getBkn, getStations, BKN_ORDER, BKN_COLORS } from '../utils/bknMapping'
 import { usePresentation } from '../context/PresentationContext'
 import PresentationBar, { PresentationEnterButton } from '../components/PresentationBar'
+import PresentationSlides from '../components/PresentationSlides'
 
 const BEHAVIOR_COLORS = { 'เสพ': '#3B82F6', 'ค้า': '#EF4444', 'เสพ/ค้า': '#F59E0B', 'ผลิต': '#8B5CF6' }
 
@@ -204,7 +205,7 @@ export default function BknPage() {
   return (
     <>
     {isPresentation && <PresentationBar title="รายงานความรวดเร็วการดำเนินการ บก.น." />}
-    <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-7">
+    <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto'}>
 
       {/* ── OFFICIAL BANNER ── */}
       {!isPresentation && <div className="rounded-2xl overflow-hidden shadow-md" style={{ background: 'linear-gradient(135deg,#1e3a5f 0%,#1d4ed8 100%)' }}>
@@ -235,7 +236,10 @@ export default function BknPage() {
         <div className="h-0.5 opacity-50" style={{ background: 'linear-gradient(90deg,#60a5fa,#22d3ee,#60a5fa)' }} />
       </div>}
 
-      {/* ── HEADER ── */}
+      <PresentationSlides isPresentation={isPresentation} normalClassName="max-w-[1600px] mx-auto space-y-7">
+
+      {/* ── HEADER + KPI (slide 1 in presentation) ── */}
+      <div className="space-y-5">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           {isLevel2 && (
@@ -326,6 +330,7 @@ export default function BknPage() {
           value={topDrug?.name || '—'}
           bg="from-violet-600 to-violet-500" foot="#5B21B6" smallValue />
       </div>
+      </div>{/* end header+KPI group */}
 
       {/* ── BAR CHART: Comparison ── */}
       <Panel accent="from-blue-500 to-indigo-600">
@@ -664,6 +669,8 @@ export default function BknPage() {
           />
         </div>
       </div>
+
+      </PresentationSlides>
 
     </div>
     </>

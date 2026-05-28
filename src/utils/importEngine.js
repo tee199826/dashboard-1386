@@ -138,8 +138,15 @@ export async function parseFile(file) {
 export function detectType(rows) {
   if (!rows || rows.length === 0) return 'unknown'
 
-  // bkn_summary: ตรวจหา "กลุ่ม 1" และ "บก.น." ในค่าทุก cell
   const allVals = rows.flatMap(r => Object.values(r)).map(v => String(v ?? '').trim())
+
+  // report_114: ตรวจจาก header row-0 keys (sheet title) หรือค่าใน cells
+  const firstRowKeys = rows.length > 0 ? Object.keys(rows[0]).map(k => String(k ?? '').trim()) : []
+  const hasRpt114 = firstRowKeys.some(k => k.includes('รายงานการดำเนินการตามข้อร้องเรียน') || /Report\s*ID:\s*114/.test(k))
+    || allVals.some(v => v.includes('รายงานการดำเนินการตามข้อร้องเรียน') || /Report\s*ID:\s*114/.test(v))
+  if (hasRpt114) return 'report_114'
+
+  // bkn_summary: ตรวจหา "กลุ่ม 1" และ "บก.น." ในค่าทุก cell
   const hasGroup1 = allVals.some(v => /กลุ่ม\s*1/.test(v))
   const hasBkn    = allVals.some(v => /^บก\.(น|สปพ)/.test(v))
   if (hasGroup1 && hasBkn) return 'bkn_summary'
@@ -406,6 +413,118 @@ export function parse115B(workbook) {
 
   if (records.length === 0)
     throw new Error('ไม่พบแถวข้อมูล บก.น. ในไฟล์ — กรุณาตรวจสอบฟอร์แมต')
+
+  return records
+}
+
+// ─── 7. parse114 ──────────────────────────────────────────────────────────────
+
+/**
+ * Parser สำหรับรายงาน RPT_114 (การดำเนินการตามข้อร้องเรียน กลุ่ม 1-5 + รวม)
+ * ใช้ positional column mapping (cols 1-31) ซึ่งตรงกับโครงสร้างไฟล์จริง
+ * คืน array: [{ report_id, fiscal_year, period, group_name, group_no, ...30 fields }]
+ */
+export function parse114(workbook) {
+  const sheetName = workbook.SheetNames[0]
+  const ws = workbook.Sheets[sheetName]
+  if (!ws || !ws['!ref']) throw new Error('ไม่พบข้อมูลในชีต — กรุณาตรวจสอบไฟล์')
+
+  const range = XLSX.utils.decode_range(ws['!ref'])
+  const maxR = range.e.r
+  const maxC = range.e.c
+
+  function cellStr(r, c) {
+    const cell = ws[XLSX.utils.encode_cell({ r, c })]
+    return cell ? String(cell.v ?? '').trim() : ''
+  }
+
+  function cellNum(r, c) {
+    const cell = ws[XLSX.utils.encode_cell({ r, c })]
+    if (!cell) return null
+    if (typeof cell.v === 'number') return cell.v
+    const s = String(cell.v).replace(/,/g, '').trim()
+    if (s === '' || s === '-') return null
+    const n = parseFloat(s)
+    return isNaN(n) ? null : n
+  }
+
+  // 1. หา period และ fiscal_year จากแถว 0-6
+  let period = null
+  let fiscal_year = null
+  outer1:
+  for (let r = 0; r <= Math.min(6, maxR); r++) {
+    for (let c = 0; c <= maxC; c++) {
+      if (cellStr(r, c).includes('ระหว่างวันที่')) {
+        for (let dc = 1; dc <= 8; dc++) {
+          const v = cellStr(r, c + dc)
+          if (v && /\d/.test(v)) {
+            period = v
+            // ดึงปีงบประมาณจากปลายช่วงวันที่ เช่น "01 ต.ค. 66-30 ก.ย. 67" → 2567
+            const parts = v.split('-')
+            const endStr = parts[parts.length - 1].trim()
+            const yearMatch = endStr.match(/(\d{2,4})\s*$/)
+            if (yearMatch) {
+              let y = parseInt(yearMatch[1])
+              if (y < 100) y += 2500  // ปีงบ 2 หลัก เช่น 67 → 2567
+              fiscal_year = y
+            }
+            break outer1
+          }
+        }
+      }
+    }
+  }
+
+  // 2. อ่านแถวข้อมูล: col 1 ขึ้นต้นด้วย "กลุ่ม 1-5" หรือ "รวม"
+  const records = []
+  for (let r = 0; r <= maxR; r++) {
+    const groupName = cellStr(r, 1)
+    if (!/^กลุ่ม\s*[1-5]/.test(groupName) && !/^รวม/.test(groupName)) continue
+
+    const groupNoMatch = groupName.match(/กลุ่ม\s*(\d)/)
+    const group_no = groupNoMatch ? parseInt(groupNoMatch[1]) : null
+
+    records.push({
+      report_id:           '114',
+      fiscal_year,
+      period,
+      group_name:          groupName,
+      group_no,
+      complaints:          cellNum(r, 2),
+      processed:           cellNum(r, 3),
+      percent:             cellNum(r, 4),
+      found:               cellNum(r, 5),
+      not_found:           cellNum(r, 6),
+      not_in_area:         cellNum(r, 7),
+      investigating:       cellNum(r, 8),
+      deceased:            cellNum(r, 9),
+      arrested:            cellNum(r, 10),
+      more_invest:         cellNum(r, 11),
+      rehab:               cellNum(r, 12),
+      framed:              cellNum(r, 13),
+      closed:              cellNum(r, 14),
+      action_other:        cellNum(r, 15),
+      charge_use:          cellNum(r, 16),
+      charge_possess:      cellNum(r, 17),
+      charge_sell:         cellNum(r, 18),
+      charge_possess_sell: cellNum(r, 19),
+      charge_none:         cellNum(r, 20),
+      drug_yaba:           cellNum(r, 21),
+      drug_ice:            cellNum(r, 22),
+      drug_heroin:         cellNum(r, 23),
+      drug_cannabis:       cellNum(r, 24),
+      drug_kratom:         cellNum(r, 25),
+      drug_inhalant:       cellNum(r, 26),
+      drug_cough:          cellNum(r, 27),
+      drug_none:           cellNum(r, 28),
+      drug_other:          cellNum(r, 29),
+      id_13:               cellNum(r, 30),
+      expand:              cellNum(r, 31),
+    })
+  }
+
+  if (records.length === 0)
+    throw new Error('ไม่พบแถวข้อมูลกลุ่มในไฟล์ — กรุณาตรวจสอบฟอร์แมต')
 
   return records
 }
