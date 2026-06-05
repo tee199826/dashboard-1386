@@ -48,7 +48,9 @@
       "Bash(curl *)",
       "PowerShell($content = Get-Content \"C:\\\\Users\\\\Acer\\\\dashboard-1386\\\\src\\\\components\\\\Header.jsx\" -Raw; Write-Output \"Length: $\\($content.Length\\)\"; Write-Output $content)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Acer\\\\dashboard-1386\\\\src\" -Recurse -File)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(find . -path ./node_modules -prune -o \\\\\\( -name \"*.sql\" -o -name \"supabase.ts\" -o -name \"database.types.ts\" \\\\\\) -print)",
+      "Bash(ls -la supabase/migrations/)"
     ]
   }
 }

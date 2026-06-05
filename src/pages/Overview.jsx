@@ -134,9 +134,11 @@ export default function Overview() {
           .limit(500)
         if (data && data.length > 0) {
           const periods = [...new Set(data.map(r => r.period).filter(Boolean))].sort()
-          // SUM ทุกงวด — ภาพรวมไม่กรองเฉพาะงวดล่าสุด
+          // ใช้เฉพาะงวดล่าสุด (latestPeriod) ให้ตรงกับหน้า /bkn — pattern เดียวกับ BknPage
+          const latestPeriod = periods[periods.length - 1]
+          const rows = latestPeriod ? data.filter(r => r.period === latestPeriod) : data
           const map = {}
-          data.forEach(r => {
+          rows.forEach(r => {
             if (!r.bkn || r.bkn.includes('สปพ')) return
             if (!map[r.bkn]) map[r.bkn] = { total: 0, done: 0, pending: 0 }
             map[r.bkn].total   += r.total   || 0
@@ -147,8 +149,7 @@ export default function Overview() {
             (parseInt(a.replace(/\D+/g, '')) || 999) - (parseInt(b.replace(/\D+/g, '')) || 999)
           )
           const grandTotal = entries.reduce((s, [, v]) => s + v.total, 0)
-          const periodLabel = periods.length > 1 ? `${periods.length} งวด` : periods[0] || null
-          setBknSummary({ entries, periodLabel, periodCount: periods.length, grandTotal, totalRows: data.length })
+          setBknSummary({ entries, period: latestPeriod, periodCount: periods.length, grandTotal, totalRows: rows.length })
         } else {
           setBknSummary(null)
         }
@@ -386,6 +387,11 @@ export default function Overview() {
 
       {/* ── KPI Row 1: complaints ─────────────────────────────────────────── */}
       <div className="space-y-4">
+        <div className="flex items-center gap-2 pt-2">
+          <div className="w-1 h-5 bg-blue-600 rounded-full"></div>
+          <h3 className="text-sm font-bold text-slate-700">📁 ข้อมูลรายเรื่อง (complaints)</h3>
+          <span className="text-xs text-slate-400">ไฟล์รายเรื่องที่อัปเข้าระบบ · ปี 2568-2569</span>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
             icon={<TrendingUp />}
@@ -413,6 +419,11 @@ export default function Overview() {
         </div>
 
         {/* ── KPI Row 2: multi-source ───────────────────────────────────── */}
+        <div className="flex items-center gap-2 pt-2 mt-2">
+          <div className="w-1 h-5 bg-indigo-600 rounded-full"></div>
+          <h3 className="text-sm font-bold text-slate-700">📊 รายงานสรุปจากแหล่งอื่น</h3>
+          <span className="text-xs text-slate-400">ตัวเลขจาก 3 แหล่งข้อมูลที่ต่างกัน — ไม่เกี่ยวกันกับแถวบน</span>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <KpiCard
             icon={<FileText size={18} />}
@@ -436,7 +447,7 @@ export default function Overview() {
             icon={<BarChart2 size={18} />}
             label="ยอดราย บก.น. รวม"
             value={bknSummary ? bknSummary.grandTotal.toLocaleString() : '—'}
-            sub={bknSummary?.periodLabel ? `รวมทุกงวด · ${bknSummary.periodLabel}` : 'รวมทุกงวด'}
+            sub={bknSummary?.period ? `งวดล่าสุด · ${bknSummary.period}` : 'งวดล่าสุด'}
             sourceLabel="จาก 115_B"
             color="teal"
             loading={bknSummaryLoading}
@@ -486,7 +497,7 @@ export default function Overview() {
             </h3>
             <p className="text-xs text-slate-500 mt-1">
               {bknSummary
-                ? `ยอดดำเนินการรายกองบัญชาการ · รวมทุกงวด · ${bknSummary.totalRows} records`
+                ? `ยอดดำเนินการรายกองบัญชาการ · งวด ${bknSummary.period} · ${bknSummary.totalRows} records`
                 : 'ยอดดำเนินการรายกองบัญชาการ · แหล่งข้อมูล: bkn_summary'}
             </p>
           </div>
@@ -1132,7 +1143,7 @@ export default function Overview() {
                   </div>
                   <div className="bg-white p-2 rounded">
                     <span className="text-slate-500">จำนวนงวด</span>
-                    <div className="font-bold text-teal-700">{bknSummary?.periodLabel ?? '—'}</div>
+                    <div className="font-bold text-teal-700">{bknSummary ? `${bknSummary.periodCount} งวด` : '—'}</div>
                   </div>
                 </div>
                 <div className="mt-2 text-xs text-teal-700">✓ ใช้สำหรับ: KPI card 115_B, กราฟสรุป บก.น.</div>
