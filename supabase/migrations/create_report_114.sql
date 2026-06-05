@@ -28,21 +28,38 @@ CREATE TABLE IF NOT EXISTS report_114 (
   charge_sell    integer,
   charge_possess_sell integer,
   charge_none    integer,
-  drug_yaba      integer,
-  drug_ice       integer,
-  drug_heroin    integer,
-  drug_cannabis  integer,
-  drug_kratom    integer,
-  drug_inhalant  integer,
-  drug_cough     integer,
-  drug_none      integer,
-  drug_other     integer,
+  drug_yaba      numeric,
+  drug_ice       numeric,
+  drug_heroin    numeric,
+  drug_cannabis  numeric,
+  drug_kratom    numeric,
+  drug_inhalant  numeric,
+  drug_cough     numeric,
+  drug_none      numeric,
+  drug_other     numeric,
   id_13          integer,
   expand         integer,
   batch_id       text,
   source_file    text,
   created_at     timestamptz DEFAULT now()
 );
+
+-- แก้คอลัมน์ drug_* ที่เคย CREATE เป็น integer ให้เป็น numeric (หน่วยกรัม มีทศนิยม)
+DO $$
+DECLARE col text;
+BEGIN
+  FOREACH col IN ARRAY ARRAY['drug_yaba','drug_ice','drug_heroin','drug_cannabis',
+                              'drug_kratom','drug_inhalant','drug_cough','drug_none','drug_other']
+  LOOP
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'report_114' AND column_name = col AND data_type = 'integer'
+    ) THEN
+      EXECUTE format('ALTER TABLE report_114 ALTER COLUMN %I TYPE numeric', col);
+    END IF;
+  END LOOP;
+END
+$$;
 
 -- Unique constraint สำหรับ upsert (report_id, fiscal_year, group_name)
 DO $$

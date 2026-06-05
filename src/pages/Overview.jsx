@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import React, { lazy, Suspense, useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -9,38 +9,17 @@ import {
 import {
   TrendingUp, CheckCircle2, Clock, MapPin,
   User, Users, ArrowRightLeft, Ban, ArrowRight, Trophy, ChevronDown, Info, X, Search, RefreshCw, AlertTriangle,
+  BarChart2, FileText, ExternalLink,
 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import * as stats from '../utils/statistics'
 import { usePresentation } from '../context/PresentationContext'
 import PresentationBar, { PresentationEnterButton } from '../components/PresentationBar'
 import PresentationSlides from '../components/PresentationSlides'
+import { BEHAVIOR_COLORS, BKK_GROUPS, DNAME_TO_GROUP } from '../utils/constants'
+import { fetchAllPages } from '../utils/supabasePagination'
 
-const BEHAVIOR_COLORS = { 'เสพ': '#3B82F6', 'ค้า': '#EF4444', 'เสพ/ค้า': '#F59E0B', 'ผลิต': '#8B5CF6' }
-
-const BKK_GROUPS = {
-  'กรุงเทพเหนือ': '🟡', 'กรุงเทพใต้': '🔵', 'กรุงเทพกลาง': '🟢',
-  'กรุงเทพตะวันออก': '🟠', 'กรุงธนเหนือ': '🟣', 'กรุงธนใต้': '🔴',
-}
-
-const DNAME_TO_GROUP = {
-  'เขตดอนเมือง':'กรุงเทพเหนือ','เขตหลักสี่':'กรุงเทพเหนือ','เขตบางเขน':'กรุงเทพเหนือ',
-  'เขตสายไหม':'กรุงเทพเหนือ','เขตลาดพร้าว':'กรุงเทพเหนือ','เขตบึงกุ่ม':'กรุงเทพเหนือ','เขตคันนายาว':'กรุงเทพเหนือ',
-  'เขตพระนคร':'กรุงเทพกลาง','เขตดุสิต':'กรุงเทพกลาง','เขตบางรัก':'กรุงเทพกลาง',
-  'เขตป้อมปราบศัตรูพ่าย':'กรุงเทพกลาง','เขตสัมพันธวงศ์':'กรุงเทพกลาง','เขตบางซื่อ':'กรุงเทพกลาง',
-  'เขตจตุจักร':'กรุงเทพกลาง','เขตห้วยขวาง':'กรุงเทพกลาง','เขตวังทองหลาง':'กรุงเทพกลาง',
-  'เขตมีนบุรี':'กรุงเทพตะวันออก','เขตลาดกระบัง':'กรุงเทพตะวันออก','เขตหนองจอก':'กรุงเทพตะวันออก',
-  'เขตคลองสามวา':'กรุงเทพตะวันออก','เขตสะพานสูง':'กรุงเทพตะวันออก','เขตบางกะปิ':'กรุงเทพตะวันออก',
-  'เขตสวนหลวง':'กรุงเทพตะวันออก','เขตประเวศ':'กรุงเทพตะวันออก','เขตพระโขนง':'กรุงเทพตะวันออก',
-  'เขตปทุมวัน':'กรุงเทพใต้','เขตพญาไท':'กรุงเทพใต้','เขตราชเทวี':'กรุงเทพใต้',
-  'เขตวัฒนา':'กรุงเทพใต้','เขตคลองเตย':'กรุงเทพใต้','เขตยานนาวา':'กรุงเทพใต้',
-  'เขตสาทร':'กรุงเทพใต้','เขตบางคอแหลม':'กรุงเทพใต้','เขตดินแดง':'กรุงเทพใต้','เขตบางนา':'กรุงเทพใต้',
-  'เขตคลองสาน':'กรุงธนเหนือ','เขตธนบุรี':'กรุงธนเหนือ','เขตบางกอกใหญ่':'กรุงธนเหนือ',
-  'เขตบางกอกน้อย':'กรุงธนเหนือ','เขตบางพลัด':'กรุงธนเหนือ','เขตตลิ่งชัน':'กรุงธนเหนือ',
-  'เขตทวีวัฒนา':'กรุงธนเหนือ','เขตภาษีเจริญ':'กรุงธนเหนือ',
-  'เขตบางแค':'กรุงธนใต้','เขตหนองแขม':'กรุงธนใต้','เขตบางขุนเทียน':'กรุงธนใต้',
-  'เขตราษฏร์บูรณะ':'กรุงธนใต้','เขตทุ่งครุ':'กรุงธนใต้','เขตจอมทอง':'กรุงธนใต้','เขตบางบอน':'กรุงธนใต้',
-}
+const OverviewMiniMap = lazy(() => import('../components/OverviewMiniMap'))
 
 function renderBehaviorActiveShape(props) {
   const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props
@@ -69,11 +48,11 @@ export default function Overview() {
   const { isAdmin } = useAuth()
   const { isPresentation } = usePresentation()
 
+  // ── existing state ─────────────────────────────────────────────────────────
   const [trendYear, setTrendYear] = useState('all')
   const [channelYear, setChannelYear] = useState('all')
   const [channelMonth, setChannelMonth] = useState('all')
   const [selectedDistricts, setSelectedDistricts] = useState([])
-  const [showDistrictPicker, setShowDistrictPicker] = useState(false)
   const [showSourceInfo, setShowSourceInfo] = useState(false)
   const [activeBehaviorIndex, setActiveBehaviorIndex] = useState(null)
   const [activeChannelIndex, setActiveChannelIndex] = useState(null)
@@ -88,27 +67,119 @@ export default function Overview() {
   const [incidentError, setIncidentError] = useState(null)
   const [incidentRetry, setIncidentRetry] = useState(0)
 
+  // ── new state (multi-source data) ──────────────────────────────────────────
+  const [rpt114, setRpt114] = useState(null)
+  const [rpt114Loading, setRpt114Loading] = useState(true)
+  const [bknSummary, setBknSummary] = useState(null)
+  const [bknSummaryLoading, setBknSummaryLoading] = useState(true)
+  const [mapPoints, setMapPoints] = useState([])
+  const [mapLoading, setMapLoading] = useState(true)
+
+  // ── existing useEffect: drug_incidents (behaviors) ────────────────────────
   useEffect(() => {
     const load = async () => {
       setIncidentError(null)
-      let all = []
-      let from = 0
-      while (true) {
-        const { data, error } = await supabase
-          .from('drug_incidents')
-          .select('district, subdistrict, community, behaviors')
-          .range(from, from + 999)
-        if (error) { setIncidentError('ไม่สามารถโหลดข้อมูลพฤติการณ์ได้ กรุณาลองใหม่'); break }
-        if (!data || data.length === 0) break
-        all = all.concat(data)
-        if (data.length < 1000) break
-        from += 1000
+      try {
+        const all = await fetchAllPages('drug_incidents', 'district, subdistrict, community, behaviors')
+        setIncidents(all)
+      } catch {
+        setIncidentError('ไม่สามารถโหลดข้อมูลพฤติการณ์ได้ กรุณาลองใหม่')
       }
-      setIncidents(all)
     }
     load()
   }, [incidentRetry])
 
+  // ── new useEffect: report_114 ─────────────────────────────────────────────
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data } = await supabase
+          .from('report_114')
+          .select('complaints,processed,arrested,rehab,framed,closed,action_other,fiscal_year')
+          .is('group_no', null)
+        if (data && data.length > 0) {
+          const fys = [...new Set(data.map(r => r.fiscal_year))].filter(Boolean).sort((a, b) => a - b)
+          const sum = key => data.reduce((s, r) => s + Number(r[key] ?? 0), 0)
+          const fyMin = fys[0], fyMax = fys[fys.length - 1]
+          const fyRange = fys.length > 1 ? `ปีงบ ${fyMin}–${fyMax}` : fys.length === 1 ? `ปีงบ ${fyMin}` : null
+          setRpt114({
+            total: sum('complaints'),
+            fyRange,
+            arrested: sum('arrested'),
+            rehab: sum('rehab'),
+            framed: sum('framed'),
+            other: sum('closed') + sum('action_other'),
+            totalRows: data.length,
+          })
+        } else {
+          setRpt114(null)
+        }
+      } catch {
+        setRpt114(null)
+      } finally {
+        setRpt114Loading(false)
+      }
+    }
+    load()
+  }, [])
+
+  // ── new useEffect: bkn_summary ────────────────────────────────────────────
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data } = await supabase
+          .from('bkn_summary')
+          .select('bkn,total,done,pending,period')
+          .eq('report_id', '115_B')
+          .limit(500)
+        if (data && data.length > 0) {
+          const periods = [...new Set(data.map(r => r.period).filter(Boolean))].sort()
+          // SUM ทุกงวด — ภาพรวมไม่กรองเฉพาะงวดล่าสุด
+          const map = {}
+          data.forEach(r => {
+            if (!r.bkn || r.bkn.includes('สปพ')) return
+            if (!map[r.bkn]) map[r.bkn] = { total: 0, done: 0, pending: 0 }
+            map[r.bkn].total   += r.total   || 0
+            map[r.bkn].done    += r.done    || 0
+            map[r.bkn].pending += r.pending || 0
+          })
+          const entries = Object.entries(map).sort(([a], [b]) =>
+            (parseInt(a.replace(/\D+/g, '')) || 999) - (parseInt(b.replace(/\D+/g, '')) || 999)
+          )
+          const grandTotal = entries.reduce((s, [, v]) => s + v.total, 0)
+          const periodLabel = periods.length > 1 ? `${periods.length} งวด` : periods[0] || null
+          setBknSummary({ entries, periodLabel, periodCount: periods.length, grandTotal, totalRows: data.length })
+        } else {
+          setBknSummary(null)
+        }
+      } catch {
+        setBknSummary(null)
+      } finally {
+        setBknSummaryLoading(false)
+      }
+    }
+    load()
+  }, [])
+
+  // ── new useEffect: map points (lat/lng for mini map) ─────────────────────
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data } = await supabase
+          .from('drug_incidents')
+          .select('lat, lng, behaviors, district')
+          .limit(500)
+        setMapPoints((data || []).filter(p => p.lat && p.lng))
+      } catch {
+        setMapPoints([])
+      } finally {
+        setMapLoading(false)
+      }
+    }
+    load()
+  }, [])
+
+  // ── existing computed values ───────────────────────────────────────────────
   const data = records ?? []
   const years = useMemo(() => stats.getYears(data), [data])
 
@@ -117,7 +188,7 @@ export default function Overview() {
   const totals = useMemo(() => {
     const total     = filteredRecords.length
     const completed = filteredRecords.filter(r => r.status === 'ดำเนินการแล้ว').length
-    const pending   = total - completed   // ทุก status ที่ไม่ใช่ 'ดำเนินการแล้ว'
+    const pending   = total - completed
     const pct       = total > 0 ? ((completed / total) * 100).toFixed(2) : '0.00'
     return { total, completed, pending, pct }
   }, [filteredRecords])
@@ -231,6 +302,7 @@ export default function Overview() {
     return results.slice(0, 8)
   }, [bSearch, incidents])
 
+  // ── loading / error returns ────────────────────────────────────────────────
   if (isLoading) return (
     <div className="p-16 text-center">
       <div className="inline-block w-12 h-12 border-4 border-slate-200 border-t-blue-700 rounded-full animate-spin mb-4" />
@@ -261,72 +333,126 @@ export default function Overview() {
     { icon: <Ban size={36} />, color: 'emerald' },
   ]
 
+  // ── derived data for new sections ─────────────────────────────────────────
+  const bknChartData = bknSummary?.entries.map(([bkn, v]) => ({
+    name: bkn, done: v.done, pending: v.pending, total: v.total,
+  })) || []
+
+  const rptPieData = rpt114 ? [
+    { name: 'จับกุม', value: rpt114.arrested, color: '#EF4444' },
+    { name: 'บำบัด', value: rpt114.rehab, color: '#F59E0B' },
+    { name: 'กลั่นแกล้ง', value: rpt114.framed, color: '#991B1B' },
+    { name: 'อื่นๆ', value: rpt114.other, color: '#94A3B8' },
+  ].filter(d => d.value > 0) : []
+  const rptPieTotal = rptPieData.reduce((s, d) => s + d.value, 0)
+
   return (
     <>
     {isPresentation && <PresentationBar title="ภาพรวม" />}
-    <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto'}>
+    <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto'} style={{ fontFamily: 'Sarabun, sans-serif' }}>
       <style>{`@keyframes pie-tip-in{from{opacity:0;transform:translateY(8px) scale(0.95)}to{opacity:1;transform:translateY(0) scale(1)}}`}</style>
-      {/* Page Header */}
+
+      {/* ── Page Header ─────────────────────────────────────────────────────── */}
       {!isPresentation && (
-      <div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <h1 className="text-xl lg:text-2xl font-bold text-slate-800">ภาพรวม</h1>
-          <button
-            onClick={() => setShowSourceInfo(true)}
-            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-full text-xs font-medium text-blue-700 flex items-center gap-1">
-            <Info size={12} /> แหล่งข้อมูล
-          </button>
-          <button
-            onClick={reload}
-            disabled={isLoading}
-            title="โหลดข้อมูลใหม่จากฐานข้อมูล"
-            className="p-2.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition disabled:opacity-40">
-            <RefreshCw size={15} className={isLoading ? 'animate-spin' : ''} />
-          </button>
-          <PresentationEnterButton />
+      <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-blue-800 rounded-2xl px-6 pt-8 pb-10 text-white shadow-2xl overflow-hidden relative mb-8">
+        <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, white 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-widest text-blue-300 mb-3">สถิติยาเสพติด · กรุงเทพมหานคร</div>
+            <h1 className="text-3xl lg:text-4xl font-extrabold leading-tight">ภาพรวม</h1>
+            <p className="text-sm text-blue-200 mt-3">รวมข้อมูลจากทุกแหล่ง · complaints · report_114 · drug_incidents · 115_B</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSourceInfo(true)}
+              className="px-4 py-2.5 bg-white/15 hover:bg-white/25 border border-white/20 rounded-xl text-xs font-bold text-white flex items-center gap-1.5 transition">
+              <Info size={13} /> แหล่งข้อมูล
+            </button>
+            <button
+              onClick={reload}
+              disabled={isLoading}
+              title="โหลดข้อมูลใหม่จากฐานข้อมูล"
+              className="p-2.5 bg-white/15 hover:bg-white/25 border border-white/20 rounded-xl text-white transition disabled:opacity-40">
+              <RefreshCw size={15} className={isLoading ? 'animate-spin' : ''} />
+            </button>
+            <PresentationEnterButton />
+          </div>
         </div>
-        <p className="text-sm text-slate-500 mt-1">สถิติเรื่องร้องเรียนยาเสพติด · กรุงเทพมหานคร</p>
+        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-400 via-sky-300 to-blue-600 opacity-75" />
       </div>
       )}
 
-      <PresentationSlides isPresentation={isPresentation} normalClassName="max-w-[1600px] mx-auto space-y-6">
+      <PresentationSlides isPresentation={isPresentation} normalClassName="max-w-[1600px] mx-auto space-y-8">
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard
-          icon={<TrendingUp />}
-          label="เรื่องร้องเรียนทั้งหมด"
-          value={totals.total.toLocaleString()}
-          color="blue"
-          onClick={isAdmin ? () => navigate('/admin/data') : null}
-        />
-        <StatCard
-          icon={<CheckCircle2 />}
-          label="ดำเนินการแล้ว"
-          value={totals.completed.toLocaleString()}
-          unit={`${totals.pct}%`}
-          color="emerald"
-          onClick={isAdmin ? () => navigate('/admin/data?status=ดำเนินการแล้ว') : null}
-        />
-        <StatCard
-          icon={<Clock />}
-          label="รอดำเนินการ"
-          value={totals.pending.toLocaleString()}
-          unit={`${(100 - parseFloat(totals.pct)).toFixed(2)}%`}
-          color="amber"
-          onClick={isAdmin ? () => navigate('/admin/data?status=ยังไม่ได้รับผล') : null}
-        />
+      {/* ── KPI Row 1: complaints ─────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard
+            icon={<TrendingUp />}
+            label="เรื่องร้องเรียนทั้งหมด"
+            value={totals.total.toLocaleString()}
+            color="blue"
+            onClick={isAdmin ? () => navigate('/admin/data') : null}
+          />
+          <StatCard
+            icon={<CheckCircle2 />}
+            label="ดำเนินการแล้ว"
+            value={totals.completed.toLocaleString()}
+            unit={`${totals.pct}%`}
+            color="emerald"
+            onClick={isAdmin ? () => navigate('/admin/data?status=ดำเนินการแล้ว') : null}
+          />
+          <StatCard
+            icon={<Clock />}
+            label="รอดำเนินการ"
+            value={totals.pending.toLocaleString()}
+            unit={`${(100 - parseFloat(totals.pct)).toFixed(2)}%`}
+            color="amber"
+            onClick={isAdmin ? () => navigate('/admin/data?status=ยังไม่ได้รับผล') : null}
+          />
+        </div>
+
+        {/* ── KPI Row 2: multi-source ───────────────────────────────────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <KpiCard
+            icon={<FileText size={18} />}
+            label="เรื่องร้องเรียน (RPT_114)"
+            value={rpt114 ? rpt114.total.toLocaleString() : '—'}
+            sub={rpt114?.fyRange ? `รวมทุกปีงบ · ${rpt114.fyRange}` : 'รวมทุกปีงบ'}
+            sourceLabel={rpt114?.fyRange ? `RPT_114 · ${rpt114.fyRange}` : 'จาก RPT_114'}
+            color="indigo"
+            loading={rpt114Loading}
+          />
+          <KpiCard
+            icon={<MapPin size={18} />}
+            label="จำนวนจุดยาเสพติด"
+            value={incidents.length > 0 ? incidents.length.toLocaleString() : (incidentError ? 'ข้อผิดพลาด' : '—')}
+            sub="จำนวนจุดในฐานข้อมูล"
+            sourceLabel="จาก drug_incidents"
+            color="rose"
+            loading={incidents.length === 0 && !incidentError}
+          />
+          <KpiCard
+            icon={<BarChart2 size={18} />}
+            label="ยอดราย บก.น. รวม"
+            value={bknSummary ? bknSummary.grandTotal.toLocaleString() : '—'}
+            sub={bknSummary?.periodLabel ? `รวมทุกงวด · ${bknSummary.periodLabel}` : 'รวมทุกงวด'}
+            sourceLabel="จาก 115_B"
+            color="teal"
+            loading={bknSummaryLoading}
+          />
+        </div>
       </div>
 
-      {/* แนวโน้มรายเดือน */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+      {/* ── Monthly Trend (complaints) ────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-8">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
           <div>
-            <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 flex-wrap">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 flex-wrap">
               <TrendingUp size={20} className="text-blue-600" /> แนวโน้มรายเดือน
               <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">📁 จาก records {records.length} เรื่อง</span>
             </h3>
-            <p className="text-xs text-slate-500 mt-1">จำนวนเรื่องรับเข้าและการดำเนินการในแต่ละเดือน</p>
+            <p className="text-xs text-slate-500 mt-1">จำนวนเรื่องรับเข้าและการดำเนินการในแต่ละเดือน · แหล่งข้อมูล: complaints</p>
           </div>
           <CardFilter label="ปี" value={trendYear} onChange={setTrendYear}
             options={[{ v: 'all', l: 'ทุกปี' }, ...years.map(y => ({ v: String(y), l: 'พ.ศ. ' + y }))]} />
@@ -347,16 +473,174 @@ export default function Overview() {
         </ResponsiveContainer>
       </div>
 
-      {/* Top 10 เขต */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+      {/* ── NEW: BKN mini bar + RPT_114 pie ──────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* BKN summary mini bar */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-6">
+          <div className="mb-4">
+            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 flex-wrap">
+              <BarChart2 size={18} className="text-blue-600" />
+              สรุปราย บก.น.
+              <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-medium">จาก bkn_summary (115_B)</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              {bknSummary
+                ? `ยอดดำเนินการรายกองบัญชาการ · รวมทุกงวด · ${bknSummary.totalRows} records`
+                : 'ยอดดำเนินการรายกองบัญชาการ · แหล่งข้อมูล: bkn_summary'}
+            </p>
+          </div>
+          {bknSummaryLoading ? (
+            <LoadingSpinner color="blue" />
+          ) : bknChartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={bknChartData} layout="vertical" margin={{ top: 0, right: 50, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: '#475569' }} width={58} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
+                  formatter={(v, name) => [v.toLocaleString() + ' เรื่อง', name]}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="done" fill="#10B981" radius={[0, 4, 4, 0]} name="ดำเนินการแล้ว">
+                  <LabelList dataKey="done" position="right" style={{ fontSize: 10, fill: '#047857' }} />
+                </Bar>
+                <Bar dataKey="pending" fill="#F59E0B" radius={[0, 4, 4, 0]} name="รอดำเนินการ" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptySection message="ยังไม่มีข้อมูล 115_B" sub="กรุณาอัปโหลดที่หน้า /upload" />
+          )}
+        </div>
+
+        {/* RPT_114 mini pie */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-6 flex flex-col">
+          <div className="mb-4">
+            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 flex-wrap">
+              <FileText size={18} className="text-indigo-600" />
+              ผลการดำเนินการ (RPT_114)
+              <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full font-medium">จาก report_114</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              {rpt114
+                ? `สัดส่วนผลตรวจสอบ · ${rpt114.totalRows} records`
+                : 'สัดส่วนผลตรวจสอบ · แหล่งข้อมูล: report_114'}
+            </p>
+          </div>
+          {rpt114Loading ? (
+            <LoadingSpinner color="indigo" />
+          ) : rptPieData.length > 0 ? (
+            <div className="flex flex-col flex-1">
+              <div className="relative flex-1">
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie
+                      data={rptPieData} dataKey="value" nameKey="name"
+                      cx="50%" cy="50%" innerRadius={58} outerRadius={92} paddingAngle={3}
+                    >
+                      {rptPieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
+                      formatter={v => [v.toLocaleString() + ' เรื่อง']}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <div className="text-2xl font-extrabold text-slate-800 tabular-nums leading-none">{rptPieTotal.toLocaleString()}</div>
+                  <div className="text-xs text-slate-500 mt-1">เรื่อง</div>
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('/operations')}
+                className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-sm font-semibold transition"
+              >
+                ดูรายละเอียด <ExternalLink size={14} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col">
+              <EmptySection message="ยังไม่มีข้อมูล RPT_114" sub="กรุณาอัปโหลดที่หน้า /upload" />
+              <button
+                onClick={() => navigate('/operations')}
+                className="mt-auto w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-sm font-semibold transition"
+              >
+                ดูรายละเอียด <ExternalLink size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── NEW: Mini map (drug_incidents) ───────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 flex-wrap">
+              <MapPin size={18} className="text-rose-500" />
+              จุดยาเสพติดในพื้นที่
+              <span className="text-xs px-2 py-0.5 bg-rose-50 text-rose-700 rounded-full font-medium">จาก drug_incidents</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              {mapLoading
+                ? 'กำลังโหลดข้อมูลแผนที่...'
+                : mapPoints.length > 0
+                  ? `แสดง ${mapPoints.length.toLocaleString()} จุดที่มีพิกัด · รวมทั้งหมด ${incidents.length.toLocaleString()} จุด`
+                  : 'ข้อมูลพิกัดจาก drug_incidents'}
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/radar')}
+            className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-sm font-semibold transition flex-shrink-0"
+          >
+            ดูแผนที่เต็ม <ExternalLink size={13} />
+          </button>
+        </div>
+
+        {mapLoading ? (
+          <LoadingSpinner color="rose" />
+        ) : mapPoints.length > 0 ? (
+          <>
+            <div className="rounded-xl overflow-hidden border border-slate-100">
+              <Suspense fallback={
+                <div className="h-[280px] flex items-center justify-center text-slate-400 text-sm bg-slate-50">
+                  <div className="w-6 h-6 border-2 border-slate-200 border-t-rose-400 rounded-full animate-spin mr-2" />
+                  กำลังโหลดแผนที่...
+                </div>
+              }>
+                <OverviewMiniMap points={mapPoints} />
+              </Suspense>
+            </div>
+            <div className="flex flex-wrap gap-4 mt-3 items-center">
+              {Object.entries(BEHAVIOR_COLORS).map(([k, v]) => (
+                <div key={k} className="flex items-center gap-1.5 text-xs text-slate-600">
+                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: v }} />
+                  {k}
+                </div>
+              ))}
+              <span className="text-xs text-slate-400 ml-auto">แสดง {mapPoints.length.toLocaleString()} จุด</span>
+            </div>
+          </>
+        ) : (
+          <EmptySection
+            message="ไม่มีข้อมูลพิกัดสำหรับแสดงบนแผนที่"
+            sub="ข้อมูลจาก drug_incidents ยังไม่มีพิกัด lat/lng หรือยังไม่มีข้อมูล"
+          />
+        )}
+      </div>
+
+      {/* ── Top 10 เขต ───────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-8">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
           <div>
-            <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 flex-wrap">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 flex-wrap">
               <MapPin size={20} className="text-blue-600" />
               {selectedDistricts.length === 0 ? '10 เขตที่มีเรื่องร้องเรียนมากที่สุด' : `เปรียบเทียบ ${selectedDistricts.length} เขต`}
               <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">📁 จาก records {records.length} เรื่อง</span>
             </h3>
-            <p className="text-xs text-slate-500 mt-1">จัดอันดับตามจำนวนเรื่องที่ได้รับ</p>
+            <p className="text-xs text-slate-500 mt-1">จัดอันดับตามจำนวนเรื่องที่ได้รับ · แหล่งข้อมูล: complaints</p>
           </div>
           <div className="flex gap-2 items-end">
             <DistrictMultiSelect
@@ -389,17 +673,17 @@ export default function Overview() {
         </ResponsiveContainer>
       </div>
 
-      {/* Row: ช่องทาง + Top 5 */}
+      {/* ── ช่องทาง + Top 5 ──────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Donut ช่องทาง */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-8">
           <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
             <div>
-              <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 flex-wrap">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 flex-wrap">
                 ช่องทางการรับเรื่อง
                 <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">📁 จาก records {records.length} เรื่อง</span>
               </h3>
-              <p className="text-xs text-slate-500 mt-1">สัดส่วนช่องทางที่ประชาชนใช้ร้องเรียน</p>
+              <p className="text-xs text-slate-500 mt-1">สัดส่วนช่องทางที่ประชาชนใช้ร้องเรียน · แหล่งข้อมูล: complaints</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <CardFilter label="ปี" value={channelYear} onChange={v => { setChannelYear(v); setChannelMonth('all') }}
@@ -479,10 +763,11 @@ export default function Overview() {
         </div>
 
         {/* Top 5 เขต */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-          <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2 mb-5">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-8">
+          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-1">
             <Trophy size={20} className="text-amber-500" /> 5 อันดับเขตที่ร้องเรียนสูงสุด
           </h3>
+          <p className="text-xs text-slate-500 mb-5">แหล่งข้อมูล: complaints</p>
           <div className="space-y-3">
             {top5Districts.map((d, i) => {
               const rankStyle = [
@@ -510,17 +795,18 @@ export default function Overview() {
         </div>
       </div>
 
-      {/* สัดส่วนพฤติการณ์ */}
+      {/* ── สัดส่วนพฤติการณ์ (drug_incidents) ───────────────────────────── */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        {/* gradient accent */}
         <div className="h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500" />
 
         <div className="p-6">
-          {/* Header */}
           <div className="flex items-start justify-between mb-6">
             <div>
-              <h3 className="text-base font-semibold text-slate-800">สัดส่วนพฤติการณ์ยาเสพติด</h3>
-              <p className="text-sm text-slate-500 mt-0.5">จำแนกตามพฤติการณ์ · กรองตามพื้นที่</p>
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 flex-wrap">
+                สัดส่วนพฤติการณ์ยาเสพติด
+                <span className="text-xs px-2 py-0.5 bg-rose-50 text-rose-700 rounded-full font-medium">จาก drug_incidents</span>
+              </h3>
+              <p className="text-sm text-slate-500 mt-0.5">จำแนกตามพฤติการณ์ · กรองตามพื้นที่ · {incidents.length.toLocaleString()} records</p>
             </div>
             <div className="text-right shrink-0 pl-4">
               <div className="text-3xl font-extrabold text-slate-800 tabular-nums leading-none">{behaviorTotal.toLocaleString()}</div>
@@ -553,7 +839,6 @@ export default function Overview() {
               )}
 
               <div className="space-y-2.5">
-                {/* Search */}
                 <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 z-10 pointer-events-none" />
                   <input
@@ -602,7 +887,6 @@ export default function Overview() {
                   )}
                 </div>
 
-                {/* Cascade selects */}
                 {[
                   { label: 'กลุ่มพื้นที่', dot: '#3B82F6', active: bGroup !== 'all', value: bGroup, onChange: e => { setBGroup(e.target.value); setBDistrict('all'); setBSubdistrict('all'); setBCommunity('all') }, opts: [{ v: 'all', l: 'ทั้งหมด' }, ...Object.entries(BKK_GROUPS).map(([g, emoji]) => ({ v: g, l: `${emoji} ${g}` }))] },
                   { label: 'เขต', dot: '#6366F1', active: bDistrict !== 'all', value: bDistrict, onChange: e => { setBDistrict(e.target.value); setBSubdistrict('all'); setBCommunity('all') }, opts: [{ v: 'all', l: 'ทุกเขต' }, ...bDistrictOptions.map(d => ({ v: d, l: d }))] },
@@ -623,7 +907,6 @@ export default function Overview() {
                 ))}
               </div>
 
-              {/* Active tags */}
               {bHasFilter && (
                 <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-1">
                   {bGroup !== 'all' && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-600 text-white rounded-full text-xs font-semibold">{BKK_GROUPS[bGroup]} {bGroup}<button onMouseDown={() => { setBGroup('all'); setBDistrict('all'); setBSubdistrict('all'); setBCommunity('all') }} className="w-5 h-5 flex items-center justify-center opacity-75 hover:opacity-100 hover:bg-white/20 rounded-full ml-0.5 flex-shrink-0">×</button></span>}
@@ -639,7 +922,6 @@ export default function Overview() {
             <div className="flex-1 min-w-0 flex flex-col">
               {behaviorData.length > 0 ? (
                 <>
-                  {/* Donut chart */}
                   <div
                     className="relative"
                     onClick={() => setActiveBehaviorIndex(null)}
@@ -687,7 +969,6 @@ export default function Overview() {
                         </Pie>
                       </PieChart>
                     </ResponsiveContainer>
-                    {/* Center label */}
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                       <div className="text-2xl font-extrabold text-slate-800 tabular-nums leading-none">{behaviorTotal.toLocaleString()}</div>
                       <div className="text-xs text-slate-500 mt-1 font-medium">เรื่องรวม</div>
@@ -712,7 +993,6 @@ export default function Overview() {
                     })()}
                   </div>
 
-                  {/* Stat cards */}
                   <div className="grid grid-cols-2 gap-3 mt-2">
                     {behaviorData.map(d => (
                       <div key={d.name} className="relative rounded-xl p-4 overflow-hidden"
@@ -747,20 +1027,19 @@ export default function Overview() {
 
       {!isPresentation && (
       <div className="max-w-[1600px] mx-auto">
-      {/* หน่วยดำเนินการ */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-        <h3 className="text-base font-semibold text-slate-800 text-center mb-6">หน่วยดำเนินการ</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {actions.map((a, i) => (
-            <ActionIcon key={a.name} icon={ACTION_ICONS[i]?.icon} label={a.name}
-              pct={a.pct} count={a.count} color={ACTION_ICONS[i]?.color ?? 'blue'} />
-          ))}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-8">
+          <h3 className="text-lg font-bold text-slate-800 text-center mb-6">หน่วยดำเนินการ</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {actions.map((a, i) => (
+              <ActionIcon key={a.name} icon={ACTION_ICONS[i]?.icon} label={a.name}
+                pct={a.pct} count={a.count} color={ACTION_ICONS[i]?.color ?? 'blue'} />
+            ))}
+          </div>
         </div>
-      </div>
       </div>
       )}
 
-      {/* Source Info Modal */}
+      {/* ── Source Info Modal ─────────────────────────────────────────────── */}
       {showSourceInfo && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowSourceInfo(false)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
@@ -787,20 +1066,20 @@ export default function Overview() {
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                   <div className="bg-white p-2 rounded">
-                    <span className="text-slate-500">รวมทั้งหมด</span>
-                    <div className="font-bold text-blue-700">{totals.total.toLocaleString()} เรื่อง</div>
+                    <span className="text-slate-500">ปีงบล่าสุด</span>
+                    <div className="font-bold text-blue-700">{rpt114?.fyRange ?? '—'}</div>
                   </div>
                   <div className="bg-white p-2 rounded">
-                    <span className="text-slate-500">ดำเนินการแล้ว</span>
-                    <div className="font-bold text-emerald-700">{totals.completed.toLocaleString()} ({totals.pct}%)</div>
+                    <span className="text-slate-500">เรื่องรวมทุกปีงบ</span>
+                    <div className="font-bold text-blue-700">{rpt114 ? rpt114.total.toLocaleString() : '—'} เรื่อง</div>
                   </div>
                 </div>
-                <div className="mt-2 text-xs text-blue-700">✓ ใช้สำหรับ: 3 Cards บนสุด, ตารางผลพฤติการณ์/ผลดำเนินการ</div>
+                <div className="mt-2 text-xs text-blue-700">✓ ใช้สำหรับ: KPI card RPT_114, pie ผลการดำเนินการ</div>
               </div>
 
               <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-lg">
                 <h3 className="font-bold text-amber-900 mb-2 flex items-center gap-2">
-                  <span>📁</span> 2. ข้อมูล Export Records
+                  <span>📁</span> 2. ข้อมูล Export Records (complaints)
                 </h3>
                 <p className="text-sm text-slate-700 leading-relaxed">
                   <strong>ไฟล์รายเรื่องที่ export จากระบบ ป.ป.ส.</strong> — มีรายละเอียดทุก case
@@ -812,11 +1091,51 @@ export default function Overview() {
                     <div className="font-bold text-amber-700">{records.length.toLocaleString()} records</div>
                   </div>
                   <div className="bg-white p-2 rounded">
-                    <span className="text-slate-500">ช่องทางหลัก</span>
-                    <div className="font-bold text-amber-700">6 ช่องทาง</div>
+                    <span className="text-slate-500">ดำเนินการแล้ว</span>
+                    <div className="font-bold text-amber-700">{totals.completed.toLocaleString()} ({totals.pct}%)</div>
                   </div>
                 </div>
-                <div className="mt-2 text-xs text-amber-700">✓ ใช้สำหรับ: กราฟรายเดือน, Top เขต, ช่องทาง, จัดการข้อมูล</div>
+                <div className="mt-2 text-xs text-amber-700">✓ ใช้สำหรับ: 3 KPI cards บน, กราฟรายเดือน, Top เขต, ช่องทาง</div>
+              </div>
+
+              <div className="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-lg">
+                <h3 className="font-bold text-rose-900 mb-2 flex items-center gap-2">
+                  <span>📍</span> 3. จุดยาเสพติด (drug_incidents)
+                </h3>
+                <p className="text-sm text-slate-700 leading-relaxed">
+                  <strong>ฐานข้อมูลจุดยาเสพติดในชุมชน</strong> — มีพิกัด lat/lng, พฤติการณ์, สน., บก.น.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-white p-2 rounded">
+                    <span className="text-slate-500">รวม</span>
+                    <div className="font-bold text-rose-700">{incidents.length.toLocaleString()} จุด</div>
+                  </div>
+                  <div className="bg-white p-2 rounded">
+                    <span className="text-slate-500">มีพิกัด</span>
+                    <div className="font-bold text-rose-700">{mapPoints.length.toLocaleString()} จุด</div>
+                  </div>
+                </div>
+                <div className="mt-2 text-xs text-rose-700">✓ ใช้สำหรับ: KPI card, mini map, กราฟพฤติการณ์</div>
+              </div>
+
+              <div className="bg-teal-50 border-l-4 border-teal-500 p-4 rounded-r-lg">
+                <h3 className="font-bold text-teal-900 mb-2 flex items-center gap-2">
+                  <span>🏢</span> 4. สรุปราย บก.น. (bkn_summary / 115_B)
+                </h3>
+                <p className="text-sm text-slate-700 leading-relaxed">
+                  <strong>รายงาน RPT_115_B</strong> — สรุปยอดดำเนินการรายกองบัญชาการตำรวจนครบาล (บก.น.1-9)
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-white p-2 rounded">
+                    <span className="text-slate-500">รวมยอด</span>
+                    <div className="font-bold text-teal-700">{bknSummary ? bknSummary.grandTotal.toLocaleString() : '—'} เรื่อง</div>
+                  </div>
+                  <div className="bg-white p-2 rounded">
+                    <span className="text-slate-500">จำนวนงวด</span>
+                    <div className="font-bold text-teal-700">{bknSummary?.periodLabel ?? '—'}</div>
+                  </div>
+                </div>
+                <div className="mt-2 text-xs text-teal-700">✓ ใช้สำหรับ: KPI card 115_B, กราฟสรุป บก.น.</div>
               </div>
 
               <div className="bg-slate-100 border border-slate-200 p-4 rounded-lg">
@@ -824,12 +1143,9 @@ export default function Overview() {
                   <span>💡</span> ทำไมตัวเลขต่างกัน?
                 </h3>
                 <p className="text-sm text-slate-700 leading-relaxed">
-                  ทั้ง 2 แหล่งมาจาก ป.ป.ส. แต่ <strong>RPT_114 รวมทุก case</strong> ในระบบ
-                  ส่วน <strong>Export Records เป็น subset</strong> ที่ส่งออกเป็นไฟล์รายเรื่อง
-                  (ต่างกัน ~6 records — เป็นเรื่องปกติ)
-                </p>
-                <p className="text-sm text-slate-700 leading-relaxed mt-2">
-                  <strong>หลักการ:</strong> ใช้ RPT_114 สำหรับนำเสนอ/รายงาน · ใช้ Records สำหรับวิเคราะห์เชิงลึก
+                  แต่ละแหล่งข้อมูลมีวัตถุประสงค์ต่างกัน — <strong>RPT_114</strong> เป็นตัวเลขทางการ,
+                  <strong> Records</strong> เป็น export รายเรื่อง, <strong>drug_incidents</strong> เป็นฐานข้อมูลจุดชุมชน,
+                  <strong> 115_B</strong> เป็นรายงานสรุปรายหน่วย ตัวเลขแต่ละแหล่งจึงไม่เท่ากัน
                 </p>
               </div>
             </div>
@@ -838,6 +1154,64 @@ export default function Overview() {
       )}
     </div>
     </>
+  )
+}
+
+// ── Helper components ──────────────────────────────────────────────────────────
+
+function LoadingSpinner({ color = 'blue' }) {
+  const borderColor = {
+    blue: 'border-t-blue-500',
+    indigo: 'border-t-indigo-500',
+    rose: 'border-t-rose-400',
+    teal: 'border-t-teal-500',
+  }[color] || 'border-t-blue-500'
+  return (
+    <div className="h-60 flex items-center justify-center text-slate-400 text-sm">
+      <div className={`w-6 h-6 border-2 border-slate-200 ${borderColor} rounded-full animate-spin mr-2`} />
+      กำลังโหลด...
+    </div>
+  )
+}
+
+function EmptySection({ message, sub }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+      <div className="text-4xl mb-3 opacity-25">📊</div>
+      <div className="text-sm font-semibold text-slate-500">{message}</div>
+      {sub && <div className="text-xs text-slate-400 mt-1">{sub}</div>}
+    </div>
+  )
+}
+
+function KpiCard({ icon, label, value, sub, sourceLabel, color, loading }) {
+  const C = {
+    indigo: { accent: '#6366F1', bg: '#EEF2FF', text: '#4338CA' },
+    rose:   { accent: '#F43F5E', bg: '#FFF1F2', text: '#BE123C' },
+    teal:   { accent: '#14B8A6', bg: '#F0FDFA', text: '#0F766E' },
+  }
+  const c = C[color] || C.indigo
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="h-1" style={{ background: c.accent }} />
+      <div className="p-5">
+        <div className="flex items-start justify-between mb-3 gap-2">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: c.bg }}>
+            <div style={{ color: c.accent }}>{icon}</div>
+          </div>
+          <span className="text-xs px-2 py-1 rounded-full font-medium text-center leading-tight" style={{ background: c.bg, color: c.text }}>
+            {sourceLabel}
+          </span>
+        </div>
+        {loading ? (
+          <div className="h-8 bg-slate-100 rounded-lg animate-pulse mt-1" />
+        ) : (
+          <div className="text-3xl font-extrabold text-slate-800 tabular-nums leading-none mt-1">{value}</div>
+        )}
+        <div className="text-sm text-slate-600 mt-2 font-medium">{label}</div>
+        {sub && <div className="text-xs text-slate-400 mt-0.5">{sub}</div>}
+      </div>
+    </div>
   )
 }
 
@@ -948,14 +1322,12 @@ function StatCard({ icon, label, value, unit, color, onClick }) {
       style={{ backgroundColor: c.bg }}>
 
       <div className="relative px-5 pt-5 pb-3 min-h-[140px]">
-        {/* Icon ใหญ่จาง */}
         <div className="absolute right-2 top-3 opacity-25 group-hover:opacity-40 transition-opacity duration-300 pointer-events-none">
           <div className="text-white" style={{ transform: 'scale(3.5)', transformOrigin: 'top right' }}>
             {icon}
           </div>
         </div>
 
-        {/* Sparkle effect ตอน hover */}
         {clickable && (
           <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/10 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
         )}
@@ -969,12 +1341,11 @@ function StatCard({ icon, label, value, unit, color, onClick }) {
         </div>
       </div>
 
-      {/* Footer */}
       <div className="px-5 py-2.5 text-xs flex items-center justify-between font-medium relative overflow-hidden"
            style={{ backgroundColor: c.footer }}>
         <span className="relative z-10 flex items-center gap-1">
           {clickable && <span className="opacity-80">👆</span>}
-          {clickable ? 'คลิกเพื่อดูข้อมูล' : 'ดูเพิ่มเติม'}
+          {clickable ? 'คลิกเพื่อดูข้อมูล' : 'จาก complaints'}
         </span>
         <span className="relative z-10 inline-block transform transition-all duration-300 group-hover:translate-x-1 group-hover:scale-125">
           →
@@ -992,7 +1363,6 @@ function PieTooltipCard({ label, value, pct, color, total, rank, rankOfTotal, mo
   const vw = window.innerWidth, vh = window.innerHeight
   const OFF = 22
 
-  // Clamp position so card stays inside viewport
   let left = mouseX + OFF
   let top = mouseY - 108
   if (left + W > vw - 12) left = mouseX - W - OFF
@@ -1015,10 +1385,8 @@ function PieTooltipCard({ label, value, pct, color, total, rank, rankOfTotal, mo
       boxShadow: `0 12px 40px rgba(0,0,0,0.6), 0 2px 10px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.07), 0 0 0 1px rgba(0,0,0,0.3)`,
       animation: 'pie-tip-in .15s cubic-bezier(0.2,0,0,1)',
     }}>
-      {/* Color accent line */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, borderRadius: '14px 14px 0 0', background: color, opacity: 0.9 }} />
 
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 11, marginTop: 4 }}>
         <div style={{
           width: 10, height: 28, borderRadius: 3, flexShrink: 0,
@@ -1038,10 +1406,8 @@ function PieTooltipCard({ label, value, pct, color, total, rank, rankOfTotal, mo
         </div>
       </div>
 
-      {/* Divider */}
       <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', marginBottom: 11 }} />
 
-      {/* Value */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
         <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12 }}>จำนวน</span>
         <span style={{ color: '#fff', fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}>
@@ -1050,7 +1416,6 @@ function PieTooltipCard({ label, value, pct, color, total, rank, rankOfTotal, mo
         </span>
       </div>
 
-      {/* Progress bar */}
       <div style={{ height: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 99, overflow: 'hidden', marginBottom: 10 }}>
         <div style={{
           width: `${Math.min(pctNum, 100)}%`, height: '100%',
@@ -1061,7 +1426,6 @@ function PieTooltipCard({ label, value, pct, color, total, rank, rankOfTotal, mo
         }} />
       </div>
 
-      {/* vs average row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11 }}>เทียบค่าเฉลี่ย ({avgPct.toFixed(1)}%)</span>
         <span style={{

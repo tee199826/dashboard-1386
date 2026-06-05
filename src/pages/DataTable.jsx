@@ -7,6 +7,8 @@ import { Search, Filter, Plus, Download, Eye, Pencil, Trash2, X, ChevronLeft, Ch
 import Toast from '../components/Toast'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
+import { MONTH_TH_SHORT } from '../utils/constants'
+import { fetchAllPages } from '../utils/supabasePagination'
 
 const ROWS_PER_PAGE = 10
 
@@ -23,37 +25,27 @@ const FETCH_PAGE = 1000
 async function fetchSortedComplaints(sortVal) {
   const opt = SORT_OPTIONS.find(o => o.v === sortVal)
   if (!opt) return []
-  let all = []
-  let from = 0
-  while (true) {
-    const { data, error } = await supabase
-      .from('complaints')
-      .select(FETCH_COLS)
-      .order(opt.col, { ascending: opt.asc, nullsFirst: false })
-      .range(from, from + FETCH_PAGE - 1)
-    if (error) throw error
-    if (!data || data.length === 0) break
-    all = [...all, ...data.map(r => ({
-      id: r.id,
-      group: r.group_no,
-      date: r.received_date,
-      completedDate: r.completed_date,
-      channel: r.channel,
-      district: r.district,
-      subdistrict: r.subdistrict,
-      community: r.community,
-      province: r.province,
-      personType: r.person_type,
-      actionUnit: r.action_unit,
-      urgency: r.urgency,
-      status: r.status,
-      drug: r.drug,
-      areaType: r.area_type,
-    }))]
-    if (data.length < FETCH_PAGE) break
-    from += FETCH_PAGE
-  }
-  return all
+  const rows = await fetchAllPages('complaints', FETCH_COLS, {
+    batchSize: FETCH_PAGE,
+    filter: q => q.order(opt.col, { ascending: opt.asc, nullsFirst: false }),
+  })
+  return rows.map(r => ({
+    id: r.id,
+    group: r.group_no,
+    date: r.received_date,
+    completedDate: r.completed_date,
+    channel: r.channel,
+    district: r.district,
+    subdistrict: r.subdistrict,
+    community: r.community,
+    province: r.province,
+    personType: r.person_type,
+    actionUnit: r.action_unit,
+    urgency: r.urgency,
+    status: r.status,
+    drug: r.drug,
+    areaType: r.area_type,
+  }))
 }
 
 const GROUPS = [
@@ -82,8 +74,8 @@ export default function DataTable() {
     try {
       const rows = await fetchSortedComplaints(sortOrder)
       setTableRecords(rows)
-    } catch (e) {
-      console.error('[DataTable] fetchSorted error:', e)
+    } catch {
+      setTableRecords([])
     } finally {
       setTableLoading(false)
     }
@@ -177,29 +169,34 @@ export default function DataTable() {
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-[1600px] mx-auto">
+    <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto bg-slate-50 min-h-screen space-y-8" style={{ fontFamily: 'Sarabun, sans-serif' }}>
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">ฐานข้อมูลเรื่องร้องเรียน สำนักงานป้องกันปราบปรามยาเสพติด</h1>
-          <p className="text-sm text-emerald-600 font-semibold mt-1">{filtered.length.toLocaleString()} รายการ</p>
-        </div>
-        <div className="flex gap-3">
-          <button onClick={handleExport}
-            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium flex items-center gap-2 shadow-sm transition">
-            <Download size={16} /> Export Excel
-          </button>
-          {isAdmin && (
-            <button onClick={() => setShowAdd(true)}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium flex items-center gap-2 shadow-sm transition">
-              <Plus size={16} /> เพิ่มข้อมูลใหม่
+      <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-blue-800 rounded-2xl px-6 pt-8 pb-10 text-white shadow-2xl overflow-hidden relative">
+        <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, white 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-widest text-blue-300 mb-3">สำนักงานป้องกันปราบปรามยาเสพติด · ป.ป.ส.</div>
+            <h1 className="text-3xl lg:text-4xl font-extrabold leading-tight">ฐานข้อมูลเรื่องร้องเรียน</h1>
+            <p className="text-sm text-blue-200 mt-3">{filtered.length.toLocaleString()} รายการ · จัดการข้อมูลเรื่องร้องเรียนยาเสพติด กรุงเทพมหานคร</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={handleExport}
+              className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl font-bold flex items-center gap-2 shadow-lg transition text-sm">
+              <Download size={16} /> Export Excel
             </button>
-          )}
+            {isAdmin && (
+              <button onClick={() => setShowAdd(true)}
+                className="px-5 py-2.5 bg-white text-blue-800 hover:bg-blue-50 rounded-xl font-bold flex items-center gap-2 shadow-lg transition text-sm">
+                <Plus size={16} /> เพิ่มข้อมูลใหม่
+              </button>
+            )}
+          </div>
         </div>
+        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-400 via-sky-300 to-blue-600 opacity-75" />
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-6">
+      <div className="bg-white rounded-2xl shadow-md border border-slate-100 p-6">
         <div className="flex items-center gap-2 mb-4">
           <Filter size={18} className="text-blue-600" />
           <h3 className="font-bold text-slate-800">ค้นหาและคัดกรองข้อมูล</h3>
@@ -262,9 +259,9 @@ export default function DataTable() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">
         {/* Table Header */}
-        <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-gradient-to-r from-slate-700 to-slate-800 text-xs font-bold text-white uppercase tracking-wide">
+        <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-gradient-to-r from-slate-800 to-slate-700 text-xs font-bold text-white uppercase tracking-wide">
           <div className="col-span-2">ID / วันที่</div>
           <div className="col-span-3">พื้นที่ (เขต/แขวง)</div>
           <div className="col-span-2">ช่องทาง</div>
@@ -381,8 +378,7 @@ function formatThaiDate(dateStr) {
   if (!dateStr) return '-'
   try {
     const d = new Date(dateStr)
-    const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
-    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear() + 543}`
+    return `${d.getDate()} ${MONTH_TH_SHORT[d.getMonth() + 1]} ${d.getFullYear() + 543}`
   } catch { return dateStr }
 }
 

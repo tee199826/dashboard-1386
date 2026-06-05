@@ -18,15 +18,17 @@ export function PresentationProvider({ children }) {
 
   useEffect(() => {
     ;(async () => {
-      const { data: b } = await supabase.from('upload_batches').select('created_at')
+      const { data: b, error: e1 } = await supabase.from('upload_batches').select('uploaded_at')
+        .order('uploaded_at', { ascending: false }).limit(1)
+      if (!e1 && b?.[0]?.uploaded_at) { setLastUpdateLabel(fmtThaiLong(b[0].uploaded_at)); return }
+
+      const { data: c, error: e2 } = await supabase.from('complaints').select('created_at')
         .order('created_at', { ascending: false }).limit(1)
-      if (b?.[0]?.created_at) { setLastUpdateLabel(fmtThaiLong(b[0].created_at)); return }
-      const { data: c } = await supabase.from('complaints').select('created_at')
+      if (!e2 && c?.[0]?.created_at) { setLastUpdateLabel(fmtThaiLong(c[0].created_at)); return }
+
+      const { data: d, error: e3 } = await supabase.from('drug_incidents').select('created_at')
         .order('created_at', { ascending: false }).limit(1)
-      if (c?.[0]?.created_at) { setLastUpdateLabel(fmtThaiLong(c[0].created_at)); return }
-      const { data: d } = await supabase.from('drug_incidents').select('created_at')
-        .order('created_at', { ascending: false }).limit(1)
-      if (d?.[0]?.created_at) setLastUpdateLabel(fmtThaiLong(d[0].created_at))
+      if (!e3 && d?.[0]?.created_at) setLastUpdateLabel(fmtThaiLong(d[0].created_at))
     })()
   }, [])
 

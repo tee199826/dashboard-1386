@@ -1,10 +1,12 @@
 import { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { supabase } from '../lib/supabase'
 import { MapPin, ArrowLeft, Search, Menu, AlertTriangle } from 'lucide-react'
+import { THAI_MONTHS, DNAME_TO_GROUP } from '../utils/constants'
+import { fetchAllPages } from '../utils/supabasePagination'
 import IncidentMap from '../components/IncidentMap'
 import { usePresentation } from '../context/PresentationContext'
 import PresentationBar, { PresentationEnterButton } from '../components/PresentationBar'
+import PresentationSlides from '../components/PresentationSlides'
 
 const DRUG_CATEGORIES = {
   'Club Drugs': {
@@ -36,13 +38,6 @@ const DRUG_COLORS = {
   'ฝิ่น': '#B91C1C', 'สารระเหย': '#0EA5E9', 'วัตถุออกฤทธิ์': '#6366F1',
 }
 
-const THAI_MONTHS = [
-  { v: 1, l: 'มกราคม' }, { v: 2, l: 'กุมภาพันธ์' }, { v: 3, l: 'มีนาคม' },
-  { v: 4, l: 'เมษายน' }, { v: 5, l: 'พฤษภาคม' }, { v: 6, l: 'มิถุนายน' },
-  { v: 7, l: 'กรกฎาคม' }, { v: 8, l: 'สิงหาคม' }, { v: 9, l: 'กันยายน' },
-  { v: 10, l: 'ตุลาคม' }, { v: 11, l: 'พฤศจิกายน' }, { v: 12, l: 'ธันวาคม' },
-]
-
 const DISTRICT_GROUPS = {
   'กรุงเทพเหนือ':     { border: '#a16207', fill: '#fde047', emoji: '🟡', count: 7 },
   'กรุงเทพใต้':      { border: '#1e40af', fill: '#93c5fd', emoji: '🔵', count: 10 },
@@ -52,27 +47,6 @@ const DISTRICT_GROUPS = {
   'กรุงธนใต้':       { border: '#9f1239', fill: '#fda4af', emoji: '🔴', count: 7 },
 }
 
-const DNAME_TO_GROUP = {
-  'เขตดอนเมือง':'กรุงเทพเหนือ','เขตหลักสี่':'กรุงเทพเหนือ','เขตบางเขน':'กรุงเทพเหนือ',
-  'เขตสายไหม':'กรุงเทพเหนือ','เขตลาดพร้าว':'กรุงเทพเหนือ','เขตบึงกุ่ม':'กรุงเทพเหนือ',
-  'เขตคันนายาว':'กรุงเทพเหนือ',
-  'เขตพระนคร':'กรุงเทพกลาง','เขตดุสิต':'กรุงเทพกลาง','เขตบางรัก':'กรุงเทพกลาง',
-  'เขตป้อมปราบศัตรูพ่าย':'กรุงเทพกลาง','เขตสัมพันธวงศ์':'กรุงเทพกลาง','เขตบางซื่อ':'กรุงเทพกลาง',
-  'เขตจตุจักร':'กรุงเทพกลาง','เขตห้วยขวาง':'กรุงเทพกลาง','เขตวังทองหลาง':'กรุงเทพกลาง',
-  'เขตมีนบุรี':'กรุงเทพตะวันออก','เขตลาดกระบัง':'กรุงเทพตะวันออก','เขตหนองจอก':'กรุงเทพตะวันออก',
-  'เขตคลองสามวา':'กรุงเทพตะวันออก','เขตสะพานสูง':'กรุงเทพตะวันออก','เขตบางกะปิ':'กรุงเทพตะวันออก',
-  'เขตสวนหลวง':'กรุงเทพตะวันออก','เขตประเวศ':'กรุงเทพตะวันออก','เขตพระโขนง':'กรุงเทพตะวันออก',
-  'เขตปทุมวัน':'กรุงเทพใต้','เขตพญาไท':'กรุงเทพใต้','เขตราชเทวี':'กรุงเทพใต้',
-  'เขตวัฒนา':'กรุงเทพใต้','เขตคลองเตย':'กรุงเทพใต้','เขตยานนาวา':'กรุงเทพใต้',
-  'เขตสาทร':'กรุงเทพใต้','เขตบางคอแหลม':'กรุงเทพใต้','เขตดินแดง':'กรุงเทพใต้',
-  'เขตบางนา':'กรุงเทพใต้',
-  'เขตคลองสาน':'กรุงธนเหนือ','เขตธนบุรี':'กรุงธนเหนือ','เขตบางกอกใหญ่':'กรุงธนเหนือ',
-  'เขตบางกอกน้อย':'กรุงธนเหนือ','เขตบางพลัด':'กรุงธนเหนือ','เขตตลิ่งชัน':'กรุงธนเหนือ',
-  'เขตทวีวัฒนา':'กรุงธนเหนือ','เขตภาษีเจริญ':'กรุงธนเหนือ',
-  'เขตบางแค':'กรุงธนใต้','เขตหนองแขม':'กรุงธนใต้','เขตบางขุนเทียน':'กรุงธนใต้',
-  'เขตราษฏร์บูรณะ':'กรุงธนใต้','เขตทุ่งครุ':'กรุงธนใต้','เขตจอมทอง':'กรุงธนใต้',
-  'เขตบางบอน':'กรุงธนใต้',
-}
 
 function PointPopupContent({ p }) {
   const rows = [
@@ -179,22 +153,14 @@ export default function SubstanceRadar() {
     const load = async () => {
       setLoading(true)
       setLoadError(null)
-      const BATCH = 1000
-      let all = []
-      let from = 0
-      while (true) {
-        const { data, error } = await supabase
-          .from('drug_incidents')
-          .select('*')
-          .range(from, from + BATCH - 1)
-        if (error) { setLoadError('ไม่สามารถโหลดข้อมูลแผนที่ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือลองใหม่'); setLoading(false); return }
-        if (!data || data.length === 0) break
-        all = all.concat(data)
-        if (data.length < BATCH) break
-        from += BATCH
+      try {
+        const all = await fetchAllPages('drug_incidents', '*')
+        setIncidents(all)
+      } catch {
+        setLoadError('ไม่สามารถโหลดข้อมูลแผนที่ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือลองใหม่')
+      } finally {
+        setLoading(false)
       }
-      setIncidents(all)
-      setLoading(false)
     }
     load()
   }, [retryCount])
@@ -380,41 +346,42 @@ export default function SubstanceRadar() {
   return (
     <>
     {isPresentation && <PresentationBar title="แผนที่ยาเสพติด กรุงเทพมหานคร" />}
+
+    {/* Portals — เฉพาะ normal mode (mobile sidebar controls) */}
+    {!isPresentation && sidebarOpen && createPortal(
+      <div onClick={() => setSidebarOpen(false)} className="lg:hidden"
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9990 }} />,
+      document.body
+    )}
+    {!isPresentation && createPortal(
+      <button type="button" onClick={() => setSidebarOpen(v => !v)} aria-label="เปิดเมนู"
+        className="lg:hidden flex items-center justify-center bg-blue-600 text-white rounded-full shadow-xl"
+        style={{
+          position: 'fixed', left: '16px',
+          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
+          width: '52px', height: '52px', zIndex: 9999,
+          pointerEvents: 'auto', touchAction: 'manipulation',
+          WebkitTapHighlightColor: 'transparent', border: 'none', cursor: 'pointer',
+        }}>
+        <Menu size={24} />
+      </button>,
+      document.body
+    )}
+
+    <PresentationSlides isPresentation={isPresentation} normalClassName="">
     <div className="flex" style={{ height: isPresentation ? 'calc(100dvh - 56px)' : 'calc(100dvh - 68px)', fontFamily: 'Sarabun, sans-serif' }}>
-      <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
 
-      {sidebarOpen && createPortal(
-        <div onClick={() => setSidebarOpen(false)} className="lg:hidden"
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9990 }} />,
-        document.body
-      )}
-
-      {createPortal(
-        <button type="button" onClick={() => setSidebarOpen(v => !v)} aria-label="เปิดเมนู"
-          className="lg:hidden flex items-center justify-center bg-blue-600 text-white rounded-full shadow-xl"
-          style={{
-            position: 'fixed', left: '16px',
-            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
-            width: '52px', height: '52px', zIndex: 9999,
-            pointerEvents: 'auto', touchAction: 'manipulation',
-            WebkitTapHighlightColor: 'transparent', border: 'none', cursor: 'pointer',
-          }}>
-          <Menu size={24} />
-        </button>,
-        document.body
-      )}
-
-      {/* Sidebar */}
-      <div className={`fixed lg:static inset-y-0 left-0 z-[9995] w-80 bg-white border-r border-slate-200 overflow-y-auto flex-shrink-0 flex flex-col transform transition-transform duration-300 ${
+      {/* Sidebar — ซ่อนในโหมดนำเสนอ */}
+      {!isPresentation && <div className={`fixed lg:static inset-y-0 left-0 z-[9995] w-80 bg-white border-r border-slate-200 overflow-y-auto flex-shrink-0 flex flex-col transform transition-transform duration-300 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       }`}>
-        <div className="bg-slate-800 border-b-2 border-blue-600 px-5 py-4 flex-shrink-0">
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 border-b-2 border-blue-500 px-5 py-5 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center text-white">
               <MapPin size={20} />
             </div>
             <div>
-              <h1 className="font-bold text-base text-white leading-tight">ระบบแผนที่ยาเสพติด</h1>
+              <h1 className="font-bold text-lg text-white leading-tight">ระบบแผนที่ยาเสพติด</h1>
               <p className="text-xs text-blue-300">BKK Substance Radar · กรุงเทพมหานคร</p>
             </div>
           </div>
@@ -456,7 +423,7 @@ export default function SubstanceRadar() {
             <>
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center"><MapPin size={16} /></div>
-                <h3 className="font-bold text-slate-800">เลือกมุมมองข้อมูล</h3>
+                <h3 className="font-bold text-slate-800 text-base">เลือกมุมมองข้อมูล</h3>
               </div>
               <div className="grid grid-cols-2 gap-2 mb-4">
                 {Object.keys(DRUG_CATEGORIES).map(cat => (
@@ -531,7 +498,7 @@ export default function SubstanceRadar() {
               <div className="border-t border-slate-200 pt-4">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-lg">📊</span>
-                  <h3 className="font-bold text-slate-800">สถิติพื้นที่</h3>
+                  <h3 className="font-bold text-slate-800 text-base">สถิติพื้นที่</h3>
                 </div>
                 <div className="text-sm text-slate-600">
                   พบ <strong className="text-blue-600">{points.length.toLocaleString()}</strong> รายการ ในกลุ่ม <strong>{category}</strong>
@@ -560,7 +527,7 @@ export default function SubstanceRadar() {
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center"><MapPin size={16} /></div>
-                <h3 className="font-bold text-slate-800">กลุ่มยาเสพติด</h3>
+                <h3 className="font-bold text-slate-800 text-base">กลุ่มยาเสพติด</h3>
               </div>
               <div className="grid grid-cols-2 gap-2 mb-4">
                 {Object.keys(DRUG_CATEGORIES).map(cat => (
@@ -638,7 +605,7 @@ export default function SubstanceRadar() {
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Map area */}
       <div className="flex-1 relative">
@@ -651,7 +618,7 @@ export default function SubstanceRadar() {
             </a>
           </div>
         )}
-        <div className="absolute top-4 left-4 z-[1000] bg-slate-800/95 backdrop-blur rounded-xl shadow-lg px-5 py-3 border border-slate-700 max-w-md">
+        <div className="absolute top-4 left-4 z-[1000] bg-slate-900/95 backdrop-blur rounded-2xl shadow-xl px-5 py-4 border border-slate-700 max-w-md">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-blue-600/20 text-blue-400 rounded-lg flex items-center justify-center">
               <MapPin size={18} />
@@ -701,6 +668,7 @@ export default function SubstanceRadar() {
         </div>
       </div>
     </div>
+    </PresentationSlides>
     </>
   )
 }

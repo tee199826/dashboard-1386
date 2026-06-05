@@ -21,13 +21,13 @@ export default function Header() {
 
   useEffect(() => {
     const fetch = async () => {
-      // Primary: upload_batches (created_at = Supabase auto-column)
+      // Primary: upload_batches
       const { data: batches } = await supabase
         .from('upload_batches')
-        .select('created_at')
-        .order('created_at', { ascending: false })
+        .select('uploaded_at')
+        .order('uploaded_at', { ascending: false })
         .limit(1)
-      if (batches?.[0]?.created_at) { setLastUpdate(batches[0].created_at); return }
+      if (batches?.[0]?.uploaded_at) { setLastUpdate(batches[0].uploaded_at); return }
 
       // Fallback: complaints
       const { data: c } = await supabase

@@ -49,26 +49,27 @@ export async function upsertRecords(type, rows, batchInfo) {
       inserted += batch.filter(r => !existingSet.has(r.record_uid)).length
       updated  += batch.filter(r =>  existingSet.has(r.record_uid)).length
     } catch (err) {
-      console.error(`[uploadService] batch ${Math.floor(i / UPSERT_BATCH) + 1} failed:`, err)
       failed += batch.length
       lastError = err.message
     }
   }
 
-  // บันทึก batch log — ถ้า table ยังไม่มีให้แจ้ง warning แต่ไม่ล้มงาน
+  let batchLogError = null
   try {
-    await supabase.from('upload_batches').insert([{
+    const { error: logErr } = await supabase.from('upload_batches').insert([{
       batch_id:     batchInfo.batchId,
       target_table: tableName,
       file_name:    batchInfo.fileName,
       row_count:    rows.length,
       status:       failed === 0 ? 'completed' : failed === rows.length ? 'failed' : 'partial',
+      uploaded_at:  new Date().toISOString(),
     }])
+    if (logErr) batchLogError = logErr.message
   } catch (err) {
-    console.warn('[uploadService] บันทึก upload_batches ไม่ได้ (อาจยังไม่มีตาราง):', err.message)
+    batchLogError = err.message
   }
 
-  return { inserted, updated, failed, error: lastError }
+  return { inserted, updated, failed, error: lastError, batchLogError }
 }
 
 /**
@@ -113,25 +114,27 @@ export async function upsertBknSummary(rows, batchInfo) {
       if (isUpdate) updated += batch.length
       else          inserted += batch.length
     } catch (err) {
-      console.error('[uploadService] bkn_summary batch failed:', err)
       failed += batch.length
       lastError = err.message
     }
   }
 
+  let batchLogError = null
   try {
-    await supabase.from('upload_batches').insert([{
+    const { error: logErr } = await supabase.from('upload_batches').insert([{
       batch_id:     batchInfo.batchId,
       target_table: 'bkn_summary',
       file_name:    batchInfo.fileName,
       row_count:    rows.length,
       status:       failed === 0 ? 'completed' : failed === rows.length ? 'failed' : 'partial',
+      uploaded_at:  new Date().toISOString(),
     }])
+    if (logErr) batchLogError = logErr.message
   } catch (err) {
-    console.warn('[uploadService] บันทึก upload_batches ไม่ได้:', err.message)
+    batchLogError = err.message
   }
 
-  return { inserted, updated, failed, error: lastError }
+  return { inserted, updated, failed, error: lastError, batchLogError }
 }
 
 /**
@@ -169,23 +172,25 @@ export async function upsertRpt114(rows, batchInfo) {
       if (isUpdate) updated += batch.length
       else          inserted += batch.length
     } catch (err) {
-      console.error('[uploadService] report_114 batch failed:', err)
       failed += batch.length
       lastError = err.message
     }
   }
 
+  let batchLogError = null
   try {
-    await supabase.from('upload_batches').insert([{
+    const { error: logErr } = await supabase.from('upload_batches').insert([{
       batch_id:     batchInfo.batchId,
       target_table: 'report_114',
       file_name:    batchInfo.fileName,
       row_count:    rows.length,
       status:       failed === 0 ? 'completed' : failed === rows.length ? 'failed' : 'partial',
+      uploaded_at:  new Date().toISOString(),
     }])
+    if (logErr) batchLogError = logErr.message
   } catch (err) {
-    console.warn('[uploadService] บันทึก upload_batches ไม่ได้:', err.message)
+    batchLogError = err.message
   }
 
-  return { inserted, updated, failed, error: lastError }
+  return { inserted, updated, failed, error: lastError, batchLogError }
 }

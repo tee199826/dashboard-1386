@@ -310,18 +310,21 @@ export default function UploadPage() {
 
   // ─── Render ───────────────────────────────────────────────────
   return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto" style={{ fontFamily: 'Sarabun, sans-serif' }}>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto bg-slate-50 min-h-screen space-y-8" style={{ fontFamily: 'Sarabun, sans-serif' }}>
       {/* Page header */}
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-3">
-          <span className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow">
-            <Upload size={20} className="text-white" />
-          </span>
-          นำเข้าข้อมูลจากไฟล์ Excel / CSV
-        </h1>
-        <p className="text-sm text-slate-500 mt-2 ml-[52px]">
-          รองรับ .xlsx · .xls · .csv — รองรับ 4 ประเภท: เรื่องร้องเรียน / เหตุการณ์ยาเสพติด / สรุป บก.น. (RPT_115_B) / RPT_114
-        </p>
+      <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-blue-800 rounded-2xl px-6 pt-8 pb-10 text-white shadow-2xl overflow-hidden relative">
+        <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, white 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+        <div className="relative">
+          <div className="text-xs font-bold uppercase tracking-widest text-blue-300 mb-3">ระบบนำเข้าข้อมูล · Data Import</div>
+          <h1 className="text-3xl lg:text-4xl font-extrabold leading-tight flex items-center gap-3">
+            <span className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0 backdrop-blur-sm">
+              <Upload size={22} className="text-white" />
+            </span>
+            นำเข้าข้อมูลจากไฟล์ Excel / CSV
+          </h1>
+          <p className="text-sm text-blue-200 mt-3">รองรับ .xlsx · .xls · .csv — รองรับ 4 ประเภท: เรื่องร้องเรียน / เหตุการณ์ยาเสพติด / สรุป บก.น. (RPT_115_B) / RPT_114</p>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-400 via-sky-300 to-blue-600 opacity-75" />
       </div>
 
       {/* ════════════ IDLE — drop zone ════════════ */}
@@ -330,7 +333,7 @@ export default function UploadPage() {
           onDrop={handleDrop}
           onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
           onDragLeave={() => setIsDragging(false)}
-          className={`border-2 border-dashed rounded-2xl p-10 sm:p-20 text-center transition-all duration-200 ${
+          className={`border-2 border-dashed rounded-2xl p-10 sm:p-16 text-center transition-all duration-200 ${
             isDragging
               ? 'border-blue-500 bg-blue-50 scale-[1.01]'
               : 'border-slate-300 bg-white hover:border-blue-400 hover:bg-slate-50'
@@ -392,7 +395,7 @@ export default function UploadPage() {
         <div className="space-y-4">
 
           {/* ── Info card ── */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-6 space-y-4">
 
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
@@ -527,7 +530,7 @@ export default function UploadPage() {
           )}
 
           {/* ── ตัวอย่างข้อมูล ── */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-md overflow-hidden">
             <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <h3 className="text-sm font-semibold text-slate-700">
                 {selectedType === 'bkn_summary'
@@ -554,14 +557,14 @@ export default function UploadPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50">
-                      <th className="px-3 py-2.5 text-left text-slate-400 font-medium">#</th>
-                      <th className="px-3 py-2.5 text-left text-slate-600 font-semibold whitespace-nowrap">หน่วยงาน (บก.น.)</th>
-                      <th className="px-3 py-2.5 text-left text-slate-600 font-semibold whitespace-nowrap">กลุ่ม</th>
-                      <th className="px-3 py-2.5 text-right text-slate-600 font-semibold whitespace-nowrap">จำนวนผู้ถูกร้องเรียน</th>
-                      <th className="px-3 py-2.5 text-right text-slate-600 font-semibold whitespace-nowrap">ยังไม่ได้รับผล</th>
-                      <th className="px-3 py-2.5 text-right text-emerald-700 font-semibold whitespace-nowrap">จำนวนผลดำเนินการ</th>
-                      <th className="px-3 py-2.5 text-left text-slate-600 font-semibold whitespace-nowrap">ช่วงเวลา (period)</th>
+                    <tr className="border-b border-slate-200 bg-slate-800">
+                      <th className="px-3 py-2.5 text-left text-slate-300 font-medium">#</th>
+                      <th className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap">หน่วยงาน (บก.น.)</th>
+                      <th className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap">กลุ่ม</th>
+                      <th className="px-3 py-2.5 text-right text-white font-bold whitespace-nowrap">จำนวนผู้ถูกร้องเรียน</th>
+                      <th className="px-3 py-2.5 text-right text-white font-bold whitespace-nowrap">ยังไม่ได้รับผล</th>
+                      <th className="px-3 py-2.5 text-right text-emerald-300 font-bold whitespace-nowrap">จำนวนผลดำเนินการ</th>
+                      <th className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap">ช่วงเวลา (period)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -595,15 +598,15 @@ export default function UploadPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50">
-                      <th className="px-3 py-2.5 text-left text-slate-400 font-medium">#</th>
-                      <th className="px-3 py-2.5 text-left text-slate-600 font-semibold whitespace-nowrap">กลุ่ม</th>
-                      <th className="px-3 py-2.5 text-right text-slate-600 font-semibold whitespace-nowrap">ร้องเรียน</th>
-                      <th className="px-3 py-2.5 text-right text-emerald-700 font-semibold whitespace-nowrap">ดำเนินการแล้ว</th>
-                      <th className="px-3 py-2.5 text-right text-slate-600 font-semibold whitespace-nowrap">ร้อยละ</th>
-                      <th className="px-3 py-2.5 text-right text-blue-700 font-semibold whitespace-nowrap">พบพฤติการณ์</th>
-                      <th className="px-3 py-2.5 text-right text-slate-600 font-semibold whitespace-nowrap">จับกุม</th>
-                      <th className="px-3 py-2.5 text-left text-purple-700 font-semibold whitespace-nowrap">ปีงบประมาณ</th>
+                    <tr className="border-b border-slate-200 bg-slate-800">
+                      <th className="px-3 py-2.5 text-left text-slate-300 font-medium">#</th>
+                      <th className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap">กลุ่ม</th>
+                      <th className="px-3 py-2.5 text-right text-white font-bold whitespace-nowrap">ร้องเรียน</th>
+                      <th className="px-3 py-2.5 text-right text-emerald-300 font-bold whitespace-nowrap">ดำเนินการแล้ว</th>
+                      <th className="px-3 py-2.5 text-right text-white font-bold whitespace-nowrap">ร้อยละ</th>
+                      <th className="px-3 py-2.5 text-right text-blue-300 font-bold whitespace-nowrap">พบพฤติการณ์</th>
+                      <th className="px-3 py-2.5 text-right text-white font-bold whitespace-nowrap">จับกุม</th>
+                      <th className="px-3 py-2.5 text-left text-purple-300 font-bold whitespace-nowrap">ปีงบประมาณ</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -631,10 +634,10 @@ export default function UploadPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-slate-100">
-                      <th className="px-3 py-2.5 text-left text-slate-400 font-medium bg-slate-50 sticky left-0 border-r border-slate-100 whitespace-nowrap">#</th>
+                    <tr className="border-b border-slate-200 bg-slate-800">
+                      <th className="px-3 py-2.5 text-left text-slate-300 font-medium bg-slate-800 sticky left-0 border-r border-slate-100 whitespace-nowrap">#</th>
                       {previewCols.map(col => (
-                        <th key={col} className="px-3 py-2.5 text-left text-slate-600 font-semibold whitespace-nowrap bg-slate-50">
+                        <th key={col} className="px-3 py-2.5 text-left text-white font-bold whitespace-nowrap bg-slate-800">
                           {COL_LABELS[col] || col}
                           <span className="block text-[10px] font-normal text-slate-400">{col}</span>
                         </th>
@@ -741,6 +744,12 @@ export default function UploadPage() {
               <div className="flex items-start gap-2 text-sm text-rose-700 bg-rose-50 rounded-xl px-4 py-3 border border-rose-200">
                 <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
                 <span>{uploadResult.error}</span>
+              </div>
+            )}
+            {uploadResult.batchLogError && (
+              <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 rounded-xl px-4 py-3 border border-amber-200">
+                <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
+                <span>⚠️ บันทึก upload log ไม่สำเร็จ (ข้อมูลหลักถูกบันทึกแล้ว): {uploadResult.batchLogError}</span>
               </div>
             )}
           </div>
