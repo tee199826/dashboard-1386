@@ -12,7 +12,8 @@ import IncidentMap from '../components/IncidentMap'
 import { getBkn, getStations, BKN_ORDER, BKN_COLORS } from '../utils/bknMapping'
 import { BEHAVIOR_COLORS, MONTH_TH_SHORT } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
-import { formatThaiDateShort as formatThaiDate } from '../utils/formatDate'
+import { formatThaiDateShort as formatThaiDate, thaiDateRange } from '../utils/formatDate'
+import PeriodBadge from '../components/PeriodBadge'
 import { usePresentation } from '../context/PresentationContext'
 import PresentationBar, { PresentationEnterButton } from '../components/PresentationBar'
 import PresentationSlides from '../components/PresentationSlides'
@@ -126,6 +127,11 @@ export default function BknPage() {
     return yearFiltered.filter(r => getBkn(r.police_station) === selectedBkn)
   }, [yearFiltered, selectedBkn])
 
+  // period ของข้อมูล drug_incidents ที่ filter แล้ว (สำหรับ BknDrugStats + bar Level-2)
+  const incidentsPeriod = useMemo(
+    () => thaiDateRange(filtered, 'received_date', { unfiltered: yearFilter === 'all' && !selectedBkn }),
+    [filtered, yearFilter, selectedBkn])
+
   // KPI
   const totals = useMemo(() => {
     const b = { 'เสพ': 0, 'ค้า': 0, 'เสพ/ค้า': 0, 'ผลิต': 0 }
@@ -221,7 +227,7 @@ export default function BknPage() {
   return (
     <>
     {isPresentation && <PresentationBar title="รายงานความรวดเร็วการดำเนินการ บก.น." />}
-    <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto'} style={{ fontFamily: 'Sarabun, sans-serif' }}>
+    <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto'}>
 
       {/* ── OFFICIAL BANNER ── */}
       {!isPresentation && <div className="rounded-2xl overflow-hidden shadow-md" style={{ background: 'linear-gradient(135deg,#1e3a5f 0%,#1d4ed8 100%)' }}>
@@ -380,6 +386,7 @@ export default function BknPage() {
                 ? `${getStations(selectedBkn).length} สถานีตำรวจ · จาก drug_incidents`
                 : `จาก RPT_115_B${bknStats?.period ? ` · ${bknStats.period}` : ''} · คลิกแท่งเพื่อดูรายละเอียด`}
             </p>
+            <PeriodBadge period={isLevel2 ? incidentsPeriod : bknStats?.period} className="mt-1" />
           </div>
           <span className="text-sm font-semibold text-slate-500">
             รวม {isLevel2 ? totals.total.toLocaleString() : (bknStats?.total || 0).toLocaleString()} เรื่อง
@@ -443,6 +450,7 @@ export default function BknPage() {
         top5={top5}
         activePieIdx={activePieIdx}
         setActivePieIdx={setActivePieIdx}
+        period={incidentsPeriod}
       />
 
 
@@ -523,7 +531,7 @@ export default function BknPage() {
             points={mapPoints}
             getColor={getColor}
             renderPopup={p => (
-              <div style={{ fontFamily: 'Sarabun, sans-serif', minWidth: 200 }}>
+              <div style={{ minWidth: 200 }}>
                 <div style={{ fontWeight: 700, fontSize: 13, color: BKN_COLORS[getBkn(p.police_station)] || '#475569', marginBottom: 6 }}>
                   {getBkn(p.police_station)}
                 </div>
@@ -560,7 +568,7 @@ function Panel({ accent, children }) {
   )
 }
 
-function KpiCard({ icon, label, value, sub, bg, foot, smallValue, source = 'drug_incidents' }) {
+function KpiCard({ icon, label, value, sub, bg, foot, smallValue, source = 'drug_incidents', period }) {
   return (
     <div className={`rounded-2xl text-white overflow-hidden shadow-sm bg-gradient-to-br ${bg}`}>
       <div className="relative px-5 pt-5 pb-3 min-h-[118px]">
@@ -574,6 +582,7 @@ function KpiCard({ icon, label, value, sub, bg, foot, smallValue, source = 'drug
           </div>
           <div className="text-sm font-semibold opacity-95 leading-none">{label}</div>
           <div className="text-xs opacity-65 mt-1">{sub}</div>
+          {period && <div className="mt-1.5"><PeriodBadge period={period} tone="dark" /></div>}
         </div>
       </div>
       <div className="px-5 py-1.5 text-xs font-medium opacity-60" style={{ background: foot }}>

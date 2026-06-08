@@ -2,6 +2,7 @@ import {
   AreaChart, Area, PieChart, Pie, Cell, Sector,
   CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts'
+import PeriodBadge from './PeriodBadge'
 
 function Panel({ accent, children }) {
   return (
@@ -27,12 +28,12 @@ export default function BknDrugStats({
   incidentCount, yearFilter, selectedBkn, setSelectedBkn, isLevel2,
   trendData, behaviorData, behaviorTotal,
   drugData, filteredCount, top5,
-  activePieIdx, setActivePieIdx,
+  activePieIdx, setActivePieIdx, period,
 }) {
   return (
     <>
       {/* ── สถิติเหตุการณ์ยาเสพติด (drug_incidents) ── */}
-      <div className="flex items-center gap-3 pt-2">
+      <div className="flex items-center gap-3 pt-2 flex-wrap">
         <h2 className="text-base font-bold text-slate-700">สถิติเหตุการณ์ยาเสพติด</h2>
         <span className="text-xs px-2.5 py-1 bg-amber-50 text-amber-700 rounded-full font-medium border border-amber-200">
           จาก drug_incidents · {incidentCount.toLocaleString()} จุด
@@ -40,6 +41,7 @@ export default function BknDrugStats({
         {yearFilter !== 'all' && (
           <span className="text-xs text-slate-400">กรองปี พ.ศ. {yearFilter}</span>
         )}
+        <PeriodBadge period={period} className="ml-auto" />
       </div>
 
       {/* ── TREND (3/5) + BEHAVIOR DONUT (2/5) ── */}

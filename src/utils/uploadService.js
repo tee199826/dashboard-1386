@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { flattenSubstanceUserRow } from './importEngine'
 
 const UPSERT_BATCH = 500
 
@@ -135,6 +136,51 @@ export async function upsertBknSummary(rows, batchInfo) {
   }
 
   return { inserted, updated, failed, error: lastError, batchLogError }
+}
+
+/**
+ * Insert ข้อมูลแบบเก็บผู้เสพเข้าตาราง substance_users
+ * รับ raw rows (header แบนจาก Excel) → flatten เป็น jsonb 4 ก้อนก่อน insert
+ * ไม่มี natural conflict key → ใช้ insert (อัปซ้ำจะ append แถวใหม่)
+ */
+export async function upsertSubstanceUsers(rawRows, batchInfo) {
+  if (!rawRows || rawRows.length === 0) return { inserted: 0, updated: 0, failed: 0, error: null }
+
+  const rows = rawRows.map(flattenSubstanceUserRow).map(r => ({
+    ...r,
+    batch_id:    batchInfo.batchId,
+    source_file: batchInfo.fileName,
+  }))
+
+  let inserted = 0, failed = 0, lastError = null
+  for (let i = 0; i < rows.length; i += UPSERT_BATCH) {
+    const batch = rows.slice(i, i + UPSERT_BATCH)
+    try {
+      const { error } = await supabase.from('substance_users').insert(batch)
+      if (error) throw error
+      inserted += batch.length
+    } catch (err) {
+      failed += batch.length
+      lastError = err.message
+    }
+  }
+
+  let batchLogError = null
+  try {
+    const { error: logErr } = await supabase.from('upload_batches').insert([{
+      batch_id:     batchInfo.batchId,
+      target_table: 'substance_users',
+      file_name:    batchInfo.fileName,
+      row_count:    rows.length,
+      status:       failed === 0 ? 'completed' : failed === rows.length ? 'failed' : 'partial',
+      uploaded_at:  new Date().toISOString(),
+    }])
+    if (logErr) batchLogError = logErr.message
+  } catch (err) {
+    batchLogError = err.message
+  }
+
+  return { inserted, updated: 0, failed, error: lastError, batchLogError }
 }
 
 /**

@@ -1,6 +1,7 @@
 import React from 'react'
+import PeriodBadge from './PeriodBadge'
 
-export function BigCard({ icon, label, value, pct, sub, color }) {
+export function BigCard({ icon, label, value, pct, sub, color, period }) {
   const configs = {
     blue:    { gradient: 'from-blue-700 to-blue-500'        },
     emerald: { gradient: 'from-emerald-700 to-teal-500'     },
@@ -10,17 +11,18 @@ export function BigCard({ icon, label, value, pct, sub, color }) {
   }
   const c = configs[color] || configs.blue
   return (
-    <div className={`bg-gradient-to-br ${c.gradient} text-white rounded-2xl p-6 shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-200 relative overflow-hidden cursor-default`}>
+    <div className={`bg-gradient-to-br ${c.gradient} text-white rounded-2xl p-5 shadow-md hover:shadow-lg hover:opacity-95 transition-all duration-200 relative overflow-hidden`}>
       <div className="absolute -right-4 -bottom-4 opacity-[0.07] pointer-events-none select-none">
-        {React.cloneElement(icon, { size: 100 })}
+        {React.cloneElement(icon, { size: 88 })}
       </div>
-      <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mb-4">
-        {React.cloneElement(icon, { size: 22 })}
+      <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mb-3">
+        {React.cloneElement(icon, { size: 20 })}
       </div>
-      <div className="text-xs font-bold uppercase tracking-wider text-white/70 mb-2 leading-tight">{label}</div>
-      <div className="text-4xl lg:text-5xl font-extrabold leading-none">{(value || 0).toLocaleString()}</div>
-      {pct && <div className="text-sm font-bold text-white/90 mt-2">{pct}</div>}
-      {sub && <div className="text-xs text-white/55 mt-1.5 leading-tight">{sub}</div>}
+      <div className="text-xs font-semibold uppercase tracking-wider text-white/70 mb-1.5 leading-tight">{label}</div>
+      <div className="text-4xl font-bold leading-none">{(value || 0).toLocaleString()}</div>
+      {pct && <div className="text-sm font-bold text-white/90 mt-1.5">{pct}</div>}
+      {sub && <div className="text-xs text-white/55 mt-1 leading-tight">{sub}</div>}
+      {period && <div className="mt-1.5 relative z-10"><PeriodBadge period={period} tone="dark" /></div>}
     </div>
   )
 }
@@ -39,7 +41,7 @@ const RANK_COLORS = {
   4: 'bg-slate-100 text-slate-500',
 }
 
-export function SourceCard({ rank, channel, count, total }) {
+export function SourceCard({ rank, channel, count, total, period }) {
   const theme = SOURCE_THEMES[channel] || SOURCE_THEMES['ช่องทางอื่นๆ']
   const rankColor = RANK_COLORS[rank] || 'bg-slate-100 text-slate-500'
   const pct = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0'
@@ -81,6 +83,7 @@ export function SourceCard({ rank, channel, count, total }) {
         <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-400">
           จาก {total.toLocaleString()} เรื่องร้องฯ
         </div>
+        {period && <div className="mt-1.5"><PeriodBadge period={period} /></div>}
       </div>
     </div>
   )

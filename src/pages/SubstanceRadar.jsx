@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { MapPin, ArrowLeft, Search, Menu, AlertTriangle } from 'lucide-react'
 import { THAI_MONTHS, DNAME_TO_GROUP } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
+import { thaiDateRange } from '../utils/formatDate'
+import PeriodBadge from '../components/PeriodBadge'
 import IncidentMap from '../components/IncidentMap'
 import { usePresentation } from '../context/PresentationContext'
 import PresentationBar, { PresentationEnterButton } from '../components/PresentationBar'
@@ -59,7 +61,7 @@ function PointPopupContent({ p }) {
     { label: 'ผลดำเนินการ', value: p.primary_action },
   ]
   return (
-    <div style={{ fontFamily: 'Sarabun, sans-serif', minWidth: '210px' }}>
+    <div style={{ minWidth: '210px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingBottom: '6px', marginBottom: '8px', borderBottom: '1px solid #e2e8f0' }}>
         <span style={{ width: '11px', height: '11px', borderRadius: '50%', background: DRUG_COLORS[p.primary_drug] || '#94A3B8', display: 'inline-block', flexShrink: 0 }}></span>
         <span style={{ fontWeight: 700, fontSize: '14px', color: DRUG_COLORS[p.primary_drug] || '#334155' }}>
@@ -84,7 +86,7 @@ function PointPopupContent({ p }) {
 
 function SearchPopupContent({ popup }) {
   return (
-    <div style={{ fontFamily: 'Sarabun, sans-serif', minWidth: '210px' }}>
+    <div style={{ minWidth: '210px' }}>
       <div style={{ fontWeight: 700, fontSize: '14px', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px', marginBottom: '8px' }}>
         📍 {popup.label}
       </div>
@@ -213,6 +215,10 @@ export default function SubstanceRadar() {
     })
     return stats
   }, [incidents])
+
+  const pointsPeriod = useMemo(
+    () => thaiDateRange(points, 'received_date', { unfiltered: year === 'all' && month === 'all' }),
+    [points, year, month])
 
   const searchResults = useMemo(() => {
     if (!searchQuery || searchQuery.trim().length < 2) return []
@@ -369,7 +375,7 @@ export default function SubstanceRadar() {
     )}
 
     <PresentationSlides isPresentation={isPresentation} normalClassName="">
-    <div className="flex" style={{ height: isPresentation ? 'calc(100dvh - 56px)' : 'calc(100dvh - 68px)', fontFamily: 'Sarabun, sans-serif' }}>
+    <div className="flex" style={{ height: isPresentation ? 'calc(100dvh - 56px)' : 'calc(100dvh - 68px)' }}>
 
       {/* Sidebar — ซ่อนในโหมดนำเสนอ */}
       {!isPresentation && <div className={`fixed lg:static inset-y-0 left-0 z-[9995] w-80 bg-white border-r border-slate-200 overflow-y-auto flex-shrink-0 flex flex-col transform transition-transform duration-300 ${
@@ -503,6 +509,7 @@ export default function SubstanceRadar() {
                 <div className="text-sm text-slate-600">
                   พบ <strong className="text-blue-600">{points.length.toLocaleString()}</strong> รายการ ในกลุ่ม <strong>{category}</strong>
                 </div>
+                <PeriodBadge period={pointsPeriod} className="mt-1.5" />
                 {targetDrugs.map(drug => {
                   const count = drugCounts[drug] || 0
                   const color = DRUG_COLORS[drug]
@@ -634,6 +641,7 @@ export default function SubstanceRadar() {
                   : `Heat Map · ${points.length.toLocaleString()} เรื่อง`
                 }
               </p>
+              {viewMode !== 'district' && <PeriodBadge period={pointsPeriod} tone="dark" className="mt-1" />}
             </div>
           </div>
         </div>

@@ -97,7 +97,7 @@ function fallback(text) {
 
 function DefaultSearchPopup({ popup }) {
   return (
-    <div style={{ fontFamily: 'Sarabun, sans-serif', minWidth: 210 }}>
+    <div style={{ minWidth: 210 }}>
       <div style={{ fontWeight: 700, fontSize: 14, borderBottom: '1px solid #e2e8f0', paddingBottom: 6, marginBottom: 8 }}>
         📍 {popup.label}
       </div>

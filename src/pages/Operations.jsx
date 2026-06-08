@@ -9,6 +9,8 @@ import Rpt114Dashboard from '../components/Rpt114Dashboard'
 import { usePresentation } from '../context/PresentationContext'
 import PresentationBar, { PresentationEnterButton } from '../components/PresentationBar'
 import PresentationSlides from '../components/PresentationSlides'
+import { thaiDateRange } from '../utils/formatDate'
+import PeriodBadge from '../components/PeriodBadge'
 import UploadRptModal from '../components/UploadRptModal'
 import { BigCard, SourceCard } from '../components/OperationsCards'
 import OperationsSourceModal from '../components/OperationsSourceModal'
@@ -168,6 +170,12 @@ export default function Operations() {
     })
   }, [records, filterYear, filterMonth, rptYear])
 
+  // period ของข้อมูล complaints ที่ filter แล้ว (SourceCard ฝั่งซ้าย)
+  const recordsPeriod = useMemo(
+    () => thaiDateRange(filteredRecords, 'date',
+      { unfiltered: filterYear === 'all' && filterMonth === 'all' && rptYear === 'all' }),
+    [filteredRecords, filterYear, filterMonth, rptYear])
+
   const summary = useMemo(() => {
     const byChannel = {}
     CHANNELS.forEach(ch => {
@@ -232,7 +240,7 @@ export default function Operations() {
   return (
     <>
     {isPresentation && <PresentationBar title="ผลการดำเนินงาน RPT_114" />}
-    <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-10 bg-slate-50 min-h-screen'} style={{ fontFamily: 'Sarabun, sans-serif' }}>
+    <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-8 bg-slate-50 min-h-screen'}>
 
       {/* ── Page Header ── */}
       {!isPresentation && (
@@ -383,15 +391,16 @@ export default function Operations() {
         {/* Sources overview + donut */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* 4 channel cards */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-md p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center text-xl">📊</div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">ภาพรวมสถิติจำแนกตามแหล่งข่าว</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Sources Overview · จาก complaints {summary.totalAll.toLocaleString()} records · เรียงมาก → น้อย</p>
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-md p-6">
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <div className="flex items-center gap-2">
+                <div className="w-1 h-5 bg-slate-400 rounded-full"></div>
+                <h3 className="text-xl font-semibold text-slate-800">จำแนกตามแหล่งข่าว</h3>
+                <span className="text-xs text-slate-400">complaints · {summary.totalAll.toLocaleString()} records</span>
               </div>
+              <PeriodBadge period={recordsPeriod} />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {ranking.map((r, i) => (
                 <SourceCard key={r.channel} rank={i + 1} channel={r.display} count={r.total} total={summary.totalAll} />
               ))}
@@ -402,7 +411,8 @@ export default function Operations() {
           {donutData.length > 0 && donutTotal > 0 && (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-8" onClick={() => setActiveDonutIndex(null)}>
               <h3 className="text-lg font-bold text-slate-800 mb-1">สัดส่วนผลพิจารณาการตรวจสอบ</h3>
-              <p className="text-xs text-slate-500 mb-5">จาก RPT_114 · คลิกชิ้นเพื่อดูรายละเอียด</p>
+              <p className="text-xs text-slate-500 mb-1">จาก RPT_114 · คลิกชิ้นเพื่อดูรายละเอียด</p>
+              <PeriodBadge period={rptData?.period} className="mb-5" />
               <div className="relative">
                 <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
@@ -528,6 +538,7 @@ function ResultTable({ title, icon, headerClass, totalRowClass, thClass, rows, s
           <div>
             <h3 className="text-lg font-bold">{title}</h3>
             <p className={`text-xs mt-0.5 opacity-75`}>{subTitle}</p>
+            <PeriodBadge period={rptData?.period} tone="dark" className="mt-1" />
           </div>
         </div>
       </div>

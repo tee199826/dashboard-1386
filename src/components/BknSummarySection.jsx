@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import { BKN_COLORS } from '../utils/bknMapping'
 import { formatThaiDateLong } from '../utils/formatDate'
+import PeriodBadge from './PeriodBadge'
 
 export default function BknSummarySection({ selectedBkn, onPeriodReady }) {
   const [rows, setRows] = useState(null)
@@ -120,16 +121,12 @@ export default function BknSummarySection({ selectedBkn, onPeriodReady }) {
   const allUnits = [...bknEntries.map(([b]) => b), ...spwEntries.map(([b]) => b)]
 
   return (
-    <div style={{ fontFamily: 'Sarabun, sans-serif' }} className="space-y-7">
+    <div className="space-y-7">
 
       {/* Period badge */}
       <div className="flex items-center gap-3 flex-wrap">
         <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 tracking-wide">RPT 115_B</span>
-        {selectedPeriod && (
-          <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600">
-            ช่วง {selectedPeriod}
-          </span>
-        )}
+        <PeriodBadge period={selectedPeriod} />
       </div>
 
       {/* ─── 1. KPI CARDS ─── */}

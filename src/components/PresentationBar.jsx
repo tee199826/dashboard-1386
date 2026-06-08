@@ -17,7 +17,7 @@ export function PresentationEnterButton({ className = '' }) {
 export default function PresentationBar({ title }) {
   const { exit, lastUpdateLabel } = usePresentation()
   return (
-    <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-100 shadow-sm flex-shrink-0" style={{ fontFamily: 'Sarabun, sans-serif' }}>
+    <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-slate-100 shadow-sm flex-shrink-0">
       <div>
         <h1 className="text-lg font-extrabold text-slate-800">{title}</h1>
         {lastUpdateLabel && (

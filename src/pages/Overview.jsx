@@ -18,6 +18,8 @@ import PresentationBar, { PresentationEnterButton } from '../components/Presenta
 import PresentationSlides from '../components/PresentationSlides'
 import { BEHAVIOR_COLORS, BKK_GROUPS, DNAME_TO_GROUP } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
+import { thaiDateRange } from '../utils/formatDate'
+import PeriodBadge from '../components/PeriodBadge'
 
 const OverviewMiniMap = lazy(() => import('../components/OverviewMiniMap'))
 
@@ -80,7 +82,7 @@ export default function Overview() {
     const load = async () => {
       setIncidentError(null)
       try {
-        const all = await fetchAllPages('drug_incidents', 'district, subdistrict, community, behaviors')
+        const all = await fetchAllPages('drug_incidents', 'district, subdistrict, community, behaviors, received_date')
         setIncidents(all)
       } catch {
         setIncidentError('ไม่สามารถโหลดข้อมูลพฤติการณ์ได้ กรุณาลองใหม่')
@@ -168,7 +170,7 @@ export default function Overview() {
       try {
         const { data } = await supabase
           .from('drug_incidents')
-          .select('lat, lng, behaviors, district')
+          .select('lat, lng, behaviors, district, received_date')
           .limit(500)
         setMapPoints((data || []).filter(p => p.lat && p.lng))
       } catch {
@@ -280,6 +282,40 @@ export default function Overview() {
 
   const bHasFilter = bGroup !== 'all' || bDistrict !== 'all' || bSubdistrict !== 'all' || bCommunity !== 'all' || bSearch
 
+  // ── period labels per card (ตาม filter ของแต่ละการ์ด) ────────────────────
+  const complaintsRangeAll = useMemo(() => thaiDateRange(data, 'date', { unfiltered: true }), [data])
+  const incidentsRangeAll = useMemo(() => thaiDateRange(incidents, 'received_date', { unfiltered: true }), [incidents])
+  const mapPointsRange = useMemo(() => thaiDateRange(mapPoints, 'received_date', { unfiltered: true }), [mapPoints])
+  const trendPeriod = useMemo(
+    () => thaiDateRange(stats.filterByYear(data, trendYear), 'date', { unfiltered: trendYear === 'all' }),
+    [data, trendYear])
+  const channelPeriod = useMemo(
+    () => thaiDateRange(stats.filterByMonth(stats.filterByYear(data, channelYear), channelMonth), 'date',
+      { unfiltered: channelYear === 'all' && channelMonth === 'all' }),
+    [data, channelYear, channelMonth])
+  const districtPeriod = useMemo(() => {
+    const rows = selectedDistricts.length === 0 ? data : data.filter(r => selectedDistricts.includes(r.district))
+    return thaiDateRange(rows, 'date', { unfiltered: selectedDistricts.length === 0 })
+  }, [data, selectedDistricts])
+  const behaviorPeriod = useMemo(() => {
+    const q = bSearch.trim().toLowerCase()
+    const rows = incidents.filter(r => {
+      if (bGroup !== 'all' && DNAME_TO_GROUP[r.district] !== bGroup) return false
+      if (bDistrict !== 'all' && r.district !== bDistrict) return false
+      if (bSubdistrict !== 'all' && r.subdistrict !== bSubdistrict) return false
+      if (bCommunity !== 'all' && r.community !== bCommunity) return false
+      if (q) {
+        const hit = (r.community || '').toLowerCase().includes(q) ||
+                    (r.subdistrict || '').toLowerCase().includes(q) ||
+                    (r.district || '').toLowerCase().includes(q)
+        if (!hit) return false
+      }
+      return true
+    })
+    return thaiDateRange(rows, 'received_date', { unfiltered: !bHasFilter })
+  }, [incidents, bGroup, bDistrict, bSubdistrict, bCommunity, bSearch, bHasFilter])
+  const rpt114Period = rpt114?.fyRange ? `${rpt114.fyRange}${rpt114.fyRange.includes('–') ? ' (รวมทุกปี)' : ''}` : null
+
   const bSearchSuggestions = useMemo(() => {
     if (!bSearch || bSearch.length < 1) return []
     const q = bSearch.toLowerCase()
@@ -350,18 +386,17 @@ export default function Overview() {
   return (
     <>
     {isPresentation && <PresentationBar title="ภาพรวม" />}
-    <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto'} style={{ fontFamily: 'Sarabun, sans-serif' }}>
+    <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto'}>
       <style>{`@keyframes pie-tip-in{from{opacity:0;transform:translateY(8px) scale(0.95)}to{opacity:1;transform:translateY(0) scale(1)}}`}</style>
 
       {/* ── Page Header ─────────────────────────────────────────────────────── */}
       {!isPresentation && (
-      <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-blue-800 rounded-2xl px-6 pt-8 pb-10 text-white shadow-2xl overflow-hidden relative mb-8">
+      <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-blue-800 rounded-2xl px-6 py-5 text-white shadow-lg overflow-hidden relative mb-6">
         <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, white 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
         <div className="relative flex flex-wrap items-center justify-between gap-4">
           <div>
-            <div className="text-xs font-bold uppercase tracking-widest text-blue-300 mb-3">สถิติยาเสพติด · กรุงเทพมหานคร</div>
-            <h1 className="text-3xl lg:text-4xl font-extrabold leading-tight">ภาพรวม</h1>
-            <p className="text-sm text-blue-200 mt-3">รวมข้อมูลจากทุกแหล่ง · complaints · report_114 · drug_incidents · 115_B</p>
+            <div className="text-xs font-semibold uppercase tracking-widest text-blue-300 mb-1">สถิติยาเสพติด · กรุงเทพมหานคร</div>
+            <h1 className="text-3xl font-bold leading-tight">ภาพรวม</h1>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -379,7 +414,6 @@ export default function Overview() {
             <PresentationEnterButton />
           </div>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-400 via-sky-300 to-blue-600 opacity-75" />
       </div>
       )}
 
@@ -387,10 +421,13 @@ export default function Overview() {
 
       {/* ── KPI Row 1: complaints ─────────────────────────────────────────── */}
       <div className="space-y-4">
-        <div className="flex items-center gap-2 pt-2">
-          <div className="w-1 h-5 bg-blue-600 rounded-full"></div>
-          <h3 className="text-sm font-bold text-slate-700">📁 ข้อมูลรายเรื่อง (complaints)</h3>
-          <span className="text-xs text-slate-400">ไฟล์รายเรื่องที่อัปเข้าระบบ · ปี 2568-2569</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-1 h-5 bg-blue-600 rounded-full"></div>
+            <h3 className="text-base font-semibold text-slate-800">ข้อมูลรายเรื่อง</h3>
+            <span className="text-xs text-slate-400">complaints</span>
+          </div>
+          <PeriodBadge period={complaintsRangeAll} />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
@@ -418,11 +455,10 @@ export default function Overview() {
           />
         </div>
 
-        {/* ── KPI Row 2: multi-source ───────────────────────────────────── */}
-        <div className="flex items-center gap-2 pt-2 mt-2">
+        {/* ── KPI Row 2: multi-source (period ต่างกันต่อการ์ด → คงไว้บนการ์ด) ── */}
+        <div className="flex items-center gap-2 pt-1">
           <div className="w-1 h-5 bg-indigo-600 rounded-full"></div>
-          <h3 className="text-sm font-bold text-slate-700">📊 รายงานสรุปจากแหล่งอื่น</h3>
-          <span className="text-xs text-slate-400">ตัวเลขจาก 3 แหล่งข้อมูลที่ต่างกัน — ไม่เกี่ยวกันกับแถวบน</span>
+          <h3 className="text-base font-semibold text-slate-800">รายงานสรุปจากแหล่งอื่น</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <KpiCard
@@ -433,6 +469,7 @@ export default function Overview() {
             sourceLabel={rpt114?.fyRange ? `RPT_114 · ${rpt114.fyRange}` : 'จาก RPT_114'}
             color="indigo"
             loading={rpt114Loading}
+            period={rpt114Period}
           />
           <KpiCard
             icon={<MapPin size={18} />}
@@ -442,6 +479,7 @@ export default function Overview() {
             sourceLabel="จาก drug_incidents"
             color="rose"
             loading={incidents.length === 0 && !incidentError}
+            period={incidentsRangeAll}
           />
           <KpiCard
             icon={<BarChart2 size={18} />}
@@ -451,6 +489,7 @@ export default function Overview() {
             sourceLabel="จาก 115_B"
             color="teal"
             loading={bknSummaryLoading}
+            period={bknSummary?.period}
           />
         </div>
       </div>
@@ -464,6 +503,7 @@ export default function Overview() {
               <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">📁 จาก records {records.length} เรื่อง</span>
             </h3>
             <p className="text-xs text-slate-500 mt-1">จำนวนเรื่องรับเข้าและการดำเนินการในแต่ละเดือน · แหล่งข้อมูล: complaints</p>
+            <PeriodBadge period={trendPeriod} className="mt-1" />
           </div>
           <CardFilter label="ปี" value={trendYear} onChange={setTrendYear}
             options={[{ v: 'all', l: 'ทุกปี' }, ...years.map(y => ({ v: String(y), l: 'พ.ศ. ' + y }))]} />
@@ -500,6 +540,7 @@ export default function Overview() {
                 ? `ยอดดำเนินการรายกองบัญชาการ · งวด ${bknSummary.period} · ${bknSummary.totalRows} records`
                 : 'ยอดดำเนินการรายกองบัญชาการ · แหล่งข้อมูล: bkn_summary'}
             </p>
+            <PeriodBadge period={bknSummary?.period} className="mt-1" />
           </div>
           {bknSummaryLoading ? (
             <LoadingSpinner color="blue" />
@@ -538,6 +579,7 @@ export default function Overview() {
                 ? `สัดส่วนผลตรวจสอบ · ${rpt114.totalRows} records`
                 : 'สัดส่วนผลตรวจสอบ · แหล่งข้อมูล: report_114'}
             </p>
+            <PeriodBadge period={rpt114Period} className="mt-1" />
           </div>
           {rpt114Loading ? (
             <LoadingSpinner color="indigo" />
@@ -601,6 +643,7 @@ export default function Overview() {
                   ? `แสดง ${mapPoints.length.toLocaleString()} จุดที่มีพิกัด · รวมทั้งหมด ${incidents.length.toLocaleString()} จุด`
                   : 'ข้อมูลพิกัดจาก drug_incidents'}
             </p>
+            <PeriodBadge period={mapPointsRange} className="mt-1" />
           </div>
           <button
             onClick={() => navigate('/radar')}
@@ -652,6 +695,7 @@ export default function Overview() {
               <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">📁 จาก records {records.length} เรื่อง</span>
             </h3>
             <p className="text-xs text-slate-500 mt-1">จัดอันดับตามจำนวนเรื่องที่ได้รับ · แหล่งข้อมูล: complaints</p>
+            <PeriodBadge period={districtPeriod} className="mt-1" />
           </div>
           <div className="flex gap-2 items-end">
             <DistrictMultiSelect
@@ -695,6 +739,7 @@ export default function Overview() {
                 <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">📁 จาก records {records.length} เรื่อง</span>
               </h3>
               <p className="text-xs text-slate-500 mt-1">สัดส่วนช่องทางที่ประชาชนใช้ร้องเรียน · แหล่งข้อมูล: complaints</p>
+              <PeriodBadge period={channelPeriod} className="mt-1" />
             </div>
             <div className="flex flex-wrap gap-2">
               <CardFilter label="ปี" value={channelYear} onChange={v => { setChannelYear(v); setChannelMonth('all') }}
@@ -778,7 +823,8 @@ export default function Overview() {
           <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-1">
             <Trophy size={20} className="text-amber-500" /> 5 อันดับเขตที่ร้องเรียนสูงสุด
           </h3>
-          <p className="text-xs text-slate-500 mb-5">แหล่งข้อมูล: complaints</p>
+          <p className="text-xs text-slate-500 mb-1">แหล่งข้อมูล: complaints</p>
+          <PeriodBadge period={complaintsRangeAll} className="mb-5" />
           <div className="space-y-3">
             {top5Districts.map((d, i) => {
               const rankStyle = [
@@ -818,6 +864,7 @@ export default function Overview() {
                 <span className="text-xs px-2 py-0.5 bg-rose-50 text-rose-700 rounded-full font-medium">จาก drug_incidents</span>
               </h3>
               <p className="text-sm text-slate-500 mt-0.5">จำแนกตามพฤติการณ์ · กรองตามพื้นที่ · {incidents.length.toLocaleString()} records</p>
+              <PeriodBadge period={behaviorPeriod} className="mt-1" />
             </div>
             <div className="text-right shrink-0 pl-4">
               <div className="text-3xl font-extrabold text-slate-800 tabular-nums leading-none">{behaviorTotal.toLocaleString()}</div>
@@ -1039,7 +1086,13 @@ export default function Overview() {
       {!isPresentation && (
       <div className="max-w-[1600px] mx-auto">
         <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-8">
-          <h3 className="text-lg font-bold text-slate-800 text-center mb-6">หน่วยดำเนินการ</h3>
+          <div className="flex flex-col items-center mb-6">
+            <h3 className="text-lg font-bold text-slate-800 text-center flex items-center gap-2">
+              หน่วยดำเนินการ
+              <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">จาก complaints</span>
+            </h3>
+            <PeriodBadge period={complaintsRangeAll} className="mt-1" />
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {actions.map((a, i) => (
               <ActionIcon key={a.name} icon={ACTION_ICONS[i]?.icon} label={a.name}
@@ -1195,7 +1248,7 @@ function EmptySection({ message, sub }) {
   )
 }
 
-function KpiCard({ icon, label, value, sub, sourceLabel, color, loading }) {
+function KpiCard({ icon, label, value, sub, sourceLabel, color, loading, period }) {
   const C = {
     indigo: { accent: '#6366F1', bg: '#EEF2FF', text: '#4338CA' },
     rose:   { accent: '#F43F5E', bg: '#FFF1F2', text: '#BE123C' },
@@ -1217,10 +1270,11 @@ function KpiCard({ icon, label, value, sub, sourceLabel, color, loading }) {
         {loading ? (
           <div className="h-8 bg-slate-100 rounded-lg animate-pulse mt-1" />
         ) : (
-          <div className="text-3xl font-extrabold text-slate-800 tabular-nums leading-none mt-1">{value}</div>
+          <div className="text-4xl font-bold text-slate-800 tabular-nums leading-none mt-1">{value}</div>
         )}
         <div className="text-sm text-slate-600 mt-2 font-medium">{label}</div>
         {sub && <div className="text-xs text-slate-400 mt-0.5">{sub}</div>}
+        {period && <div className="mt-1.5"><PeriodBadge period={period} /></div>}
       </div>
     </div>
   )
@@ -1314,56 +1368,30 @@ function CardFilter({ label, value, onChange, options }) {
 
 function StatCard({ icon, label, value, unit, color, onClick }) {
   const colors = {
-    blue:    { bg: '#2563EB', footer: '#1D4ED8' },
-    emerald: { bg: '#059669', footer: '#047857' },
-    amber:   { bg: '#D97706', footer: '#B45309' },
-    rose:    { bg: '#E11D48', footer: '#BE123C' },
+    blue:    '#3B82F6',
+    emerald: '#10B981',
+    amber:   '#F59E0B',
+    rose:    '#F43F5E',
   }
-  const c = colors[color] || colors.blue
+  const bg = colors[color] || colors.blue
   const clickable = !!onClick
 
   return (
     <div
       onClick={onClick}
-      className={`rounded-xl shadow-sm text-white overflow-hidden group transition-all duration-300 ${
-        clickable
-          ? 'cursor-pointer hover:shadow-2xl hover:-translate-y-1 active:translate-y-0 active:shadow-lg'
-          : 'hover:shadow-lg'
+      className={`rounded-xl shadow-sm text-white overflow-hidden relative p-5 transition-all duration-200 ${
+        clickable ? 'cursor-pointer hover:opacity-90 hover:shadow-md' : ''
       }`}
-      style={{ backgroundColor: c.bg }}>
-
-      <div className="relative px-5 pt-5 pb-3 min-h-[140px]">
-        <div className="absolute right-2 top-3 opacity-25 group-hover:opacity-40 transition-opacity duration-300 pointer-events-none">
-          <div className="text-white" style={{ transform: 'scale(3.5)', transformOrigin: 'top right' }}>
-            {icon}
-          </div>
-        </div>
-
-        {clickable && (
-          <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/10 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-        )}
-
-        <div className="relative z-10">
-          <div className="text-5xl font-extrabold leading-none mb-2 tracking-tight drop-shadow-sm">
-            {value}
-          </div>
-          <div className="text-sm font-medium opacity-95">{label}</div>
-          {unit && <div className="text-xs opacity-80 mt-0.5">{unit}</div>}
+      style={{ backgroundColor: bg }}>
+      <div className="absolute right-3 top-3 opacity-20 pointer-events-none">
+        <div className="text-white" style={{ transform: 'scale(2.6)', transformOrigin: 'top right' }}>
+          {icon}
         </div>
       </div>
-
-      <div className="px-5 py-2.5 text-xs flex items-center justify-between font-medium relative overflow-hidden"
-           style={{ backgroundColor: c.footer }}>
-        <span className="relative z-10 flex items-center gap-1">
-          {clickable && <span className="opacity-80">👆</span>}
-          {clickable ? 'คลิกเพื่อดูข้อมูล' : 'จาก complaints'}
-        </span>
-        <span className="relative z-10 inline-block transform transition-all duration-300 group-hover:translate-x-1 group-hover:scale-125">
-          →
-        </span>
-        {clickable && (
-          <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300"></div>
-        )}
+      <div className="relative z-10">
+        <div className="text-4xl font-bold leading-none mb-1 tracking-tight">{value}</div>
+        <div className="text-sm font-medium opacity-95">{label}</div>
+        {unit && <div className="text-xs opacity-80 mt-0.5">{unit}</div>}
       </div>
     </div>
   )

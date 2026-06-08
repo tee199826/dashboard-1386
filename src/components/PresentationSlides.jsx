@@ -75,7 +75,6 @@ export default function PresentationSlides({ children, isPresentation, normalCla
           overflowY: 'scroll',
           scrollSnapType: 'y mandatory',
           background: '#f1f5f9',
-          fontFamily: 'Sarabun, sans-serif',
         }}
       >
         {slides.map((slide, i) => (
@@ -104,7 +103,6 @@ export default function PresentationSlides({ children, isPresentation, normalCla
         style={{
           position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-          fontFamily: 'Sarabun, sans-serif',
         }}
       >
         <button

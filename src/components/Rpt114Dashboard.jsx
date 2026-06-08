@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import { AlertCircle, CheckCircle2, TrendingUp, Activity, Clock, BarChart2 } from 'lucide-react'
 import { MONTH_LONG } from '../utils/constants'
+import PeriodBadge from './PeriodBadge'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const fmtThai = iso => {
@@ -315,8 +316,7 @@ export default function Rpt114Dashboard() {
   )
 
   return (
-    <div className="space-y-6 mt-8" style={{ fontFamily:'Sarabun, sans-serif' }}>
-      <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <div className="space-y-6 mt-8">
 
       {/* ── Section title ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -370,11 +370,7 @@ export default function Rpt114Dashboard() {
             </span>
           )}
         </div>
-        {periodLabel && (
-          <div className="mt-2 text-xs text-slate-500">
-            📅 ช่วงข้อมูล: <span className="font-medium text-slate-700">{periodLabel}</span>
-          </div>
-        )}
+        {periodLabel && <div className="mt-2"><PeriodBadge period={periodLabel} /></div>}
       </div>
 
       {/* ── KPI Cards ── */}
@@ -452,7 +448,7 @@ export default function Rpt114Dashboard() {
       {/* ── Groups stacked bar ── */}
       {groups.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-8">
-          <SecHead emoji="📊" title="เทียบกลุ่ม 1–5" sub="เรื่องร้องเรียน vs ดำเนินการแล้ว" />
+          <SecHead emoji="📊" title="เทียบบุคคลผู้ถูกร้องเรียนรายกลุ่ม 1–5" sub="เรื่องร้องเรียน เปรียบเทียบกับ ดำเนินการแล้วของแต่ละกลุ่ม" />
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={groupChartData} margin={{ top:10, right:20, bottom:5, left:10 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />

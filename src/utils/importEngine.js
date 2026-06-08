@@ -42,6 +42,91 @@ const DRUG_INCIDENTS_MAP = {
   'พิกัด lng':           'lng',
 }
 
+// ─── ชุดคอลัมน์จริงใน DB (จาก schema check) — สำหรับ identity passthrough ──────
+// header ใน Excel ที่ตรงชื่อคอลัมน์ DB ใช้ได้ตรงๆ ไม่ต้องผ่าน mapping ภาษาไทย
+// (ไม่รวม audit/auto column: created_at, updated_at, batch_id, record_uid,
+//  source_file, row_index — จัดการโดย buildBatch / DB default)
+const DRUG_INCIDENTS_COLUMNS = new Set([
+  'seq', 'received_date', 'group_no', 'sex', 'community', 'subdistrict',
+  'nispa_code', 'lat', 'lng', 'area_group', 'drugs', 'primary_drug',
+  'behaviors', 'investigation_result', 'actions', 'primary_action',
+  'place_type', 'channel', 'police_station', 'status', 'district',
+])
+const COMPLAINTS_COLUMNS = new Set([
+  'group_no', 'received_date', 'completed_date', 'channel', 'district',
+  'subdistrict', 'community', 'province', 'person_type', 'sex',
+  'occupation', 'role', 'action_unit', 'urgency', 'status', 'drug',
+  'area_type',
+])
+
+// substance_users — flat DB columns (jsonb ประกอบจาก flatten ไม่ผ่าน identity passthrough)
+const SUBSTANCE_USERS_COLUMNS = new Set([
+  'record_no', 'district', 'subdistrict', 'occupation', 'income_range',
+  'arrest_count', 'rehab_count', 'first_use_age', 'first_drug', 'first_reason',
+])
+// header ไทย (จาก Google Form export) → DB column หรือ __helper (สำหรับประกอบ jsonb)
+// ⚠️ key ต้องตรงเป๊ะกับ header ในไฟล์ (รวมช่องว่าง/วงเล็บ) — flatten ใช้ exact match ไม่ trim
+// column นอก map (~121 ตัว รวม PII) ถูก drop เงียบๆ (flatten อ่านเฉพาะ key ใน map)
+const SUBSTANCE_USERS_MAP = {
+  // ── พื้นฐาน ──
+  'อายุ (ปี)':                 'age',
+  'อาชีพ':                     'occupation',
+  'รายได้ต่อเดือน (บาท)':       'income_range',
+
+  // ── จับ ──
+  'เคยถูกจับคดียาเสพติดหรือไม่':        '__arrest_yn',
+  'จำนวนครั้งที่ถูกจับคดียาเสพติด  (โปรดระบุข้อมูลรายละเอียดการถูกจับ 2 ครั้งล่าสุด ในข้อถัดไป)':  'arrest_count',
+  'ครั้งที่':           '__arrest_1_no',
+  'ข้อหา':             '__arrest_1_charge',
+  'ชนิดยาเสพติด':       '__arrest_1_drug',
+  'เมื่อปี':            '__arrest_1_year',
+  'ครั้งที่ 2':         '__arrest_2_no',
+  'ข้อหา 2':           '__arrest_2_charge',
+  'ชนิดยาเสพติด 2':     '__arrest_2_drug',
+  'เมื่อปี 2':          '__arrest_2_year',
+
+  // ── บำบัด ──
+  'เคยเข้ารับการบำบัดยาเสพติดหรือไม่':        '__rehab_yn',
+  'จำนวนครั้งที่เข้ารับการบำบัดยาเสพติด  (โปรดระบุข้อมูลรายละเอียดการบำบัด 2 ครั้งล่าสุด ในข้อถัดไป)':  'rehab_count',
+  'ครั้งที่ 3':         '__rehab_1_no',
+  'ชนิดยาเสพติด 3':     '__rehab_1_drug',
+  'สถานที่บำบัด':       '__rehab_1_place',
+  'เมื่อปี 3':          '__rehab_1_year',
+  'ครั้งที่ 4':         '__rehab_2_no',
+  'ชนิดยาเสพติด 4':     '__rehab_2_drug',
+  'สถานที่บำบัด 2':     '__rehab_2_place',
+  'เมื่อปี 4':          '__rehab_2_year',
+
+  // ── ครั้งแรก ──
+  'การเสพยาครั้งแรก อายุประมาณ (ปี)': 'first_use_age',
+  'ชนิดยาเสพติดที่ใช้เสพครั้งแรก':     'first_drug',
+  'สาเหตุที่ใช้ยาเสพติดครั้งแรก':      'first_reason',
+
+  // ── ยาประจำ + ราคา ──
+  'ยาเสพติดหลักที่ใช้เป็นประจำ': '__primary_drug',
+  'ราคาต่อหน่วย (ระบุหน่วย) ':   '__price_yaba',
+  'ห้วงเวลา (เดือน/ปี)':         '__period_yaba',
+  'ราคาต่อหน่วย (ระบุหน่วย)  2': '__price_ice',
+  'ห้วงเวลา (เดือน/ปี) 2':       '__period_ice',
+  'ราคาต่อหน่วย (ระบุหน่วย)  3': '__price_heroin',
+  'ห้วงเวลา (เดือน/ปี) 3':       '__period_heroin',
+  'ราคาต่อหน่วย (ระบุหน่วย)  4': '__price_ketamine',
+  'ห้วงเวลา (เดือน/ปี) 4':       '__period_ketamine',
+  'ระบุตัวยา 2':                 '__other_name_1',
+  'ราคาต่อหน่วย (ระบุหน่วย)  5': '__price_other_1',
+  'ห้วงเวลา (เดือน/ปี) 5':       '__period_other_1',
+  'ระบุตัวยา 3':                 '__other_name_2',
+  'ราคาต่อหน่วย (ระบุหน่วย)  6': '__price_other_2',
+  'ห้วงเวลา (เดือน/ปี) 6':       '__period_other_2',
+
+  // ── แหล่งซื้อ ──
+  'แหล่งที่ซื้อได้ประจำ บริเวณ/สถานที่/จุดสังเกต': '__dealer_area',
+  'ชุมชน/หมู่บ้าน':   '__dealer_community',
+  'แขวง/ตำบล 2':     '__dealer_subdistrict',
+  'จังหวัด 4':        '__dealer_province',
+  'เขต/อำเภอ 4':     '__dealer_district',
+}
+
 // ─── Helper: แปลงวันที่เป็น YYYY-MM-DD ────────────────────────────────────────
 
 function parseDate(value) {
@@ -153,6 +238,11 @@ export function detectType(rows) {
 
   const headers = Object.keys(rows[0]).map(h => h.trim().toLowerCase())
 
+  // substance_users: ตรวจ marker เฉพาะตัว (ก่อน drug_incidents เพราะมี dealer_N_lat ด้วย)
+  if (headers.includes('first_use_age') || headers.includes('dealer_1_lat') || headers.includes('record_no')) {
+    return 'substance_users'
+  }
+
   // ถ้ามี lat/lng หรือ "พิกัด" → drug_incidents
   const hasCoordsHeader = headers.some(h =>
     h === 'lat' || h === 'lng' ||
@@ -192,14 +282,29 @@ const DATE_COLUMNS = new Set(['received_date', 'completed_date'])
  */
 export function mapColumns(rows, type) {
   const mapping = type === 'drug_incidents' ? DRUG_INCIDENTS_MAP : COMPLAINTS_MAP
+  const dbCols  = type === 'drug_incidents' ? DRUG_INCIDENTS_COLUMNS : COMPLAINTS_COLUMNS
 
-  // สร้าง lookup โดย trim header ก่อนเทียบ
+  // หา dbCol ของ header: ลอง mapping ภาษาไทยก่อน → ถ้าไม่เจอ ลอง identity (ตรงชื่อ DB)
+  const resolveCol = header => mapping[header] || (dbCols.has(header) ? header : null)
+
+  // ── เตือน silent loss: ถ้า > 30% ของ header ในไฟล์ map ไม่ได้เลย ──
+  if (rows.length > 0) {
+    const headers = Object.keys(rows[0]).map(k => k.trim())
+    const unknown = headers.filter(h => !resolveCol(h))
+    if (headers.length > 0 && unknown.length / headers.length > 0.30) {
+      console.warn(
+        `[importEngine] ${type}: map ไม่ได้ ${unknown.length}/${headers.length} คอลัมน์ ` +
+        `(อาจสูญข้อมูลบางส่วน) → ${unknown.join(', ')}`
+      )
+    }
+  }
+
   return rows.map(row => {
     const mapped = {}
     for (const [rawKey, rawVal] of Object.entries(row)) {
       const key = rawKey.trim()
-      const dbCol = mapping[key]
-      if (!dbCol) continue  // ข้ามคอลัมน์ที่ไม่อยู่ใน mapping
+      const dbCol = resolveCol(key)
+      if (!dbCol) continue  // ข้ามคอลัมน์ที่ map ไม่ได้และไม่ตรงชื่อ DB column
 
       if (DATE_COLUMNS.has(dbCol)) {
         mapped[dbCol] = parseDate(rawVal)
@@ -212,6 +317,100 @@ export function mapColumns(rows, type) {
     }
     return mapped
   })
+}
+
+// ─── 3b. flattenSubstanceUserRow ──────────────────────────────────────────────
+
+/**
+ * แปลง 1 แถวจากไฟล์ Google Form export (header ไทย ~146 คอลัมน์) → row substance_users
+ * ขั้นตอน:
+ *  1. ใช้ SUBSTANCE_USERS_MAP map header ไทย → DB column / __helper (exact match ไม่ trim)
+ *     column นอก map (~121 ตัว รวม PII) ถูก drop เงียบๆ — ไม่ identity passthrough
+ *  2. ประกอบ jsonb 4 ก้อนจาก __helper แล้ว strip __helper ออก (ไม่ใส่ใน output)
+ * edge cases:
+ *  - cell ว่าง/'-'/'null' → null ; ตัวเลข parse ไม่ได้ → null
+ *  - arrest_count/rehab_count ว่าง → 0
+ *  - array item ข้ามเมื่อ key หลักว่าง (arrests/rehabs:ไม่มี drug, regular_drugs:ไม่มี price/ชื่อยาอื่น, dealer:พื้นที่ว่างหมด)
+ */
+export function flattenSubstanceUserRow(row) {
+  // map header ไทย → ชื่อ target (DB col / __helper) ด้วย exact match; นอก map ทิ้ง
+  const m = {}
+  for (const [header, target] of Object.entries(SUBSTANCE_USERS_MAP)) {
+    if (header in row) m[target] = row[header]
+  }
+
+  const sv = key => normalizeValue(m[key])                    // string | null
+  const nv = key => {                                          // number | null
+    const n = parseFloat(String(m[key] ?? '').replace(/,/g, ''))
+    return isNaN(n) ? null : n
+  }
+  const cnt = key => {                                         // count → integer (default 0)
+    const n = parseInt(String(m[key] ?? '').replace(/,/g, ''), 10)
+    return isNaN(n) ? 0 : n
+  }
+
+  // arrests: __arrest_N_drug/charge/year (ข้ามถ้าไม่มี drug)
+  const arrests = []
+  for (const i of [1, 2]) {
+    const drug = sv(`__arrest_${i}_drug`)
+    if (!drug) continue
+    arrests.push({ drug, charge: sv(`__arrest_${i}_charge`), year: nv(`__arrest_${i}_year`) })
+  }
+
+  // rehabs: __rehab_N_drug/place/year (ข้ามถ้าไม่มี drug)
+  const rehabs = []
+  for (const i of [1, 2]) {
+    const drug = sv(`__rehab_${i}_drug`)
+    if (!drug) continue
+    rehabs.push({ drug, place: sv(`__rehab_${i}_place`), year: nv(`__rehab_${i}_year`) })
+  }
+
+  // regular_drugs: 4 ยา fix (ข้ามถ้า price ว่าง) + 2 ยาอื่น (ข้ามถ้าชื่อยา/price ว่าง)
+  const regular_drugs = []
+  for (const d of [
+    { key: 'yaba', name: 'ยาบ้า' }, { key: 'ice', name: 'ไอซ์' },
+    { key: 'heroin', name: 'เฮโรอีน' }, { key: 'ketamine', name: 'คีตามีน' },
+  ]) {
+    const price = nv(`__price_${d.key}`)
+    if (price == null) continue
+    regular_drugs.push({ drug: d.name, price, unit: 'บาท', period: sv(`__period_${d.key}`) })
+  }
+  for (const i of [1, 2]) {
+    const name = sv(`__other_name_${i}`)
+    const price = nv(`__price_other_${i}`)
+    if (!name || price == null) continue
+    regular_drugs.push({ drug: name, price, unit: 'บาท', period: sv(`__period_other_${i}`) })
+  }
+
+  // dealer_locations: 1 แหล่ง (ข้ามถ้า area + community + subdistrict ว่างหมด)
+  const dealer_locations = []
+  const dArea = sv('__dealer_area')
+  const dCommunity = sv('__dealer_community')
+  const dSub = sv('__dealer_subdistrict')
+  if (dArea || dCommunity || dSub) {
+    dealer_locations.push({
+      area:        dArea,
+      community:   dCommunity,
+      subdistrict: dSub,
+      province:    sv('__dealer_province'),
+      district:    sv('__dealer_district'),
+    })
+  }
+
+  return {
+    age:           nv('age'),
+    occupation:    sv('occupation'),
+    income_range:  sv('income_range'),
+    arrest_count:  cnt('arrest_count'),
+    arrests,
+    rehab_count:   cnt('rehab_count'),
+    rehabs,
+    first_use_age: nv('first_use_age'),
+    first_drug:    sv('first_drug'),
+    first_reason:  sv('first_reason'),
+    regular_drugs,
+    dealer_locations,
+  }
 }
 
 // ─── 4. buildBatch ────────────────────────────────────────────────────────────

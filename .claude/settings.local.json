@@ -50,7 +50,13 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Acer\\\\dashboard-1386\\\\src\" -Recurse -File)",
       "Bash(python3 *)",
       "Bash(find . -path ./node_modules -prune -o \\\\\\( -name \"*.sql\" -o -name \"supabase.ts\" -o -name \"database.types.ts\" \\\\\\) -print)",
-      "Bash(ls -la supabase/migrations/)"
+      "Bash(ls -la supabase/migrations/)",
+      "Bash(grep -n \"แหล่งข้อมูล: complaints\\\\|ยอดดำเนินการรายกองบัญชาการ\\\\|สัดส่วนผลตรวจสอบ\\\\|รวมทั้งหมด \\\\${incidents\\\\|ข้อมูลพิกัดจาก drug_incidents\\\\|จัดอันดับตามจำนวนเรื่อง\\\\|สัดส่วนช่องทางที่ประชาชน\\\\|จำแนกตามพฤติการณ์\\\\|หน่วยดำเนินการ\" src/pages/Overview.jsx)",
+      "Bash(ls tailwind.config.*)",
+      "Bash(ls vite.config.* postcss.config.*)",
+      "Bash(cat tailwind.config.js)",
+      "Bash(cat tailwind.config.cjs)",
+      "Bash(grep -rn \"fontFamily\\\\|Sarabun\\\\|Prompt\\\\|Kanit\\\\|Noto\" tailwind.config.* vite.config.*)"
     ]
   }
 }

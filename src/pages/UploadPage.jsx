@@ -4,8 +4,8 @@ import {
   Upload, FileText, AlertTriangle, CheckCircle2,
   X, ChevronDown, RefreshCw, Info, LayoutDashboard,
 } from 'lucide-react'
-import { parseFile, detectType, mapColumns, buildBatch, validateRows, parse115B, parse114 } from '../utils/importEngine'
-import { upsertRecords, upsertBknSummary, upsertRpt114 } from '../utils/uploadService'
+import { parseFile, detectType, mapColumns, buildBatch, validateRows, parse115B, parse114, flattenSubstanceUserRow } from '../utils/importEngine'
+import { upsertRecords, upsertBknSummary, upsertRpt114, upsertSubstanceUsers } from '../utils/uploadService'
 import { useData } from '../context/DataContext'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -17,6 +17,7 @@ const TYPE_LABELS = {
   drug_incidents: '🗺️ เหตุการณ์ยาเสพติด (drug_incidents)',
   bkn_summary:    '📊 สรุป บก.น. 1–9 (RPT_115_B)',
   report_114:     '📑 รายงาน RPT_114 (การดำเนินการตามร้องเรียน)',
+  substance_users:'🧑 แบบเก็บข้อมูลผู้เสพ (substance_users)',
 }
 
 const COL_LABELS = {
@@ -45,7 +46,9 @@ function genBatchId() {
 }
 
 function computePreview(raw, type, fileName) {
-  const mapped = mapColumns(raw, type)
+  const mapped = type === 'substance_users'
+    ? raw.map(flattenSubstanceUserRow)
+    : mapColumns(raw, type)
   const b      = buildBatch(mapped, fileName, type)
   const v      = validateRows(b.rows, type)
   return { mapped, batch: b, validation: v }
@@ -279,6 +282,12 @@ export default function UploadPage() {
         batchId:  rpt114BatchId || genBatchId(),
         fileName: file.name,
       })
+    } else if (selectedType === 'substance_users') {
+      // ส่ง raw rows — upsertSubstanceUsers flatten เป็น jsonb ภายในเอง
+      result = await upsertSubstanceUsers(rawRows, {
+        batchId:  batch?.batchId || genBatchId(),
+        fileName: file.name,
+      })
     } else {
       if (!batch) { setPhase('preview'); return }
       result = await upsertRecords(selectedType, batch.rows, {
@@ -310,7 +319,7 @@ export default function UploadPage() {
 
   // ─── Render ───────────────────────────────────────────────────
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto bg-slate-50 min-h-screen space-y-8" style={{ fontFamily: 'Sarabun, sans-serif' }}>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto bg-slate-50 min-h-screen space-y-8">
       {/* Page header */}
       <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-blue-800 rounded-2xl px-6 pt-8 pb-10 text-white shadow-2xl overflow-hidden relative">
         <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, white 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
@@ -435,6 +444,7 @@ export default function UploadPage() {
                       <option value="drug_incidents">🗺️ เหตุการณ์ยาเสพติด</option>
                       <option value="bkn_summary">📊 สรุป บก.น. (RPT_115_B)</option>
                       <option value="report_114">📑 รายงาน RPT_114</option>
+                      <option value="substance_users">🧑 แบบเก็บข้อมูลผู้เสพ (substance_users)</option>
                     </select>
                     <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-amber-600 pointer-events-none" />
                   </div>

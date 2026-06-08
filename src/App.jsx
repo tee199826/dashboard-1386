@@ -16,6 +16,7 @@ import Header from './components/Header'
 import SubstanceRadar from './pages/SubstanceRadar'
 import UploadPage from './pages/UploadPage'
 import BknPage from './pages/BknPage'
+import SubstanceUsers from './pages/SubstanceUsers'
 import { Menu } from 'lucide-react'
 
 function MainLayout({ children }) {
@@ -65,6 +66,7 @@ export default function App() {
             <Route path="/districts" element={<MainLayout><AllDistricts /></MainLayout>} />
             <Route path="/operations" element={<MainLayout><Operations /></MainLayout>} />
             <Route path="/bkn" element={<MainLayout><BknPage /></MainLayout>} />
+            <Route path="/substance-users" element={<MainLayout><SubstanceUsers /></MainLayout>} />
 
             <Route path="/upload" element={
               <ProtectedRoute><MainLayout><UploadPage /></MainLayout></ProtectedRoute>
