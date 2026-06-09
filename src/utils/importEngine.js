@@ -98,7 +98,7 @@ const SUBSTANCE_USERS_MAP = {
   'เมื่อปี 4':          '__rehab_2_year',
 
   // ── ครั้งแรก ──
-  'การเสพยาครั้งแรก อายุประมาณ (ปี)': 'first_use_age',
+  '3. การเสพยาครั้งแรก อายุประมาณ (ปี)': 'first_use_age',
   'ชนิดยาเสพติดที่ใช้เสพครั้งแรก':     'first_drug',
   'สาเหตุที่ใช้ยาเสพติดครั้งแรก':      'first_reason',
 
@@ -332,7 +332,14 @@ export function mapColumns(rows, type) {
  *  - arrest_count/rehab_count ว่าง → 0
  *  - array item ข้ามเมื่อ key หลักว่าง (arrests/rehabs:ไม่มี drug, regular_drugs:ไม่มี price/ชื่อยาอื่น, dealer:พื้นที่ว่างหมด)
  */
-export function flattenSubstanceUserRow(row) {
+export function flattenSubstanceUserRow(row, fileName) {
+  // ดึง fiscal_year จากชื่อไฟล์ — ถ้าไม่เจอ → null (DB ใส่ default ให้)
+  let fiscal_year = null
+  if (fileName) {
+    const fy = String(fileName).match(/ปีงบประมาณ\s*(\d{4})/) || String(fileName).match(/(\d{4})/)
+    if (fy) fiscal_year = parseInt(fy[1], 10)
+  }
+
   // map header ไทย → ชื่อ target (DB col / __helper) ด้วย exact match; นอก map ทิ้ง
   const m = {}
   for (const [header, target] of Object.entries(SUBSTANCE_USERS_MAP)) {
@@ -398,6 +405,7 @@ export function flattenSubstanceUserRow(row) {
   }
 
   return {
+    fiscal_year,
     age:           nv('age'),
     occupation:    sv('occupation'),
     income_range:  sv('income_range'),

@@ -56,7 +56,8 @@
       "Bash(ls vite.config.* postcss.config.*)",
       "Bash(cat tailwind.config.js)",
       "Bash(cat tailwind.config.cjs)",
-      "Bash(grep -rn \"fontFamily\\\\|Sarabun\\\\|Prompt\\\\|Kanit\\\\|Noto\" tailwind.config.* vite.config.*)"
+      "Bash(grep -rn \"fontFamily\\\\|Sarabun\\\\|Prompt\\\\|Kanit\\\\|Noto\" tailwind.config.* vite.config.*)",
+      "PowerShell(npm run *)"
     ]
   }
 }

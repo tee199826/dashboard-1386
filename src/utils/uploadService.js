@@ -146,7 +146,7 @@ export async function upsertBknSummary(rows, batchInfo) {
 export async function upsertSubstanceUsers(rawRows, batchInfo) {
   if (!rawRows || rawRows.length === 0) return { inserted: 0, updated: 0, failed: 0, error: null }
 
-  const rows = rawRows.map(flattenSubstanceUserRow).map(r => ({
+  const rows = rawRows.map(r => flattenSubstanceUserRow(r, batchInfo.fileName)).map(r => ({
     ...r,
     batch_id:    batchInfo.batchId,
     source_file: batchInfo.fileName,

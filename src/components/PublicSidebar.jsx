@@ -1,9 +1,11 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { BarChart3, MapPin, LogIn, Database, ScrollText, Users, FileSpreadsheet, Map, Upload, Shield, UserSearch } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
   const { user, isAdmin } = useAuth()
+  const { pathname } = useLocation()
+  const isSubstanceUsers = pathname.startsWith('/substance-users')
 
   const close = () => setSidebarOpen?.(false)
 
@@ -13,7 +15,7 @@ export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
     { to: '/radar', icon: <Map size={18} />, label: 'แผนที่ยาเสพติด' },
     { to: '/operations', icon: <FileSpreadsheet size={18} />, label: 'ผลการดำเนินงาน' },
     { to: '/bkn', icon: <Shield size={18} />, label: 'สถิติ บก.น.' },
-    { to: '/substance-users', icon: <UserSearch size={18} />, label: 'ผู้เสพ' },
+    { to: '/substance-users', icon: <UserSearch size={18} />, label: 'ผลเก็บข้อมูลจากผู้เสพติด' },
   ]
 
   const adminMenus = [
@@ -23,17 +25,23 @@ export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
   ]
 
   return (
-    <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-gradient-to-b from-slate-900 to-blue-900 text-white flex-shrink-0 overflow-y-auto transform transition-transform duration-300 ${
+    <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-gradient-to-b text-white flex-shrink-0 overflow-y-auto transform transition-transform duration-300 ${
+      isSubstanceUsers ? 'from-purple-950 via-violet-900 to-purple-950' : 'from-slate-900 to-blue-900'
+    } ${
       sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
     }`}>
 
       <nav className="p-3 space-y-1">
-        <div className="px-3 py-1 text-xs text-blue-300/70 uppercase tracking-wide">เมนูหลัก</div>
+        <div className={`px-3 py-1 text-xs uppercase tracking-wide ${isSubstanceUsers ? 'text-violet-300/70' : 'text-blue-300/70'}`}>เมนูหลัก</div>
         {publicMenus.map(m => (
           <NavLink key={m.to} to={m.to} end={m.to === '/'} onClick={close}
-            className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${
-              isActive ? 'bg-white/20 font-semibold' : 'hover:bg-white/10'
-            }`}>
+            className={({ isActive }) => {
+              const base = 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition '
+              // active state พิเศษเฉพาะ /substance-users (violet glow ตาม theme) — หน้าอื่นคงเดิม
+              if (isActive && m.to === '/substance-users')
+                return base + 'bg-violet-500/30 text-white font-semibold shadow-lg shadow-violet-500/30 border-l-4 border-violet-300'
+              return base + (isActive ? 'bg-white/20 font-semibold' : 'hover:bg-white/10')
+            }}>
             {m.icon} {m.label}
           </NavLink>
         ))}

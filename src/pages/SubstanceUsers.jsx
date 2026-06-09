@@ -1,17 +1,44 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { flushSync } from 'react-dom'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LabelList,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from 'recharts'
 import {
-  Users, Activity, Clock, ShieldAlert, HeartPulse, AlertTriangle, MapPin, Search,
+  Users, Activity, Clock, Shield, Heart, AlertTriangle, MapPin, Search, LayoutGrid,
 } from 'lucide-react'
 import { fetchAllPages } from '../utils/supabasePagination'
-import PeriodBadge from '../components/PeriodBadge'
+import { supabase } from '../lib/supabase'
 import IncidentMap from '../components/IncidentMap'
+import HeroActions from '../components/HeroActions'
 
-const PIE_COLORS = ['#3B82F6', '#EF4444', '#F59E0B', '#10B981', '#8B5CF6', '#EC4899', '#64748B']
-const FIELDS = 'age,occupation,income_range,arrest_count,rehab_count,first_use_age,first_drug,first_reason,arrests,rehabs,regular_drugs,dealer_locations'
+// rainbow palette — หมุนตาม index ทุก bar chart
+const CHART_COLORS = [
+  '#dc2626',  // red-600
+  '#7c3aed',  // violet-600
+  '#2563eb',  // blue-600
+  '#16a34a',  // green-600
+  '#92400e',  // amber-800
+  '#a78bfa',  // violet-400
+  '#f59e0b',  // amber-500
+  '#06b6d4',  // cyan-500
+  '#ec4899',  // pink-500
+  '#84cc16',  // lime-500
+]
+// Top-3 shade palettes — #1 เข้มสุด (shade-700), #2-3 กลาง (shade-500), ที่เหลืออ่อน (shade-300)
+const TOP3_PALETTES = {
+  blue:    { top1: '#1d4ed8', top23: '#3b82f6', rest: '#93c5fd' },
+  indigo:  { top1: '#4338ca', top23: '#6366f1', rest: '#a5b4fc' },
+  emerald: { top1: '#047857', top23: '#10b981', rest: '#6ee7b7' },
+  amber:   { top1: '#b45309', top23: '#f59e0b', rest: '#fcd34d' },
+  violet:  { top1: '#6d28d9', top23: '#8b5cf6', rest: '#c4b5fd' },
+  teal:    { top1: '#0f766e', top23: '#14b8a6', rest: '#5eead4' },
+  orange:  { top1: '#c2410c', top23: '#f97316', rest: '#fdba74' },
+  red:     { top1: '#b91c1c', top23: '#ef4444', rest: '#fca5a5' },
+  rose:    { top1: '#be123c', top23: '#f43f5e', rest: '#fda4af' },
+  fuchsia: { top1: '#a21caf', top23: '#d946ef', rest: '#f5d0fe' },
+}
+const FOOTER_PERIOD = 'ข้อมูลช่วง 01 ต.ค.2568 - 30 เม.ย.2569'
+const FIELDS = 'fiscal_year,age,occupation,income_range,arrest_count,rehab_count,first_use_age,first_drug,first_reason,arrests,rehabs,regular_drugs,dealer_locations'
 
 const INCOME_ORDER = ['ไม่มีรายได้', 'ต่ำกว่า 10,000', '10,000-15,000', '15,001-20,000', '20,001-25,000', '25,001-30,000', 'มากกว่า 30,000']
 const incomeRank = v => { const i = INCOME_ORDER.findIndex(o => String(v || '').includes(o)); return i === -1 ? 99 : i }
@@ -26,34 +53,111 @@ function topN(counts, n, otherLabel = 'อื่นๆ') {
   return out
 }
 
+// ── tab navigation (executive) ──
+const TABS = [
+  { id: 'demographics', label: 'ข้อมูลประชากร' },
+  { id: 'history', label: 'ประวัติการเสพ' },
+  { id: 'drugs', label: 'ยาประจำ + ราคา' },
+  { id: 'arrests', label: 'จับและบำบัด' },
+  { id: 'dealers', label: 'แหล่งซื้อ' },
+]
+const TAB_IDS = TABS.map(t => t.id)
+const hashTab = () => {
+  const h = typeof window !== 'undefined' ? window.location.hash.replace('#', '') : ''
+  return TAB_IDS.includes(h) ? h : 'demographics'
+}
+
+const TH_MONTH = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+const fmtThaiDate = iso => {
+  if (!iso) return null
+  const d = new Date(iso)
+  return `${d.getDate()} ${TH_MONTH[d.getMonth() + 1]} ${d.getFullYear() + 543}`
+}
+
 export default function SubstanceUsers() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // ── district table controls (section 6) ──
   const [search, setSearch] = useState('')
   const [sortDesc, setSortDesc] = useState(true)
 
+  // ── fiscal-year filter (synced across every chart dropdown) ──
+  const [selectedYear, setSelectedYear] = useState('all')
+  const years = useMemo(
+    () => [...new Set(rows.map(r => r.fiscal_year).filter(Boolean))].sort((a, b) => b - a),
+    [rows],
+  )
+  const filteredRows = useMemo(
+    () => (selectedYear === 'all' ? rows : rows.filter(r => r.fiscal_year === parseInt(selectedYear))),
+    [rows, selectedYear],
+  )
+  const yearCtl = { years, selectedYear, onYearChange: setSelectedYear }
+
+  // ── tab navigation state ──
+  const [activeTab, setActiveTab] = useState(hashTab)
+  const [viewMode, setViewMode] = useState('tabs') // 'tabs' | 'all'
+
+  // sync activeTab ↔ URL hash (deep-link + refresh-safe)
   useEffect(() => {
-    const load = async () => {
-      setLoading(true); setError(null)
-      try {
-        const data = await fetchAllPages('substance_users', FIELDS)
-        setRows(data)
-      } catch {
-        setError('ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่')
-      } finally {
-        setLoading(false)
-      }
+    window.location.hash = activeTab
+  }, [activeTab])
+  useEffect(() => {
+    const onHash = () => {
+      const h = window.location.hash.replace('#', '')
+      if (TAB_IDS.includes(h)) setActiveTab(h)
     }
-    load()
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
+  // print: force all sections into the DOM so PDF exports are complete,
+  // then restore the previous view mode afterwards
+  const viewModeRef = useRef(viewMode)
+  viewModeRef.current = viewMode
+  const printPrevMode = useRef('tabs')
+  useEffect(() => {
+    const before = () => {
+      printPrevMode.current = viewModeRef.current
+      flushSync(() => setViewMode('all'))
+    }
+    const after = () => { flushSync(() => setViewMode(printPrevMode.current)) }
+    window.addEventListener('beforeprint', before)
+    window.addEventListener('afterprint', after)
+    return () => {
+      window.removeEventListener('beforeprint', before)
+      window.removeEventListener('afterprint', after)
+    }
+  }, [])
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const data = await fetchAllPages('substance_users', FIELDS)
+      setRows(data)
+    } catch {
+      setError('ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  // วันที่อัปโหลดล่าสุดของชุดข้อมูลผู้เสพ (ใช้ใน modal แหล่งข้อมูล)
+  const [lastUpload, setLastUpload] = useState(null)
+  useEffect(() => {
+    ;(async () => {
+      const { data } = await supabase.from('upload_batches')
+        .select('uploaded_at').eq('target_table', 'substance_users')
+        .order('uploaded_at', { ascending: false }).limit(1)
+      if (data?.[0]?.uploaded_at) setLastUpload(fmtThaiDate(data[0].uploaded_at))
+    })()
   }, [])
 
   const agg = useMemo(() => {
+    const rows = filteredRows
     const total = rows.length
 
-    // KPI
     const ages = rows.map(r => num(r.age)).filter(v => v != null)
     const firstAges = rows.map(r => num(r.first_use_age)).filter(v => v != null)
     const avg = arr => arr.length ? (arr.reduce((s, v) => s + v, 0) / arr.length) : 0
@@ -85,12 +189,12 @@ export default function SubstanceUsers() {
       .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
       .map(([name, value]) => ({ name, value }))
 
-    // [3.2] first_drug pie (top 6 + อื่นๆ)
+    // [3.2] first_drug (top 6 + อื่นๆ)
     const fdMap = {}
     rows.forEach(r => { const d = (r.first_drug || '').trim(); if (d) fdMap[d] = (fdMap[d] || 0) + 1 })
     const firstDrug = topN(fdMap, 6)
 
-    // [3.3] first_reason (split comma → count) horizontal
+    // [3.3] first_reason (split comma → count)
     const frMap = {}
     rows.forEach(r => String(r.first_reason || '').split(',').forEach(x => {
       const v = x.trim(); if (v) frMap[v] = (frMap[v] || 0) + 1
@@ -142,21 +246,21 @@ export default function SubstanceUsers() {
       regularDrugs, priceAvg, arrestBuckets, arrestDrugs, charges,
       distMap, districtMax, districtTable,
     }
-  }, [rows])
+  }, [filteredRows])
 
-  // ── choropleth layer (section 6) — reuse IncidentMap district layer ──
-  const districtLayerKey = `su-${rows.length}`
+  // ── choropleth layer (section 6) — purple gradient ──
+  const districtLayerKey = `su-${filteredRows.length}-${selectedYear}`
   const districtLayerStyle = useMemo(() => (feature) => {
     const dn = feature.properties?.dname
     const c = agg.distMap[dn] || 0
-    if (c === 0) return { color: '#cbd5e1', weight: 1, fillColor: '#f1f5f9', fillOpacity: 0.35, opacity: 0.5 }
+    if (c === 0) return { color: '#e2e8f0', weight: 1, fillColor: '#6d28d9', fillOpacity: 0.04, opacity: 0.5 }
     const t = c / agg.districtMax
-    return { color: '#1e40af', weight: 1.2, fillColor: '#2563eb', fillOpacity: 0.2 + t * 0.6, opacity: 0.85 }
+    return { color: '#a78bfa', weight: 1, fillColor: '#6d28d9', fillOpacity: 0.10 + t * 0.75, opacity: 0.95 }
   }, [agg.distMap, agg.districtMax])
   const districtLayerOnEachFeature = useMemo(() => (feature, layer) => {
     const dn = feature.properties?.dname || 'ไม่ระบุ'
     const c = agg.distMap[dn] || 0
-    layer.bindTooltip(`${dn} — ${c} ราย`, { sticky: true, className: 'district-tooltip' })
+    layer.bindTooltip(`${dn} — ${c} ราย`, { sticky: true, className: 'su-district-tooltip' })
   }, [agg.distMap])
 
   const filteredTable = useMemo(() => {
@@ -166,11 +270,9 @@ export default function SubstanceUsers() {
     return t
   }, [agg.districtTable, search, sortDesc])
 
-  const period = `ข้อมูลจาก ${agg.total} ราย`
-
   if (loading) return (
     <div className="p-16 text-center">
-      <div className="inline-block w-12 h-12 border-4 border-slate-200 border-t-blue-700 rounded-full animate-spin mb-4" />
+      <div className="inline-block w-12 h-12 border-4 border-slate-200 border-t-violet-600 rounded-full animate-spin mb-4" />
       <p className="text-slate-500">กำลังโหลดข้อมูล...</p>
     </div>
   )
@@ -181,218 +283,405 @@ export default function SubstanceUsers() {
     </div>
   )
 
+  const sourceInfo = {
+    title: 'แหล่งข้อมูล · ข้อมูลผู้เสพ',
+    source: 'substance_users table',
+    description:
+      'ข้อมูลจากแบบเก็บข้อมูลจากผู้เสพ (แบบ ปปส.กทม. ๑-ฑ)\n' +
+      'บันทึกจากการสัมภาษณ์ผู้เสพยาเสพติด\n' +
+      'คุ้มครองข้อมูลส่วนบุคคลตาม PDPA',
+    fields: [
+      'อายุ',
+      'อาชีพ',
+      'รายได้ต่อเดือน',
+      'ประวัติถูกจับ (จำนวนครั้ง + รายละเอียด 2 ครั้งล่าสุด)',
+      'ประวัติบำบัด (จำนวนครั้ง + รายละเอียด 2 ครั้งล่าสุด)',
+      'การเสพครั้งแรก (อายุ + ชนิดยา + สาเหตุ)',
+      'ยาประจำ + ราคา',
+      'แหล่งซื้อ (เก็บระดับเขต/ตำบล ไม่มีพิกัด)',
+    ],
+    notCollected: [
+      'ชื่อ-สกุล / เลขประจำตัวประชาชน',
+      'เบอร์โทรศัพท์',
+      'ที่อยู่บ้าน (เลขที่/ซอย/ถนน)',
+      'ข้อมูลผู้ขาย',
+      'ข้อมูลผู้สัมภาษณ์',
+    ],
+    period: '01 ต.ค. 2568 - 30 เม.ย. 2569',
+    count: `${rows.length.toLocaleString()} ราย`,
+    lastUpload,
+  }
+
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-8">
-      {/* Hero */}
-      <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-blue-800 rounded-2xl px-6 py-5 text-white shadow-lg">
-        <div className="text-xs font-semibold uppercase tracking-widest text-blue-300 mb-1">ข้อมูลผู้เสพ · Substance Users</div>
-        <h1 className="text-3xl font-bold leading-tight">ผู้เสพ</h1>
-      </div>
+    <div className="bg-white min-h-screen">
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-12">
 
-      {/* [1] KPI Strip */}
-      <section className="space-y-3">
-        <SectionHeader title="ภาพรวม" period={period} />
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          <KpiCard icon={<Users size={20} />} label="ผู้เสพรวม" value={agg.total.toLocaleString()}
-            sub="ทั้งหมดในระบบ" bg="from-blue-700 to-blue-600" foot="#1D4ED8" source="substance_users" />
-          <KpiCard icon={<Activity size={20} />} label="อายุเฉลี่ย" value={agg.avgAge.toFixed(1)}
-            sub="ปี" bg="from-sky-600 to-sky-500" foot="#0369A1" source="substance_users" />
-          <KpiCard icon={<Clock size={20} />} label="อายุเริ่มเสพเฉลี่ย"
-            value={agg.avgFirstAge > 0 ? agg.avgFirstAge.toFixed(1) : '—'}
-            sub={agg.avgFirstAge > 0 ? 'ปี' : 'ไม่มีข้อมูล'} bg="from-violet-600 to-violet-500" foot="#5B21B6" source="substance_users" />
-          <KpiCard icon={<ShieldAlert size={20} />} label="% เคยถูกจับ"
-            value={`${agg.total ? ((agg.arrested / agg.total) * 100).toFixed(0) : 0}%`}
-            sub={`${agg.arrested} ราย`} bg="from-red-600 to-rose-500" foot="#B91C1C" source="substance_users" />
-          <KpiCard icon={<HeartPulse size={20} />} label="% เคยบำบัด"
-            value={`${agg.total ? ((agg.rehabbed / agg.total) * 100).toFixed(0) : 0}%`}
-            sub={`${agg.rehabbed} ราย`} bg="from-emerald-600 to-green-500" foot="#047857" source="substance_users" />
-        </div>
-      </section>
-
-      {/* [2] Demographics */}
-      <section className="space-y-3">
-        <SectionHeader title="ข้อมูลประชากร" period={period} />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <ChartCard title="กลุ่มอายุ">
-            <VBar data={agg.ageGroups} color="#3B82F6" />
-          </ChartCard>
-          <ChartCard title="อาชีพ (10 อันดับ)">
-            <HBar data={agg.occupations} color="#8B5CF6" height={300} />
-          </ChartCard>
-          <ChartCard title="รายได้ต่อเดือน">
-            <HBar data={agg.income} color="#10B981" height={300} />
-          </ChartCard>
-        </div>
-      </section>
-
-      {/* [3] ประวัติการเสพ */}
-      <section className="space-y-3">
-        <SectionHeader title="ประวัติการเสพ" period={period} />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <ChartCard title="อายุที่เริ่มเสพ">
-            {agg.firstUseHist.length ? <VBar data={agg.firstUseHist} color="#F59E0B" /> : <Empty />}
-          </ChartCard>
-          <ChartCard title="ชนิดยาที่ใช้ครั้งแรก">
-            <DonutPie data={agg.firstDrug} />
-          </ChartCard>
-          <ChartCard title="สาเหตุการเสพครั้งแรก">
-            <HBar data={agg.firstReason} color="#EF4444" height={300} />
-          </ChartCard>
-        </div>
-      </section>
-
-      {/* [4] ยาประจำ + ราคา */}
-      <section className="space-y-3">
-        <SectionHeader title="ยาที่ใช้ประจำ และ ราคา" period={period} />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ChartCard title="ยาที่ใช้เป็นประจำ">
-            {agg.regularDrugs.length ? <HBar data={agg.regularDrugs} color="#3B82F6" height={300} />
-              : <Empty />}
-          </ChartCard>
-          <ChartCard title="ราคาเฉลี่ยต่อยา (บาท · ผู้ระบุ ≥ 3 ราย)">
-            {agg.priceAvg.length ? <HBar data={agg.priceAvg} color="#0EA5E9" height={300} unit=" บาท" />
-              : <Empty />}
-          </ChartCard>
-        </div>
-      </section>
-
-      {/* [5] ประวัติถูกจับ + บำบัด */}
-      <section className="space-y-3">
-        <SectionHeader title="ประวัติการถูกจับ และ การบำบัด" period={period} />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <ChartCard title="จำนวนครั้งที่ถูกจับ">
-            <VBar data={agg.arrestBuckets} color="#EF4444" />
-          </ChartCard>
-          <ChartCard title="ชนิดยาตอนถูกจับ">
-            {agg.arrestDrugs.length ? <HBar data={agg.arrestDrugs} color="#F59E0B" height={300} /> : <Empty />}
-          </ChartCard>
-          <ChartCard title="ข้อหา">
-            {agg.charges.length ? <DonutPie data={agg.charges} /> : <Empty />}
-          </ChartCard>
-        </div>
-      </section>
-
-      {/* [6] แหล่งซื้อ × Map */}
-      <section className="space-y-3">
-        <SectionHeader title="แหล่งซื้อยา รายเขต" period={period} />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* map */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-md overflow-hidden">
-            <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
-              <MapPin size={16} className="text-blue-600" />
-              <h3 className="text-sm font-semibold text-slate-800">แผนที่กรุงเทพฯ · เขตที่เข้มกว่า = มีแหล่งซื้อมากกว่า</h3>
+        {/* Hero */}
+        <header className="bg-gradient-to-br from-purple-900 via-violet-800 to-purple-900 rounded-xl px-8 py-8 text-white shadow-xl shadow-purple-900/20">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-widest text-violet-300 mb-2">Substance Users · Drug Survey Data</div>
+              <h1 className="text-4xl font-bold tracking-tight">แบบเก็บข้อมูลจากผู้เสพ</h1>
+              <p className="text-violet-200 text-base mt-2 leading-relaxed">สรุปผลจาก {agg.total} ราย · ข้อมูลสำรวจผู้เสพยาเสพติด</p>
             </div>
-            <div className="h-[500px]">
-              <IncidentMap
-                className="w-full h-full"
-                points={[]}
-                viewMode="point"
-                getColor={() => '#2563eb'}
-                districtLayerKey={districtLayerKey}
-                districtLayerStyle={districtLayerStyle}
-                districtLayerOnEachFeature={districtLayerOnEachFeature}
-              />
-            </div>
+            <HeroActions onRefresh={load} refreshing={loading} sourceInfo={sourceInfo} />
           </div>
+        </header>
 
-          {/* table */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-md overflow-hidden flex flex-col">
-            <div className="px-5 py-3 border-b border-slate-100">
-              <h3 className="text-sm font-semibold text-slate-800 mb-2">เขต × จำนวนราย</h3>
-              <div className="relative">
-                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหาเขต..."
-                  className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 outline-none" />
+        {/* SECTION 1 — KPI */}
+        <section>
+          <SectionHeader title="ภาพรวม" desc="ตัวชี้วัดหลักของกลุ่มผู้เสพในระบบ" />
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <KpiCard icon={<Users size={64} />} gradient="bg-gradient-to-br from-indigo-600 to-indigo-700"
+              label="ผู้เสพรวม" value={agg.total.toLocaleString()} sub="ทั้งหมดในระบบ" />
+            <KpiCard icon={<Activity size={64} />} gradient="bg-gradient-to-br from-sky-500 to-cyan-600"
+              label="อายุเฉลี่ย" value={agg.avgAge.toFixed(1)} sub="ปี" />
+            <KpiCard icon={<Clock size={64} />} gradient="bg-gradient-to-br from-violet-500 to-purple-600"
+              label="อายุเริ่มเสพเฉลี่ย"
+              value={agg.avgFirstAge > 0 ? agg.avgFirstAge.toFixed(1) : '—'}
+              sub={agg.avgFirstAge > 0 ? 'ปี' : 'ไม่มีข้อมูล'} />
+            <KpiCard icon={<Shield size={64} />} gradient="bg-gradient-to-br from-rose-500 to-red-600"
+              label="เคยถูกจับ"
+              value={`${agg.total ? ((agg.arrested / agg.total) * 100).toFixed(0) : 0}%`} sub={`${agg.arrested} ราย`} />
+            <KpiCard icon={<Heart size={64} />} gradient="bg-gradient-to-br from-emerald-500 to-green-600"
+              label="เคยบำบัด"
+              value={`${agg.total ? ((agg.rehabbed / agg.total) * 100).toFixed(0) : 0}%`} sub={`${agg.rehabbed} ราย`} />
+          </div>
+        </section>
+
+        {/* ── TAB NAVIGATION (sections 2–6) ── */}
+        <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} viewMode={viewMode} setViewMode={setViewMode} />
+
+        <div key={viewMode === 'tabs' ? activeTab : 'all'} className="transition-opacity duration-200 space-y-12">
+          {viewMode === 'tabs' ? (
+            <>
+              {activeTab === 'demographics' && <DemographicsSection agg={agg} yearCtl={yearCtl} />}
+              {activeTab === 'history' && <HistorySection agg={agg} yearCtl={yearCtl} />}
+              {activeTab === 'drugs' && <DrugsSection agg={agg} yearCtl={yearCtl} />}
+              {activeTab === 'arrests' && <ArrestsSection agg={agg} yearCtl={yearCtl} />}
+              {activeTab === 'dealers' && (
+                <DealersSection agg={agg} yearCtl={yearCtl} mapKey={`map-${activeTab}`}
+                  districtLayerKey={districtLayerKey} districtLayerStyle={districtLayerStyle} districtLayerOnEachFeature={districtLayerOnEachFeature}
+                  search={search} setSearch={setSearch} sortDesc={sortDesc} setSortDesc={setSortDesc} filteredTable={filteredTable} />
+              )}
+            </>
+          ) : (
+            <>
+              <DemographicsSection agg={agg} yearCtl={yearCtl} />
+              <HistorySection agg={agg} yearCtl={yearCtl} />
+              <DrugsSection agg={agg} yearCtl={yearCtl} />
+              <ArrestsSection agg={agg} yearCtl={yearCtl} />
+              <DealersSection agg={agg} yearCtl={yearCtl} mapKey="map-all"
+                districtLayerKey={districtLayerKey} districtLayerStyle={districtLayerStyle} districtLayerOnEachFeature={districtLayerOnEachFeature}
+                search={search} setSearch={setSearch} sortDesc={sortDesc} setSortDesc={setSortDesc} filteredTable={filteredTable} />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── tab navigation ───────────────────────────────────────────────────────────
+
+function TabBar({ tabs, active, onChange, viewMode, setViewMode }) {
+  const onKeyDown = (e, idx) => {
+    if (e.key === 'ArrowRight') { e.preventDefault(); onChange(tabs[(idx + 1) % tabs.length].id) }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); onChange(tabs[(idx - 1 + tabs.length) % tabs.length].id) }
+  }
+  const allOn = viewMode === 'all'
+  return (
+    <div className="tab-bar print:hidden sticky top-0 z-20 -mx-2 px-2 py-2 mb-8 flex items-center justify-between gap-3
+      bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl shadow-sm">
+      <div role="tablist" aria-label="หมวดข้อมูลผู้เสพ" className="flex items-center gap-2 px-2 overflow-x-auto">
+        {tabs.map((t, i) => {
+          const isActive = t.id === active
+          return (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={isActive}
+              tabIndex={isActive ? 0 : -1}
+              onClick={() => onChange(t.id)}
+              onKeyDown={e => onKeyDown(e, i)}
+              className={`min-w-[140px] text-center px-6 py-4 text-sm rounded-lg transition-colors duration-200 whitespace-nowrap
+                ${isActive
+                  ? 'text-violet-700 font-semibold bg-violet-50/50 border-b-2 border-violet-600 rounded-b-none'
+                  : 'text-slate-600 font-medium hover:text-violet-700 hover:bg-violet-50/50'}`}
+            >
+              {t.label}
+            </button>
+          )
+        })}
+      </div>
+      <button
+        onClick={() => setViewMode(allOn ? 'tabs' : 'all')}
+        aria-pressed={allOn}
+        className={`shrink-0 inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg border transition-colors duration-200
+          ${allOn
+            ? 'bg-violet-100 border-violet-400 text-violet-700'
+            : 'bg-white border-slate-200 text-slate-600 hover:border-violet-300 hover:bg-violet-50'}`}
+      >
+        <LayoutGrid size={16} />
+        แสดงทั้งหมด
+      </button>
+    </div>
+  )
+}
+
+// ─── section content (sub-components, same file) ──────────────────────────────
+
+function DemographicsSection({ agg, yearCtl }) {
+  return (
+    <section>
+      <SectionHeader title="ข้อมูลประชากร" desc="อายุ อาชีพ และรายได้ต่อเดือนของผู้เสพ" />
+      <div className="space-y-8">
+        <ChartCard title="กลุ่มอายุ" desc="การกระจายตัวตามช่วงอายุ" {...yearCtl}><VBar data={agg.ageGroups} palette="blue" /></ChartCard>
+        <ChartCard title="อาชีพ (10 อันดับแรก)" desc="อาชีพที่พบมากที่สุด" {...yearCtl}><HBar data={agg.occupations} palette="indigo" /></ChartCard>
+        <ChartCard title="รายได้ต่อเดือน" desc="ช่วงรายได้ของผู้เสพ" {...yearCtl}><HBar data={agg.income} palette="emerald" /></ChartCard>
+      </div>
+    </section>
+  )
+}
+
+function HistorySection({ agg, yearCtl }) {
+  return (
+    <section>
+      <SectionHeader title="ประวัติการเสพ" desc="อายุที่เริ่มเสพ ชนิดยา และสาเหตุการเสพครั้งแรก" />
+      <div className="space-y-8">
+        <ChartCard title="อายุที่เริ่มเสพ" desc="ช่วงอายุที่เริ่มใช้ยาเสพติด" {...yearCtl}>
+          {agg.firstUseHist.length ? <VBar data={agg.firstUseHist} palette="amber" /> : <Empty />}
+        </ChartCard>
+        <ChartCard title="ชนิดยาที่ใช้ครั้งแรก" desc="ชนิดยาเสพติดที่ใช้เป็นครั้งแรก" {...yearCtl}><HBar data={agg.firstDrug} rainbow /></ChartCard>
+        <ChartCard title="สาเหตุการเสพครั้งแรก" desc="เหตุผลที่เริ่มใช้ยาเสพติด" {...yearCtl}><HBar data={agg.firstReason} palette="violet" /></ChartCard>
+      </div>
+    </section>
+  )
+}
+
+function DrugsSection({ agg, yearCtl }) {
+  return (
+    <section>
+      <SectionHeader title="ยาที่ใช้ประจำ และ ราคา" desc="ชนิดยาที่ใช้ประจำและราคาเฉลี่ยต่อหน่วย" />
+      <div className="space-y-8">
+        <ChartCard title="ยาที่ใช้เป็นประจำ" desc="ชนิดยาที่ใช้เป็นประจำ" {...yearCtl}>
+          {agg.regularDrugs.length ? <HBar data={agg.regularDrugs} palette="teal" /> : <Empty />}
+        </ChartCard>
+        <ChartCard title="ราคาเฉลี่ยต่อยา" desc="ราคาเฉลี่ยต่อหน่วย (ผู้ระบุราคา ≥ 3 ราย)" {...yearCtl}>
+          {agg.priceAvg.length ? <HBar data={agg.priceAvg} unit=" บาท" palette="orange" /> : <Empty />}
+        </ChartCard>
+      </div>
+    </section>
+  )
+}
+
+function ArrestsSection({ agg, yearCtl }) {
+  return (
+    <section>
+      <SectionHeader title="ประวัติการถูกจับ และ การบำบัด" desc="ประวัติการถูกจับและการเข้ารับการบำบัด" />
+      <div className="space-y-8">
+        <ChartCard title="จำนวนครั้งที่ถูกจับ" desc="การกระจายตามจำนวนครั้งที่ถูกจับ" {...yearCtl}><VBar data={agg.arrestBuckets} palette="red" /></ChartCard>
+        <ChartCard title="ชนิดยาตอนถูกจับ" desc="ชนิดยาเสพติดที่พบขณะถูกจับ" {...yearCtl}>
+          {agg.arrestDrugs.length ? <HBar data={agg.arrestDrugs} palette="rose" /> : <Empty />}
+        </ChartCard>
+        <ChartCard title="ข้อหา" desc="ข้อหาที่ถูกดำเนินคดี" {...yearCtl}>
+          {agg.charges.length ? <HBar data={agg.charges} palette="fuchsia" /> : <Empty />}
+        </ChartCard>
+      </div>
+    </section>
+  )
+}
+
+function DealersSection({ agg, yearCtl, mapKey, districtLayerKey, districtLayerStyle, districtLayerOnEachFeature, search, setSearch, sortDesc, setSortDesc, filteredTable }) {
+  return (
+    <section>
+      <SectionHeader title="แหล่งซื้อยา รายเขต" desc="การกระจายตัวของแหล่งซื้อยาจำแนกตามเขต" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* map */}
+        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden
+          hover:shadow-md transition">
+          <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <MapPin size={16} className="text-violet-700 shrink-0" />
+              <h3 className="text-sm font-semibold text-slate-900 truncate">แผนที่กรุงเทพมหานคร · เขตที่เข้มกว่า = มีแหล่งซื้อมากกว่า</h3>
+            </div>
+            <YearSelect {...yearCtl} />
+          </div>
+          <div className="relative h-[700px]">
+            <IncidentMap
+              key={mapKey}
+              className="w-full h-full"
+              points={[]}
+              viewMode="point"
+              getColor={() => '#6d28d9'}
+              districtLayerKey={districtLayerKey}
+              districtLayerStyle={districtLayerStyle}
+              districtLayerOnEachFeature={districtLayerOnEachFeature}
+            />
+            {/* legend */}
+            <div className="absolute bottom-4 left-4 z-[1000] bg-white/95 border border-slate-200 rounded-lg p-3 shadow-sm pointer-events-none">
+              <div className="text-xs text-slate-500 mb-1.5">จำนวนแหล่งซื้อต่อเขต</div>
+              <div className="h-2.5 w-40 rounded-full" style={{ background: 'linear-gradient(to right, rgba(109,40,217,0.10), rgba(109,40,217,0.85))' }} />
+              <div className="flex justify-between text-xs text-slate-400 mt-1 tabular-nums">
+                <span>0</span><span>{agg.districtMax}</span>
               </div>
             </div>
-            <div className="overflow-y-auto max-h-[440px]">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-800 text-white text-xs sticky top-0">
-                  <tr>
-                    <th className="text-left px-4 py-2.5 font-bold">เขต</th>
-                    <th onClick={() => setSortDesc(s => !s)}
-                      className="text-right px-4 py-2.5 font-bold cursor-pointer select-none whitespace-nowrap">
-                      จำนวน {sortDesc ? '▼' : '▲'}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTable.map((d, i) => (
-                    <tr key={d.name} className={`border-t border-slate-100 ${i % 2 ? 'bg-slate-50/50' : ''} hover:bg-blue-50/40`}>
-                      <td className="px-4 py-2 text-slate-700">{d.name}</td>
-                      <td className="px-4 py-2 text-right font-semibold text-blue-700 tabular-nums">{d.count.toLocaleString()}</td>
-                    </tr>
-                  ))}
-                  {filteredTable.length === 0 && (
-                    <tr><td colSpan={2} className="px-4 py-6 text-center text-slate-400 text-sm">ไม่พบเขต</td></tr>
-                  )}
-                </tbody>
-              </table>
+          </div>
+          <FooterPill />
+        </div>
+
+        {/* table */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col
+          hover:shadow-md transition">
+          <div className="px-6 py-4 border-b border-slate-200">
+            <h3 className="text-sm font-semibold text-slate-900 mb-3">เขต × จำนวนราย</h3>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหาเขต..."
+                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 outline-none transition" />
             </div>
           </div>
+          <div className="overflow-y-auto max-h-[620px]">
+            <table className="w-full">
+              <thead className="bg-slate-50 sticky top-0">
+                <tr className="border-b border-slate-200">
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-slate-700 uppercase tracking-wider">เขต</th>
+                  <th onClick={() => setSortDesc(s => !s)}
+                    className="text-right px-6 py-4 text-xs font-semibold text-slate-700 uppercase tracking-wider cursor-pointer select-none whitespace-nowrap hover:text-violet-700 transition">
+                    จำนวน {sortDesc ? '▼' : '▲'}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTable.map((d, i) => (
+                  <tr key={d.name} className={`border-b border-slate-100 last:border-0 ${i % 2 ? 'bg-slate-50/50' : 'bg-white'} hover:bg-violet-50 hover:text-violet-900 transition-colors`}>
+                    <td className="px-6 py-3 text-sm text-slate-700">{d.name}</td>
+                    <td className="px-6 py-3 text-sm text-right font-medium text-slate-900 tabular-nums">{d.count.toLocaleString()}</td>
+                  </tr>
+                ))}
+                {filteredTable.length === 0 && (
+                  <tr><td colSpan={2} className="px-6 py-8 text-center text-slate-400 text-sm">ไม่พบเขต</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </section>
-    </div>
-  )
-}
-
-// ─── local helpers (reuse patterns จากหน้าเดิม) ───────────────────────────────
-
-function SectionHeader({ title, period }) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2">
-        <div className="w-1 h-5 bg-blue-600 rounded-full" />
-        <h2 className="text-xl font-semibold text-slate-800">{title}</h2>
       </div>
-      <PeriodBadge period={period} />
+    </section>
+  )
+}
+
+// ─── helpers — executive / formal ─────────────────────────────────────────────
+
+function SectionHeader({ title, desc }) {
+  return (
+    <div className="border-b border-slate-200 pb-4 mb-8">
+      <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{title}</h2>
+      {desc && <p className="text-sm text-slate-500 max-w-2xl mt-1 leading-relaxed">{desc}</p>}
     </div>
   )
 }
 
-function ChartCard({ title, children }) {
+// dropdown ปีงบประมาณ — sync ทุก card ผ่าน state เดียวที่ระดับ page
+function YearSelect({ years, selectedYear, onYearChange }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-5">
-      <h3 className="text-sm font-semibold text-slate-700 mb-3">{title}</h3>
-      {children}
+    <div className="flex items-center shrink-0">
+      <label className="text-xs text-slate-500 mr-2 whitespace-nowrap">ปีงบประมาณ:</label>
+      <select
+        value={selectedYear}
+        onChange={e => onYearChange(e.target.value)}
+        className="border border-slate-300 rounded-md px-3 py-1.5 text-sm bg-white text-slate-700
+          focus:border-violet-500 focus:ring-2 focus:ring-violet-100 outline-none"
+      >
+        <option value="all">รวมทุกปีงบ</option>
+        {years.map(y => <option key={y} value={String(y)}>{y}</option>)}
+      </select>
+    </div>
+  )
+}
+
+// pill ช่วงข้อมูล — กึ่งกลางใต้ chart (hardcode ช่วงเดียวกันทุกการ์ด)
+function FooterPill() {
+  return (
+    <div className="flex justify-center mt-4">
+      <span className="inline-flex items-center gap-2 px-4 py-1.5 bg-white border border-slate-300 rounded-full text-sm text-slate-700 font-medium">
+        {FOOTER_PERIOD}
+      </span>
+    </div>
+  )
+}
+
+function ChartCard({ title, desc, years, selectedYear, onYearChange, children }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition p-6">
+      <div className="flex justify-between items-start gap-4">
+        <div>
+          <h3 className="text-lg font-bold text-slate-900">{title}</h3>
+          {desc && <p className="text-sm text-slate-500 mt-1">{desc}</p>}
+        </div>
+        <YearSelect years={years} selectedYear={selectedYear} onYearChange={onYearChange} />
+      </div>
+      <div className="mt-6">{children}</div>
+      <FooterPill />
     </div>
   )
 }
 
 function Empty() {
-  return <div className="h-[260px] flex items-center justify-center text-slate-400 text-sm">ไม่มีข้อมูล</div>
+  return <div className="h-[320px] flex items-center justify-center text-slate-400 text-sm">ไม่มีข้อมูล</div>
 }
 
-// vertical bar (categorical)
-function VBar({ data, color, height = 260 }) {
+const TOOLTIP_STYLE = {
+  background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8,
+  padding: '10px 14px', boxShadow: '0 10px 30px -10px rgba(76, 29, 149, 0.2)', fontSize: 13, color: '#1e293b',
+}
+const TOOLTIP_CURSOR = { fill: 'rgba(139, 92, 246, 0.08)' }
+
+// Top-3 pattern: #1 = top1, #2-3 = top23, ที่เหลือ = rest
+function getTop3Color(value, allValues, palette) {
+  const sorted = [...allValues].sort((a, b) => b - a)
+  const rank = sorted.indexOf(value)
+  if (rank === 0) return palette.top1
+  if (rank <= 2) return palette.top23
+  return palette.rest
+}
+
+// vertical bar — Top-3 shade ตาม palette, rainbow=true เพื่อหมุน CHART_COLORS ตาม index
+function VBar({ data, height = 380, rainbow = false, palette = 'violet' }) {
+  const values = data.map(x => x.value)
+  const pal = TOP3_PALETTES[palette] || TOP3_PALETTES.violet
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 16, right: 10, left: 0, bottom: 10 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-        <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} angle={data.length > 5 ? -20 : 0} textAnchor={data.length > 5 ? 'end' : 'middle'} height={data.length > 5 ? 50 : 30} />
-        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
-        <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
-        <Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} name="จำนวน">
-          <LabelList dataKey="value" position="top" style={{ fontSize: 11, fontWeight: 700, fill: '#334155' }} />
+      <BarChart data={data} margin={{ top: 24, right: 16, left: 0, bottom: 10 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+        <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={{ stroke: '#cbd5e1' }} tickLine={false} tickMargin={8}
+          interval={0} angle={data.length > 5 ? -20 : 0} textAnchor={data.length > 5 ? 'end' : 'middle'} height={data.length > 5 ? 50 : 30} />
+        <YAxis tick={{ fontSize: 12, fill: '#64748b' }} axisLine={{ stroke: '#cbd5e1' }} tickLine={false} tickMargin={8} allowDecimals={false} />
+        <Tooltip contentStyle={TOOLTIP_STYLE} cursor={TOOLTIP_CURSOR} />
+        <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={56} name="จำนวน">
+          {data.map((d, i) => <Cell key={i} fill={rainbow ? CHART_COLORS[i % CHART_COLORS.length] : getTop3Color(d.value, values, pal)} />)}
+          <LabelList dataKey="value" position="top" style={{ fontSize: 13, fontWeight: 700, fill: '#0f172a' }} />
         </Bar>
       </BarChart>
     </ResponsiveContainer>
   )
 }
 
-// horizontal bar (long labels)
-function HBar({ data, color, height = 260, unit = '' }) {
+// horizontal bar — Top-3 shade ตาม palette, rainbow=true เพื่อหมุน CHART_COLORS ตาม index
+function HBar({ data, height = 380, unit = '', rainbow = false, palette = 'violet' }) {
+  const values = data.map(x => x.value)
+  const pal = TOP3_PALETTES[palette] || TOP3_PALETTES.violet
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 48, left: 8, bottom: 4 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-        <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
-        <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#475569' }} width={130}
-          tickFormatter={v => (v.length > 18 ? v.slice(0, 17) + '…' : v)} />
-        <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
-          formatter={v => [`${v.toLocaleString()}${unit}`, 'จำนวน']} />
-        <Bar dataKey="value" fill={color} radius={[0, 5, 5, 0]} name="จำนวน">
-          <LabelList dataKey="value" position="right" style={{ fontSize: 10, fontWeight: 600, fill: '#475569' }}
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 64, left: 8, bottom: 4 }}>
+        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+        <XAxis type="number" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={{ stroke: '#cbd5e1' }} tickLine={false} tickMargin={8} allowDecimals={false} />
+        <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: '#475569' }} axisLine={{ stroke: '#cbd5e1' }} tickLine={false} tickMargin={8}
+          width={160} tickFormatter={v => (v.length > 22 ? v.slice(0, 21) + '…' : v)} />
+        <Tooltip contentStyle={TOOLTIP_STYLE} cursor={TOOLTIP_CURSOR} formatter={v => [`${v.toLocaleString()}${unit}`, 'จำนวน']} />
+        <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={56} name="จำนวน">
+          {data.map((d, i) => <Cell key={i} fill={rainbow ? CHART_COLORS[i % CHART_COLORS.length] : getTop3Color(d.value, values, pal)} />)}
+          <LabelList dataKey="value" position="right" style={{ fontSize: 13, fontWeight: 700, fill: '#0f172a' }}
             formatter={v => `${v.toLocaleString()}${unit}`} />
         </Bar>
       </BarChart>
@@ -400,50 +689,15 @@ function HBar({ data, color, height = 260, unit = '' }) {
   )
 }
 
-function DonutPie({ data, height = 260 }) {
-  const total = data.reduce((s, d) => s + d.value, 0)
+// KpiCard — vivid gradient + ตัวเลขขาวใหญ่ + icon โปร่งหลังการ์ด
+function KpiCard({ icon, label, value, sub, gradient }) {
   return (
-    <div className="relative">
-      <ResponsiveContainer width="100%" height={height}>
-        <PieChart>
-          <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={58} outerRadius={92} paddingAngle={2}>
-            {data.map((d, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-          </Pie>
-          <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
-        </PieChart>
-      </ResponsiveContainer>
-      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" style={{ bottom: 0 }}>
-        <div className="text-2xl font-bold text-slate-800 tabular-nums leading-none">{total.toLocaleString()}</div>
-        <div className="text-xs text-slate-500 mt-0.5">รวม</div>
-      </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 justify-center mt-2">
-        {data.map((d, i) => (
-          <div key={d.name} className="flex items-center gap-1.5 text-xs text-slate-600">
-            <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-            <span className="truncate max-w-[110px]">{d.name}</span>
-            <span className="text-slate-400">{d.value}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// KpiCard — pattern เดียวกับ /bkn (tone dark) แต่ replicate ในไฟล์นี้ (ของ /bkn ไม่ export, ห้ามแตะหน้านั้น)
-function KpiCard({ icon, label, value, sub, bg, foot, source }) {
-  return (
-    <div className={`rounded-2xl text-white overflow-hidden shadow-sm bg-gradient-to-br ${bg}`}>
-      <div className="relative px-5 pt-5 pb-3 min-h-[118px]">
-        <div className="absolute right-3 top-3 opacity-15 pointer-events-none" style={{ transform: 'scale(3.2)', transformOrigin: 'top right' }}>
-          {icon}
-        </div>
-        <div className="relative z-10">
-          <div className="text-4xl font-extrabold leading-tight mb-1.5 tabular-nums">{value}</div>
-          <div className="text-sm font-semibold opacity-95 leading-none">{label}</div>
-          <div className="text-xs opacity-65 mt-1">{sub}</div>
-        </div>
-      </div>
-      <div className="px-5 py-1.5 text-xs font-medium opacity-60" style={{ background: foot }}>{source}</div>
+    <div className={`relative overflow-hidden rounded-2xl p-6 shadow-lg ${gradient}
+      hover:shadow-xl hover:scale-[1.02] transition`}>
+      <div className="absolute right-4 top-4 text-white/30 pointer-events-none">{icon}</div>
+      <div className="text-sm text-white/90 font-medium">{label}</div>
+      <div className="text-4xl font-bold text-white tabular-nums mt-3 leading-none">{value}</div>
+      <div className="text-xs text-white/70 mt-2">{sub}</div>
     </div>
   )
 }

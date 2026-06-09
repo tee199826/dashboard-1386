@@ -47,7 +47,7 @@ function genBatchId() {
 
 function computePreview(raw, type, fileName) {
   const mapped = type === 'substance_users'
-    ? raw.map(flattenSubstanceUserRow)
+    ? raw.map(r => flattenSubstanceUserRow(r, fileName))
     : mapColumns(raw, type)
   const b      = buildBatch(mapped, fileName, type)
   const v      = validateRows(b.rows, type)
