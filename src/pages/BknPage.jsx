@@ -227,7 +227,7 @@ export default function BknPage() {
   return (
     <>
     {isPresentation && <PresentationBar title="รายงานความรวดเร็วการดำเนินการ บก.น." />}
-    <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto'}>
+    <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-8'}>
 
       {/* ── OFFICIAL BANNER ── */}
       {!isPresentation && <div className="rounded-2xl overflow-hidden shadow-md" style={{ background: 'linear-gradient(135deg,#1e3a5f 0%,#1d4ed8 100%)' }}>

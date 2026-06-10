@@ -12,7 +12,7 @@ import PresentationSlides from '../components/PresentationSlides'
 import { thaiDateRange } from '../utils/formatDate'
 import PeriodBadge from '../components/PeriodBadge'
 import UploadRptModal from '../components/UploadRptModal'
-import { BigCard, SourceCard } from '../components/OperationsCards'
+import { BigCard, SourceCard, KpiToggleCard } from '../components/OperationsCards'
 import OperationsSourceModal from '../components/OperationsSourceModal'
 import { THAI_MONTHS } from '../utils/constants'
 
@@ -71,6 +71,7 @@ export default function Operations() {
   const [filterMonth, setFilterMonth] = useState('all')
   const [showUpload, setShowUpload] = useState(false)
   const [showSourceInfo, setShowSourceInfo] = useState(false)
+  const [kpiExpanded, setKpiExpanded] = useState(false)   // KPI strip: 5 ใบหลัก + expand อีก 2
   const [toast, setToast] = useState(null)
   const showToast = (message, type = 'success') => setToast({ message, type })
   const [activeDonutIndex, setActiveDonutIndex] = useState(null)
@@ -333,16 +334,42 @@ export default function Operations() {
           )}
         </div>
 
-        {/* 5 KPI cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
-          <BigCard icon={<AlertCircle />}   label="เรื่องร้องเรียนทั้งหมด" value={totalCases}    sub="ตามรายงาน ป.ป.ส."                color="blue"    />
-          <BigCard icon={<CheckCircle2 />}  label="ดำเนินการแล้ว"          value={completed}     pct={percent(completed, totalCases)}    sub="จากเรื่องทั้งหมด"             color="emerald" />
-          <BigCard icon={<SearchIcon />}    label="พบพฤติการณ์"             value={found}         pct={percent(found, verifTotal)}        sub="จากผลตรวจสอบ"                  color="rose"    />
-          <BigCard icon={<XCircle />}       label="ไม่พบพฤติการณ์"          value={notFound}      pct={percent(notFound, verifTotal)}     sub="ไม่พบบุคคล/สถานที่"           color="slate"   />
-          <BigCard icon={<FileQuestion />}  label="ไม่พบตัวในพื้นที่"       value={notInArea}     pct={percent(notInArea, verifTotal)}    sub="ออกพื้นที่ตรวจไม่พบ"          color="amber"   />
-          <BigCard icon={<SearchIcon />}    label="อยู่ระหว่างสืบสวน"       value={investigating} pct={percent(investigating, verifTotal)} sub="ยังไม่ปิดเรื่อง"               color="blue"    />
-          <BigCard icon={<AlertCircle />}   label="เสียชีวิต"               value={deceased}      pct={percent(deceased, verifTotal)}     sub="ก่อนตรวจสอบเสร็จ"             color="slate"   />
-        </div>
+        {/* KPI cards — 5 ใบหลัก + ปุ่ม expand (อีก 2 ใบ slide เข้ามา) */}
+        {(() => {
+          const PRIMARY = [
+            <BigCard icon={<AlertCircle />}   label="เรื่องร้องเรียนทั้งหมด" value={totalCases}    sub="ตามรายงาน ป.ป.ส."                color="blue"    />,
+            <BigCard icon={<CheckCircle2 />}  label="ดำเนินการแล้ว"          value={completed}     pct={percent(completed, totalCases)}    sub="จากเรื่องทั้งหมด"             color="emerald" />,
+            <BigCard icon={<SearchIcon />}    label="พบพฤติการณ์"             value={found}         pct={percent(found, verifTotal)}        sub="จากผลตรวจสอบ"                  color="rose"    />,
+            <BigCard icon={<XCircle />}       label="ไม่พบพฤติการณ์"          value={notFound}      pct={percent(notFound, verifTotal)}     sub="ไม่พบบุคคล/สถานที่"           color="slate"   />,
+            <BigCard icon={<FileQuestion />}  label="ไม่พบตัวในพื้นที่"       value={notInArea}     pct={percent(notInArea, verifTotal)}    sub="ออกพื้นที่ตรวจไม่พบ"          color="amber"   />,
+          ]
+          const SECONDARY = [
+            <BigCard icon={<SearchIcon />}    label="อยู่ระหว่างสืบสวน"       value={investigating} pct={percent(investigating, verifTotal)} sub="ยังไม่ปิดเรื่อง"               color="blue"    />,
+            <BigCard icon={<AlertCircle />}   label="เสียชีวิต"               value={deceased}      pct={percent(deceased, verifTotal)}     sub="ก่อนตรวจสอบเสร็จ"             color="slate"   />,
+          ]
+          const cellBase = 'flex transition-all duration-300 ease-out'
+          const cellVisible = 'p-2 basis-1/2 md:basis-1/3 lg:flex-1 lg:basis-0 min-w-[140px]'
+          const cellHidden = 'p-0 basis-0 w-0 min-w-0 opacity-0 scale-95 pointer-events-none'
+          return (
+            <div className="flex flex-wrap -m-2">
+              {PRIMARY.map((card, i) => (
+                <div key={`p${i}`} className={`${cellBase} ${cellVisible}`}>{card}</div>
+              ))}
+              {SECONDARY.map((card, i) => (
+                <div key={`s${i}`}
+                  style={{ transitionDelay: kpiExpanded ? `${i * 80}ms` : '0ms' }}
+                  className={`${cellBase} overflow-hidden ${
+                    kpiExpanded ? `${cellVisible} opacity-100 scale-100` : cellHidden
+                  }`}>
+                  {card}
+                </div>
+              ))}
+              <div className={`${cellBase} ${cellVisible}`}>
+                <KpiToggleCard expanded={kpiExpanded} onToggle={() => setKpiExpanded(e => !e)} hiddenCount={SECONDARY.length} />
+              </div>
+            </div>
+          )
+        })()}
       </div>{/* end slide 1 */}
 
       {/* ── Slide 2: Charts ── */}

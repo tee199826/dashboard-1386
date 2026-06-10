@@ -37,8 +37,7 @@ const TOP3_PALETTES = {
   rose:    { top1: '#be123c', top23: '#f43f5e', rest: '#fda4af' },
   fuchsia: { top1: '#a21caf', top23: '#d946ef', rest: '#f5d0fe' },
 }
-const FOOTER_PERIOD = 'ข้อมูลช่วง 01 ต.ค.2568 - 30 เม.ย.2569'
-const FIELDS = 'fiscal_year,age,occupation,income_range,arrest_count,rehab_count,first_use_age,first_drug,first_reason,arrests,rehabs,regular_drugs,dealer_locations'
+const FIELDS = 'fiscal_year,surveyed_at,age,occupation,income_range,arrest_count,rehab_count,first_use_age,first_drug,first_reason,arrests,rehabs,regular_drugs,dealer_locations'
 
 const INCOME_ORDER = ['ไม่มีรายได้', 'ต่ำกว่า 10,000', '10,000-15,000', '15,001-20,000', '20,001-25,000', '25,001-30,000', 'มากกว่า 30,000']
 const incomeRank = v => { const i = INCOME_ORDER.findIndex(o => String(v || '').includes(o)); return i === -1 ? 99 : i }
@@ -73,6 +72,11 @@ const fmtThaiDate = iso => {
   const d = new Date(iso)
   return `${d.getDate()} ${TH_MONTH[d.getMonth() + 1]} ${d.getFullYear() + 543}`
 }
+// "YYYY-MM-DD" → "1 ต.ค. 2568" (พ.ศ.)
+const fmtPeriod = iso => {
+  const [y, m, d] = iso.split('-')
+  return `${parseInt(d)} ${TH_MONTH[parseInt(m)]} ${parseInt(y) + 543}`
+}
 
 export default function SubstanceUsers() {
   const [rows, setRows] = useState([])
@@ -92,7 +96,17 @@ export default function SubstanceUsers() {
     () => (selectedYear === 'all' ? rows : rows.filter(r => r.fiscal_year === parseInt(selectedYear))),
     [rows, selectedYear],
   )
-  const yearCtl = { years, selectedYear, onYearChange: setSelectedYear }
+
+  // ── ช่วงวันที่สำรวจจริง (footer pill) — min/max ของ surveyed_at ──
+  const periodLabel = useMemo(() => {
+    const dates = filteredRows.map(r => r.surveyed_at).filter(Boolean).sort()
+    if (!dates.length) return 'ไม่มีข้อมูลวันที่'
+    const min = dates[0]
+    const max = dates[dates.length - 1]
+    return min === max ? fmtPeriod(min) : `${fmtPeriod(min)} - ${fmtPeriod(max)}`
+  }, [filteredRows])
+
+  const yearCtl = { years, selectedYear, onYearChange: setSelectedYear, periodLabel }
 
   // ── tab navigation state ──
   const [activeTab, setActiveTab] = useState(hashTab)
@@ -527,7 +541,7 @@ function DealersSection({ agg, yearCtl, mapKey, districtLayerKey, districtLayerS
               </div>
             </div>
           </div>
-          <FooterPill />
+          <FooterPill periodLabel={yearCtl.periodLabel} />
         </div>
 
         {/* table */}
@@ -600,18 +614,18 @@ function YearSelect({ years, selectedYear, onYearChange }) {
   )
 }
 
-// pill ช่วงข้อมูล — กึ่งกลางใต้ chart (hardcode ช่วงเดียวกันทุกการ์ด)
-function FooterPill() {
+// pill ช่วงข้อมูล — กึ่งกลางใต้ chart (คำนวณจาก surveyed_at จริง)
+function FooterPill({ periodLabel }) {
   return (
     <div className="flex justify-center mt-4">
       <span className="inline-flex items-center gap-2 px-4 py-1.5 bg-white border border-slate-300 rounded-full text-sm text-slate-700 font-medium">
-        {FOOTER_PERIOD}
+        ข้อมูลช่วง {periodLabel}
       </span>
     </div>
   )
 }
 
-function ChartCard({ title, desc, years, selectedYear, onYearChange, children }) {
+function ChartCard({ title, desc, years, selectedYear, onYearChange, periodLabel, children }) {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition p-6">
       <div className="flex justify-between items-start gap-4">
@@ -622,7 +636,7 @@ function ChartCard({ title, desc, years, selectedYear, onYearChange, children })
         <YearSelect years={years} selectedYear={selectedYear} onYearChange={onYearChange} />
       </div>
       <div className="mt-6">{children}</div>
-      <FooterPill />
+      <FooterPill periodLabel={periodLabel} />
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import React from 'react'
+import { Plus, X } from 'lucide-react'
 import PeriodBadge from './PeriodBadge'
 
 export function BigCard({ icon, label, value, pct, sub, color, period }) {
@@ -11,7 +12,7 @@ export function BigCard({ icon, label, value, pct, sub, color, period }) {
   }
   const c = configs[color] || configs.blue
   return (
-    <div className={`bg-gradient-to-br ${c.gradient} text-white rounded-2xl p-5 shadow-md hover:shadow-lg hover:opacity-95 transition-all duration-200 relative overflow-hidden`}>
+    <div className={`w-full h-full bg-gradient-to-br ${c.gradient} text-white rounded-2xl p-5 shadow-md hover:shadow-lg hover:opacity-95 transition-all duration-200 relative overflow-hidden`}>
       <div className="absolute -right-4 -bottom-4 opacity-[0.07] pointer-events-none select-none">
         {React.cloneElement(icon, { size: 88 })}
       </div>
@@ -24,6 +25,25 @@ export function BigCard({ icon, label, value, pct, sub, color, period }) {
       {sub && <div className="text-xs text-white/55 mt-1 leading-tight">{sub}</div>}
       {period && <div className="mt-1.5 relative z-10"><PeriodBadge period={period} tone="dark" /></div>}
     </div>
+  )
+}
+
+// ปุ่ม expand/collapse ขนาดเท่า BigCard — collapsed = slate dashed (+), expanded = rose dashed (×)
+export function KpiToggleCard({ expanded, onToggle, hiddenCount }) {
+  return (
+    <button
+      onClick={onToggle}
+      aria-expanded={expanded}
+      className={`w-full h-full min-h-[120px] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer transition ${
+        expanded
+          ? 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
+          : 'bg-slate-100 border-slate-300 text-slate-600 hover:bg-slate-200 hover:border-slate-400 hover:text-slate-800'
+      }`}
+    >
+      {expanded ? <X size={32} /> : <Plus size={32} />}
+      <span className="text-sm font-medium">{expanded ? 'ปิด' : 'ดูเพิ่มเติม'}</span>
+      {!expanded && <span className="text-xs text-slate-500">+{hiddenCount} รายการ</span>}
+    </button>
   )
 }
 

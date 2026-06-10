@@ -63,12 +63,14 @@ const COMPLAINTS_COLUMNS = new Set([
 const SUBSTANCE_USERS_COLUMNS = new Set([
   'record_no', 'district', 'subdistrict', 'occupation', 'income_range',
   'arrest_count', 'rehab_count', 'first_use_age', 'first_drug', 'first_reason',
+  'surveyed_at',
 ])
 // header ไทย (จาก Google Form export) → DB column หรือ __helper (สำหรับประกอบ jsonb)
 // ⚠️ key ต้องตรงเป๊ะกับ header ในไฟล์ (รวมช่องว่าง/วงเล็บ) — flatten ใช้ exact match ไม่ trim
 // column นอก map (~121 ตัว รวม PII) ถูก drop เงียบๆ (flatten อ่านเฉพาะ key ใน map)
 const SUBSTANCE_USERS_MAP = {
   // ── พื้นฐาน ──
+  'ประทับเวลา':                'surveyed_at',
   'อายุ (ปี)':                 'age',
   'อาชีพ':                     'occupation',
   'รายได้ต่อเดือน (บาท)':       'income_range',
@@ -174,6 +176,41 @@ function parseDate(value) {
   if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
 
   return null
+}
+
+// Helper: Google Form timestamp "ประทับเวลา" → ISO "YYYY-MM-DD" (ปี ค.ศ. ไม่ใช่ พ.ศ.)
+//   รองรับ Date object / ISO string / "D/M/YYYY [HH:MM:SS]" ; guard ปี ±5 จากปัจจุบัน
+function parseTimestamp(v) {
+  if (v == null || v === '') return null
+
+  // Case 1: Date object (Excel datetime)
+  if (v instanceof Date && !isNaN(v)) {
+    return v.toISOString().slice(0, 10)
+  }
+
+  // Case 2: ISO string
+  if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) {
+    const d = new Date(v)
+    if (!isNaN(d)) return d.toISOString().slice(0, 10)
+  }
+
+  // Case 3: D/M/YYYY [time] (Thai Google Form locale = D/M)
+  const s = String(v).trim()
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  if (!m) return null
+
+  const [, a, b, y] = m
+  const year = parseInt(y)
+
+  // guard: ปีต้องอยู่ในช่วงสมเหตุสมผล (กัน พ.ศ. หรือค่าเพี้ยน)
+  const currentYear = new Date().getFullYear()
+  if (year < currentYear - 5 || year > currentYear + 5) return null
+
+  const day = parseInt(a)
+  const month = parseInt(b)
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
 // Helper: ค่าว่าง / '-' / 'null' → null
@@ -406,6 +443,7 @@ export function flattenSubstanceUserRow(row, fileName) {
 
   return {
     fiscal_year,
+    surveyed_at:   parseTimestamp(m['surveyed_at']),
     age:           nv('age'),
     occupation:    sv('occupation'),
     income_range:  sv('income_range'),
