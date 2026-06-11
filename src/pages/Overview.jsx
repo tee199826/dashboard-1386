@@ -20,6 +20,14 @@ import { BEHAVIOR_COLORS, BKK_GROUPS, DNAME_TO_GROUP } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
 import { thaiDateRange } from '../utils/formatDate'
 import PeriodBadge from '../components/PeriodBadge'
+import UnifiedHero from '../components/UnifiedHero'
+import { formatThaiDate, formatPeriod, minMaxDate, getLastUploadDate } from '../utils/heroMeta'
+
+const OVERVIEW_SOURCE_INFO = {
+  title: 'แหล่งข้อมูล · ภาพรวม',
+  description: 'ดึงข้อมูลจาก 5 ตารางมาแสดง KPI และ chart รวม',
+  sources: ['complaints', 'drug_incidents', 'bkn_summary', 'report_114', 'substance_users'],
+}
 
 const OverviewMiniMap = lazy(() => import('../components/OverviewMiniMap'))
 
@@ -56,7 +64,10 @@ export default function Overview() {
   const [channelMonth, setChannelMonth] = useState('all')
   const [selectedDistricts, setSelectedDistricts] = useState([])
   const [showSourceInfo, setShowSourceInfo] = useState(false)
+  const [lastUpload, setLastUpload] = useState(null)
   const [activeBehaviorIndex, setActiveBehaviorIndex] = useState(null)
+
+  useEffect(() => { getLastUploadDate(supabase).then(setLastUpload).catch(() => {}) }, [])
   const [activeChannelIndex, setActiveChannelIndex] = useState(null)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
 
@@ -184,6 +195,7 @@ export default function Overview() {
 
   // ── existing computed values ───────────────────────────────────────────────
   const data = records ?? []
+  const heroPeriod = useMemo(() => { const { min, max } = minMaxDate(data, 'date'); return formatPeriod(min, max) }, [data])
   const years = useMemo(() => stats.getYears(data), [data])
 
   const filteredRecords = data
@@ -391,30 +403,17 @@ export default function Overview() {
 
       {/* ── Page Header ─────────────────────────────────────────────────────── */}
       {!isPresentation && (
-      <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-blue-800 rounded-2xl px-6 py-5 text-white shadow-lg overflow-hidden relative mb-6">
-        <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, white 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
-        <div className="relative flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-widest text-blue-300 mb-1">สถิติยาเสพติด · กรุงเทพมหานคร</div>
-            <h1 className="text-3xl font-bold leading-tight">ภาพรวม</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowSourceInfo(true)}
-              className="px-4 py-2.5 bg-white/15 hover:bg-white/25 border border-white/20 rounded-xl text-xs font-bold text-white flex items-center gap-1.5 transition">
-              <Info size={13} /> แหล่งข้อมูล
-            </button>
-            <button
-              onClick={reload}
-              disabled={isLoading}
-              title="โหลดข้อมูลใหม่จากฐานข้อมูล"
-              className="p-2.5 bg-white/15 hover:bg-white/25 border border-white/20 rounded-xl text-white transition disabled:opacity-40">
-              <RefreshCw size={15} className={isLoading ? 'animate-spin' : ''} />
-            </button>
-            <PresentationEnterButton />
-          </div>
-        </div>
-      </div>
+        <UnifiedHero
+          gradient="blue"
+          eyebrow="OVERVIEW · DASHBOARD"
+          title="ภาพรวม"
+          description="สรุปข้อมูลจากทุกแหล่ง"
+          period={heroPeriod}
+          lastUpload={formatThaiDate(lastUpload)}
+          sourceInfo={OVERVIEW_SOURCE_INFO}
+          onRefresh={reload}
+          refreshing={isLoading}
+        />
       )}
 
       <PresentationSlides isPresentation={isPresentation} normalClassName="max-w-[1600px] mx-auto space-y-8">

@@ -19,6 +19,14 @@ import PresentationBar, { PresentationEnterButton } from '../components/Presenta
 import PresentationSlides from '../components/PresentationSlides'
 import BknSummarySection from '../components/BknSummarySection'
 import BknDrugStats from '../components/BknDrugStats'
+import UnifiedHero from '../components/UnifiedHero'
+import { formatThaiDate as fmtHeroDate } from '../utils/heroMeta'
+
+const BKN_SOURCE_INFO = {
+  title: 'แหล่งข้อมูล · รายงาน บก.น.',
+  description: 'สถิติคดียาเสพติด รายงาน บก.น. 1-9',
+  sources: ['bkn_summary (RPT_115_B)'],
+}
 
 const DRUG_PALETTE = {
   'ยาบ้า': '#EF4444', 'ไอซ์': '#0EA5E9', 'กัญชา': '#22C55E',
@@ -230,33 +238,17 @@ export default function BknPage() {
     <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-8'}>
 
       {/* ── OFFICIAL BANNER ── */}
-      {!isPresentation && <div className="rounded-2xl overflow-hidden shadow-md" style={{ background: 'linear-gradient(135deg,#1e3a5f 0%,#1d4ed8 100%)' }}>
-        <div className="px-6 py-5 flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <p className="text-xs font-bold text-blue-300 uppercase tracking-widest mb-3">
-              กองบัญชาการตำรวจนครบาล · รายงานทางการ
-            </p>
-            <h1 className="text-2xl lg:text-3xl font-extrabold text-white leading-snug">
-              รายงานความรวดเร็วการดำเนินการ กลุ่ม 1–5 จำแนกตาม บก.น.
-            </h1>
-            <p className="text-sm text-blue-200 mt-1.5 flex items-center gap-2">
-              <span>{bannerPeriod ? `ข้อมูลช่วง ${bannerPeriod}` : 'ยังไม่มีข้อมูล'}</span>
-              <span className="opacity-40">·</span>
-              <span>รายงาน 115_B</span>
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="px-3 py-1.5 bg-white/10 border border-white/20 rounded-lg text-xs font-semibold text-blue-100">
-              บก.น. 1–9
-            </span>
-            <span className="px-3 py-1.5 rounded-lg text-xs font-bold text-white border border-blue-300/40"
-              style={{ background: 'rgba(59,130,246,0.25)' }}>
-              RPT 115_B
-            </span>
-          </div>
-        </div>
-        <div className="h-0.5 opacity-50" style={{ background: 'linear-gradient(90deg,#60a5fa,#22d3ee,#60a5fa)' }} />
-      </div>}
+      {!isPresentation && (
+        <UnifiedHero
+          gradient="slate"
+          eyebrow="POLICE COMMAND · บก.น. 1-9"
+          title="รายงาน บก.น."
+          description="ความรวดเร็วการดำเนินการ · RPT 115_B"
+          period={bannerPeriod}
+          lastUpload={fmtHeroDate(lastUpload115B)}
+          sourceInfo={BKN_SOURCE_INFO}
+        />
+      )}
 
       <PresentationSlides isPresentation={isPresentation} normalClassName="max-w-[1600px] mx-auto space-y-8">
 

@@ -121,6 +121,37 @@ export function getTopDistricts(records, n = 5) {
   return getDistricts(records).slice(0, n).map(d => ({ ...d, name: d.district }))
 }
 
+// เขต กทม. เท่านั้น (ชื่อขึ้นต้น "เขต") — ใช้ตัดอำเภอนอก กทม. ตอน aggregate
+export const isBangkokDistrict = (d) => typeof d === 'string' && d.startsWith('เขต')
+
+// รวม metric รายเขต กทม. จาก 3 source: complaints / drug_incidents / substance dealer mentions
+// ⚠️ filter ตอน aggregate เท่านั้น (raw data ไม่ถูกตัด) — sort ตาม complaints desc
+export function getDistrictMetrics(records = [], incidents = [], substanceRows = []) {
+  const map = {}
+  const ensure = (d) => (map[d] || (map[d] = { district: d, name: d, complaints: 0, completed: 0, incidents: 0, dealers: 0 }))
+
+  for (const r of records) {
+    const d = r[FIELD.DISTRICT]
+    if (!isBangkokDistrict(d)) continue
+    const m = ensure(d)
+    m.complaints++
+    if (r[FIELD.STATUS] === STATUS_DONE) m.completed++
+  }
+  for (const r of incidents) {
+    const d = r?.district
+    if (!isBangkokDistrict(d)) continue
+    ensure(d).incidents++
+  }
+  for (const r of substanceRows) {
+    for (const loc of (r?.dealer_locations || [])) {
+      const d = (loc?.district || '').trim()
+      if (!isBangkokDistrict(d)) continue
+      ensure(d).dealers++
+    }
+  }
+  return Object.values(map).sort((a, b) => b.complaints - a.complaints)
+}
+
 export function filterByYear(records, year) {
   if (year === 'all') return records
   return records.filter(r => {

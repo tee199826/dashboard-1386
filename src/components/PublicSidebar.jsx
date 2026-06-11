@@ -12,9 +12,9 @@ export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
   const publicMenus = [
     { to: '/', icon: <BarChart3 size={18} />, label: 'ภาพรวม' },
     { to: '/districts', icon: <MapPin size={18} />, label: 'รายเขต' },
+    { to: '/bkn', icon: <Shield size={18} />, label: 'สถิติ บก.น.' },
     { to: '/radar', icon: <Map size={18} />, label: 'แผนที่ยาเสพติด' },
     { to: '/operations', icon: <FileSpreadsheet size={18} />, label: 'ผลการดำเนินงาน' },
-    { to: '/bkn', icon: <Shield size={18} />, label: 'สถิติ บก.น.' },
     { to: '/substance-users', icon: <UserSearch size={18} />, label: 'ผลเก็บข้อมูลจากผู้เสพติด' },
   ]
 

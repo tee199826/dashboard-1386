@@ -15,6 +15,14 @@ import UploadRptModal from '../components/UploadRptModal'
 import { BigCard, SourceCard, KpiToggleCard } from '../components/OperationsCards'
 import OperationsSourceModal from '../components/OperationsSourceModal'
 import { THAI_MONTHS } from '../utils/constants'
+import UnifiedHero from '../components/UnifiedHero'
+import { formatThaiDate as fmtHeroDate, getLastUploadDate } from '../utils/heroMeta'
+
+const OPS_SOURCE_INFO = {
+  title: 'แหล่งข้อมูล · ผลการดำเนินงาน',
+  description: 'รายงาน 114 ผลการดำเนินการรายปีงบ',
+  sources: ['report_114'],
+}
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -66,6 +74,10 @@ export default function Operations() {
   const [rptError, setRptError] = useState(null)
   const [rptYear, setRptYear] = useState('all')   // ฝั่งขวา (RPT_114) – 'all' = ทุกปีสะสม
   const [rptAllYears, setRptAllYears] = useState([])
+  const [opsLastUpload, setOpsLastUpload] = useState(null)
+
+  useEffect(() => { getLastUploadDate(supabase, 'report_114').then(setOpsLastUpload).catch(() => {}) }, [])
+  const opsLatestFy = useMemo(() => (rptAllYears.length ? Math.max(...rptAllYears.map(Number)) : null), [rptAllYears])
 
   const [filterYear, setFilterYear] = useState('all')
   const [filterMonth, setFilterMonth] = useState('all')
@@ -245,38 +257,24 @@ export default function Operations() {
 
       {/* ── Page Header ── */}
       {!isPresentation && (
-      <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-blue-800 rounded-2xl px-6 pt-8 pb-10 text-white shadow-2xl overflow-hidden relative">
-        <div className="absolute inset-0 opacity-5 pointer-events-none"
-          style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, white 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
-        <div className="relative flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-widest text-blue-300 mb-3">
-              รายงานการดำเนินงาน · ป.ป.ส. กรุงเทพมหานคร
-            </div>
-            <h1 className="text-3xl lg:text-4xl font-extrabold leading-tight">
-              ผลการดำเนินงานจำแนกตามแหล่งข่าว
-            </h1>
-            <p className="text-sm text-blue-200 mt-3 flex items-center gap-2 flex-wrap">
-              สรุปผลการตรวจสอบเรื่องร้องเรียน ตามรายงาน RPT_114 ของ ป.ป.ส.
-              {rptData?.period && (
-                <span className="px-3 py-0.5 bg-white/15 rounded-full text-white text-xs font-bold border border-white/25">
-                  {rptData.period}
-                </span>
-              )}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {isAdmin && (
-              <button onClick={() => setShowUpload(true)}
-                className="px-5 py-2.5 bg-white text-blue-800 hover:bg-blue-50 rounded-xl font-bold flex items-center gap-2 transition shadow-lg flex-shrink-0 text-sm">
-                <Upload size={16} /> นำเข้า RPT_114
-              </button>
-            )}
-            <PresentationEnterButton />
-          </div>
+        <UnifiedHero
+          gradient="amber"
+          eyebrow="FY OPERATIONS · ผลปฏิบัติงาน"
+          title="ผลการดำเนินงาน"
+          description="สรุปรายงาน 114 · ปีงบประมาณ"
+          period={opsLatestFy ? `ปีงบประมาณ ${opsLatestFy}` : (rptData?.period || null)}
+          lastUpload={fmtHeroDate(opsLastUpload)}
+          sourceInfo={OPS_SOURCE_INFO}
+        />
+      )}
+      {/* admin upload (เดิมอยู่ใน hero — คงไว้เป็น action bar) */}
+      {!isPresentation && isAdmin && (
+        <div className="flex justify-end -mt-4">
+          <button onClick={() => setShowUpload(true)}
+            className="px-5 py-2.5 bg-white border border-slate-200 text-amber-800 hover:bg-amber-50 rounded-xl font-bold flex items-center gap-2 transition shadow-sm text-sm">
+            <Upload size={16} /> นำเข้า RPT_114
+          </button>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-400 via-sky-300 to-blue-600 opacity-75" />
-      </div>
       )}
 
       <PresentationSlides isPresentation={isPresentation} normalClassName="max-w-[1600px] mx-auto space-y-10">

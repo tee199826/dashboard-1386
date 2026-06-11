@@ -62,6 +62,17 @@ function SourceInfoModal({ info, onClose }) {
             <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{info.description}</p>
           )}
 
+          {info.sources?.length > 0 && (
+            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+              <h3 className="font-bold text-blue-900 mb-2 flex items-center gap-2"><span>🗄️</span> ตารางข้อมูลที่ใช้</h3>
+              <div className="flex flex-wrap gap-2">
+                {info.sources.map((s, i) => (
+                  <span key={i} className="px-2.5 py-1 bg-white border border-blue-200 rounded-lg text-xs font-mono text-blue-700">{s}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {(info.period || info.count || info.lastUpload) && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
               <MetaCard label="ช่วงข้อมูล" value={info.period} />
