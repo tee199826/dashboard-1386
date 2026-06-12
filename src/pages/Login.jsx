@@ -182,7 +182,7 @@ export default function Login() {
                 letterSpacing: '0.18em',
               }}
             >
-              สำนักงาน ป.ป.ส. กทม
+              สำนักงาน ปปส.กทม.
             </span>
 
             <h1
@@ -358,7 +358,7 @@ export default function Login() {
                 (e.currentTarget.style.color = 'rgba(255,255,255,0.35)')
               }
             >
-              ← กลับหน้า Dashboard
+              ← ย้อนกลับหน้า Dashboard
             </button>
           </div>
         </div>

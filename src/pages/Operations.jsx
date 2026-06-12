@@ -16,7 +16,9 @@ import { BigCard, SourceCard, KpiToggleCard } from '../components/OperationsCard
 import OperationsSourceModal from '../components/OperationsSourceModal'
 import { THAI_MONTHS } from '../utils/constants'
 import UnifiedHero from '../components/UnifiedHero'
+import DateFilter from '../components/DateFilter'
 import { formatThaiDate as fmtHeroDate, getLastUploadDate } from '../utils/heroMeta'
+import { useFilter } from '../context/FilterContext'
 
 const OPS_SOURCE_INFO = {
   title: 'แหล่งข้อมูล · ผลการดำเนินงาน',
@@ -78,6 +80,13 @@ export default function Operations() {
 
   useEffect(() => { getLastUploadDate(supabase, 'report_114').then(setOpsLastUpload).catch(() => {}) }, [])
   const opsLatestFy = useMemo(() => (rptAllYears.length ? Math.max(...rptAllYears.map(Number)) : null), [rptAllYears])
+  const opsYears = useMemo(() => [...rptAllYears].map(Number).sort((a, b) => b - a), [rptAllYears])
+
+  // DateFilter (ปีงบ) ขับ rptYear เดิม (one-way) — ฟิลเตอร์ของเก่ายังทำงาน
+  const { state: dfState } = useFilter()
+  useEffect(() => {
+    if (dfState.fiscalYear != null) setRptYear(String(dfState.fiscalYear))
+  }, [dfState.fiscalYear])
 
   const [filterYear, setFilterYear] = useState('all')
   const [filterMonth, setFilterMonth] = useState('all')
@@ -267,13 +276,16 @@ export default function Operations() {
           sourceInfo={OPS_SOURCE_INFO}
         />
       )}
-      {/* admin upload (เดิมอยู่ใน hero — คงไว้เป็น action bar) */}
-      {!isPresentation && isAdmin && (
-        <div className="flex justify-end -mt-4">
-          <button onClick={() => setShowUpload(true)}
-            className="px-5 py-2.5 bg-white border border-slate-200 text-amber-800 hover:bg-amber-50 rounded-xl font-bold flex items-center gap-2 transition shadow-sm text-sm">
-            <Upload size={16} /> นำเข้า RPT_114
-          </button>
+      {/* DateFilter (ปีงบเท่านั้น — RPT_114) + admin upload */}
+      {!isPresentation && (
+        <div className="flex items-center justify-between gap-3 -mt-2 flex-wrap">
+          <DateFilter availableYears={opsYears} disabledModes={['month', 'custom']} />
+          {isAdmin && (
+            <button onClick={() => setShowUpload(true)}
+              className="px-5 py-2.5 bg-white border border-slate-200 text-amber-800 hover:bg-amber-50 rounded-xl font-bold flex items-center gap-2 transition shadow-sm text-sm">
+              <Upload size={16} /> นำเข้า RPT_114
+            </button>
+          )}
         </div>
       )}
 

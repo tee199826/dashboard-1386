@@ -178,39 +178,49 @@ function parseDate(value) {
   return null
 }
 
-// Helper: Google Form timestamp "ประทับเวลา" → ISO "YYYY-MM-DD" (ปี ค.ศ. ไม่ใช่ พ.ศ.)
-//   รองรับ Date object / ISO string / "D/M/YYYY [HH:MM:SS]" ; guard ปี ±5 จากปัจจุบัน
+// Helper: Google Form timestamp "ประทับเวลา" → ISO "YYYY-MM-DD" (ปี ค.ศ.)
+//   ⚠️ cell เก็บปนกัน 2 แบบ (Date/serial จาก cellDates + text) → ต้อง handle ทุก type
+//   ⚠️ เลี่ยง toISOString() เพราะ shift ตาม timezone — ใช้ component ตรงๆ (no TZ math)
 function parseTimestamp(v) {
   if (v == null || v === '') return null
+  const fmt = (y, m, d) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 
-  // Case 1: Date object (Excel datetime)
+  // Case 1: Date object (cellDates: true)
   if (v instanceof Date && !isNaN(v)) {
-    return v.toISOString().slice(0, 10)
+    const y = v.getFullYear()
+    if (y < 2020 || y > 2030) return null
+    return fmt(y, v.getMonth() + 1, v.getDate())
   }
 
-  // Case 2: ISO string
-  if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) {
-    const d = new Date(v)
-    if (!isNaN(d)) return d.toISOString().slice(0, 10)
+  // Case 2: Excel serial number (เช่น 45967) — Excel epoch 1899-12-30, คำนวณแบบ UTC ไม่มี TZ shift
+  if (typeof v === 'number' && v > 1000 && v < 100000) {
+    const ms = Date.UTC(1899, 11, 30) + v * 86400000
+    const date = new Date(ms)
+    const y = date.getUTCFullYear()
+    if (y < 2020 || y > 2030) return null
+    return fmt(y, date.getUTCMonth() + 1, date.getUTCDate())
   }
 
-  // Case 3: D/M/YYYY [time] (Thai Google Form locale = D/M)
+  // Case 3: string — ISO "YYYY-MM-DD..." หรือ "M/D/YYYY [HH:MM:SS]" (Google Form locale = en-US → M/D)
   const s = String(v).trim()
+  const isoMatch = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
+  if (isoMatch) {
+    const y = parseInt(isoMatch[1])
+    if (y < 2020 || y > 2030) return null
+    return fmt(y, parseInt(isoMatch[2]), parseInt(isoMatch[3]))
+  }
   const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
   if (!m) return null
-
-  const [, a, b, y] = m
-  const year = parseInt(y)
-
-  // guard: ปีต้องอยู่ในช่วงสมเหตุสมผล (กัน พ.ศ. หรือค่าเพี้ยน)
-  const currentYear = new Date().getFullYear()
-  if (year < currentYear - 5 || year > currentYear + 5) return null
-
-  const day = parseInt(a)
-  const month = parseInt(b)
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null
-
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  let month = parseInt(m[1])             // en-US: M/D/YYYY
+  let day = parseInt(m[2])
+  let year = parseInt(m[3])
+  if (year >= 2500) year -= 543          // เผื่อมี พ.ศ. ปน (Google Form ใช้ ค.ศ. เป็นหลัก)
+  // auto-swap: ถ้า slot แรก > 12 แต่ slot สอง ≤ 12 → จริงๆ เป็น D/M ปนมา → สลับกลับ
+  if (month > 12 && day <= 12) { const t = month; month = day; day = t }
+  if (year < 2020 || year > 2030) return null
+  if (month < 1 || month > 12) return null
+  if (day < 1 || day > 31) return null
+  return fmt(year, month, day)
 }
 
 // Helper: ค่าว่าง / '-' / 'null' → null

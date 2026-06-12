@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { DataProvider } from './context/DataContext'
 import { AuthProvider } from './context/AuthContext'
 import { PresentationProvider, usePresentation } from './context/PresentationContext'
+import { FilterProvider } from './context/FilterContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import Overview from './pages/Overview'
 import AllDistricts from './pages/AllDistricts'
@@ -62,11 +63,11 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/radar" element={<MainLayout><SubstanceRadar /></MainLayout>} />
 
-            <Route path="/" element={<MainLayout><Overview /></MainLayout>} />
-            <Route path="/districts" element={<MainLayout><AllDistricts /></MainLayout>} />
-            <Route path="/operations" element={<MainLayout><Operations /></MainLayout>} />
-            <Route path="/bkn" element={<MainLayout><BknPage /></MainLayout>} />
-            <Route path="/substance-users" element={<MainLayout><SubstanceUsers /></MainLayout>} />
+            <Route path="/" element={<MainLayout><FilterProvider><Overview /></FilterProvider></MainLayout>} />
+            <Route path="/districts" element={<MainLayout><FilterProvider><AllDistricts /></FilterProvider></MainLayout>} />
+            <Route path="/operations" element={<MainLayout><FilterProvider><Operations /></FilterProvider></MainLayout>} />
+            <Route path="/bkn" element={<MainLayout><FilterProvider><BknPage /></FilterProvider></MainLayout>} />
+            <Route path="/substance-users" element={<MainLayout><FilterProvider><SubstanceUsers /></FilterProvider></MainLayout>} />
 
             <Route path="/upload" element={
               <ProtectedRoute><MainLayout><UploadPage /></MainLayout></ProtectedRoute>

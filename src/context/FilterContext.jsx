@@ -33,7 +33,9 @@ export function FilterProvider({ children, initialFiscalYear = null }) {
       return state.fiscalYear ? getFiscalYearRange(state.fiscalYear) : null
     }
     if (state.mode === 'month') {
-      return (state.monthYear && state.month) ? getMonthRange(state.monthYear, state.month) : null
+      if (!state.monthYear) return null              // ทุกปี → ไม่ filter
+      if (!state.month) return getFiscalYearRange(state.monthYear)  // ทุกเดือน → ทั้งปีงบ
+      return getMonthRange(state.monthYear, state.month)
     }
     if (state.mode === 'custom') {
       return (state.customFrom && state.customTo) ? { from: state.customFrom, to: state.customTo } : null

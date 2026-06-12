@@ -21,7 +21,11 @@ import { fetchAllPages } from '../utils/supabasePagination'
 import { thaiDateRange } from '../utils/formatDate'
 import PeriodBadge from '../components/PeriodBadge'
 import UnifiedHero from '../components/UnifiedHero'
+import DateFilter from '../components/DateFilter'
 import { formatThaiDate, formatPeriod, minMaxDate, getLastUploadDate } from '../utils/heroMeta'
+import { dateToFiscalYear } from '../utils/fiscalYear'
+import { filterByDateColumn } from '../utils/filterRows'
+import { useFilter } from '../context/FilterContext'
 
 const OVERVIEW_SOURCE_INFO = {
   title: 'แหล่งข้อมูล · ภาพรวม',
@@ -71,7 +75,7 @@ export default function Overview() {
   const [activeChannelIndex, setActiveChannelIndex] = useState(null)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
 
-  const [incidents, setIncidents] = useState([])
+  const [incidentsRaw, setIncidentsRaw] = useState([])
   const [bGroup, setBGroup] = useState('all')
   const [bDistrict, setBDistrict] = useState('all')
   const [bSubdistrict, setBSubdistrict] = useState('all')
@@ -94,7 +98,7 @@ export default function Overview() {
       setIncidentError(null)
       try {
         const all = await fetchAllPages('drug_incidents', 'district, subdistrict, community, behaviors, received_date')
-        setIncidents(all)
+        setIncidentsRaw(all)
       } catch {
         setIncidentError('ไม่สามารถโหลดข้อมูลพฤติการณ์ได้ กรุณาลองใหม่')
       }
@@ -193,10 +197,21 @@ export default function Overview() {
     load()
   }, [])
 
+  // ── DateFilter (page-level) — กรอง complaints + drug_incidents ที่ source ──
+  const rawData = records ?? []
+  const { getDateRange } = useFilter()
+  const range = getDateRange()
+  const data = useMemo(() => filterByDateColumn(rawData, 'date', range), [records, range?.from, range?.to])
+  const incidents = useMemo(() => filterByDateColumn(incidentsRaw, 'received_date', range), [incidentsRaw, range?.from, range?.to])
+  const fyYears = useMemo(() => {
+    const s = new Set()
+    rawData.forEach(r => { const fy = dateToFiscalYear(r.date); if (fy) s.add(fy) })
+    return [...s].sort((a, b) => b - a)
+  }, [records])
+
   // ── existing computed values ───────────────────────────────────────────────
-  const data = records ?? []
-  const heroPeriod = useMemo(() => { const { min, max } = minMaxDate(data, 'date'); return formatPeriod(min, max) }, [data])
-  const years = useMemo(() => stats.getYears(data), [data])
+  const heroPeriod = useMemo(() => { const { min, max } = minMaxDate(rawData, 'date'); return formatPeriod(min, max) }, [records])
+  const years = useMemo(() => stats.getYears(rawData), [records])
 
   const filteredRecords = data
 
@@ -406,7 +421,7 @@ export default function Overview() {
         <UnifiedHero
           gradient="blue"
           eyebrow="OVERVIEW · DASHBOARD"
-          title="ภาพรวม"
+          title="ภาพรวมของข้อมูลเรื่องร้องเรียนยาเสพติด"
           description="สรุปข้อมูลจากทุกแหล่ง"
           period={heroPeriod}
           lastUpload={formatThaiDate(lastUpload)}
@@ -414,6 +429,12 @@ export default function Overview() {
           onRefresh={reload}
           refreshing={isLoading}
         />
+      )}
+
+      {!isPresentation && (
+        <div className="mb-6">
+          <DateFilter availableYears={fyYears} />
+        </div>
       )}
 
       <PresentationSlides isPresentation={isPresentation} normalClassName="max-w-[1600px] mx-auto space-y-8">
@@ -473,11 +494,11 @@ export default function Overview() {
           <KpiCard
             icon={<MapPin size={18} />}
             label="จำนวนจุดยาเสพติด"
-            value={incidents.length > 0 ? incidents.length.toLocaleString() : (incidentError ? 'ข้อผิดพลาด' : '—')}
+            value={incidentsRaw.length > 0 ? incidents.length.toLocaleString() : (incidentError ? 'ข้อผิดพลาด' : '—')}
             sub="จำนวนจุดในฐานข้อมูล"
             sourceLabel="จาก drug_incidents"
             color="rose"
-            loading={incidents.length === 0 && !incidentError}
+            loading={incidentsRaw.length === 0 && !incidentError}
             period={incidentsRangeAll}
           />
           <KpiCard

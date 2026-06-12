@@ -20,6 +20,7 @@ import PresentationSlides from '../components/PresentationSlides'
 import BknSummarySection from '../components/BknSummarySection'
 import BknDrugStats from '../components/BknDrugStats'
 import UnifiedHero from '../components/UnifiedHero'
+import DateFilter from '../components/DateFilter'
 import { formatThaiDate as fmtHeroDate } from '../utils/heroMeta'
 
 const BKN_SOURCE_INFO = {
@@ -248,6 +249,14 @@ export default function BknPage() {
           lastUpload={fmtHeroDate(lastUpload115B)}
           sourceInfo={BKN_SOURCE_INFO}
         />
+      )}
+
+      {/* DateFilter — read-only: bkn_summary มีงวดเดียว ยังกรองไม่ได้ */}
+      {!isPresentation && (
+        <div className="flex items-center gap-2 -mt-4">
+          <DateFilter availableYears={[]} disabledModes={['fiscal', 'month', 'custom']} />
+          <span className="text-xs text-slate-400">ข้อมูล บก.น. มีงวดเดียว · ยังไม่รองรับการกรอง</span>
+        </div>
       )}
 
       <PresentationSlides isPresentation={isPresentation} normalClassName="max-w-[1600px] mx-auto space-y-8">

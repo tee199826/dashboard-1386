@@ -7,8 +7,12 @@ import { getDistrictMetrics } from '../utils/statistics'
 import { DNAME_TO_GROUP } from '../utils/constants'
 import { supabase } from '../lib/supabase'
 import { formatThaiDate, formatPeriod, minMaxDate, getLastUploadDate } from '../utils/heroMeta'
+import { dateToFiscalYear } from '../utils/fiscalYear'
+import { filterByDateColumn } from '../utils/filterRows'
+import { useFilter } from '../context/FilterContext'
 import IncidentMap from '../components/IncidentMap'
 import UnifiedHero from '../components/UnifiedHero'
+import DateFilter from '../components/DateFilter'
 
 const DISTRICTS_SOURCE_INFO = {
   title: 'แหล่งข้อมูล · สถิติรายเขต',
@@ -38,11 +42,11 @@ export default function AllDistricts() {
   // ดึง drug_incidents + substance dealer_locations (complaints มาจาก useData)
   useEffect(() => {
     fetchAllPages('drug_incidents', 'district, received_date').then(setIncidents).catch(() => {})
-    fetchAllPages('substance_users', 'dealer_locations').then(setDealerRows).catch(() => {})
+    fetchAllPages('substance_users', 'dealer_locations, surveyed_at').then(setDealerRows).catch(() => {})
     getLastUploadDate(supabase, ['complaints', 'drug_incidents', 'substance_users']).then(setLastUpload).catch(() => {})
   }, [])
 
-  // ช่วงข้อมูล = min-max ของ complaints + drug_incidents (received_date)
+  // ช่วงข้อมูล = min-max ของ complaints + drug_incidents (received_date) — ใช้ raw
   const heroPeriod = useMemo(() => {
     const c = minMaxDate(records, 'date')
     const i = minMaxDate(incidents, 'received_date')
@@ -51,10 +55,25 @@ export default function AllDistricts() {
     return formatPeriod(mins[0], maxs[maxs.length - 1])
   }, [records, incidents])
 
+  // ── DateFilter (page-level) ──
+  const { getDateRange } = useFilter()
+  const range = getDateRange()
+  const availableYears = useMemo(() => {
+    const s = new Set()
+    records.forEach(r => { const fy = dateToFiscalYear(r.date); if (fy) s.add(fy) })
+    incidents.forEach(r => { const fy = dateToFiscalYear(r.received_date); if (fy) s.add(fy) })
+    return [...s].sort((a, b) => b - a)
+  }, [records, incidents])
+
+  // กรองตามช่วงก่อน aggregate (complaints.date / incidents.received_date / dealer.surveyed_at)
+  const fRecords = useMemo(() => filterByDateColumn(records, 'date', range), [records, range?.from, range?.to])
+  const fIncidents = useMemo(() => filterByDateColumn(incidents, 'received_date', range), [incidents, range?.from, range?.to])
+  const fDealers = useMemo(() => filterByDateColumn(dealerRows, 'surveyed_at', range), [dealerRows, range?.from, range?.to])
+
   // รวม metric รายเขต (กรองเฉพาะเขต กทม. ตอน aggregate — raw ไม่ถูกตัด)
   const metrics = useMemo(
-    () => getDistrictMetrics(records, incidents, dealerRows),
-    [records, incidents, dealerRows],
+    () => getDistrictMetrics(fRecords, fIncidents, fDealers),
+    [fRecords, fIncidents, fDealers],
   )
   const byName = useMemo(() => Object.fromEntries(metrics.map(m => [m.district, m])), [metrics])
 
@@ -112,6 +131,8 @@ export default function AllDistricts() {
         lastUpload={formatThaiDate(lastUpload)}
         sourceInfo={DISTRICTS_SOURCE_INFO}
       />
+
+      <DateFilter availableYears={availableYears} />
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">

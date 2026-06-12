@@ -8,8 +8,12 @@ import {
 } from 'lucide-react'
 import { fetchAllPages } from '../utils/supabasePagination'
 import { supabase } from '../lib/supabase'
+import { filterByDateColumn } from '../utils/filterRows'
+import { dateToFiscalYear } from '../utils/fiscalYear'
+import { useFilter } from '../context/FilterContext'
 import IncidentMap from '../components/IncidentMap'
 import HeroActions from '../components/HeroActions'
+import DateFilter from '../components/DateFilter'
 
 // rainbow palette — หมุนตาม index ทุก bar chart
 const CHART_COLORS = [
@@ -86,18 +90,21 @@ export default function SubstanceUsers() {
   const [search, setSearch] = useState('')
   const [sortDesc, setSortDesc] = useState(true)
 
-  // ── fiscal-year filter (synced across every chart dropdown) ──
-  const [selectedYear, setSelectedYear] = useState('all')
-  const years = useMemo(
-    () => [...new Set(rows.map(r => r.fiscal_year).filter(Boolean))].sort((a, b) => b - a),
-    [rows],
-  )
+  // ── DateFilter (page-level) — กรองตาม surveyed_at ──
+  const { getDateRange } = useFilter()
+  const range = getDateRange()
+  // ปีงบ = distinct dateToFiscalYear(surveyed_at) ของ row ที่มีวันที่ (ไม่ใช่ fiscal_year column)
+  const availableYears = useMemo(() => {
+    const s = new Set()
+    rows.forEach(r => { const fy = dateToFiscalYear(r.surveyed_at); if (fy) s.add(fy) })
+    return [...s].sort((a, b) => b - a)
+  }, [rows])
   const filteredRows = useMemo(
-    () => (selectedYear === 'all' ? rows : rows.filter(r => r.fiscal_year === parseInt(selectedYear))),
-    [rows, selectedYear],
+    () => filterByDateColumn(rows, 'surveyed_at', range),
+    [rows, range?.from, range?.to],
   )
 
-  // ── ช่วงวันที่สำรวจจริง (footer pill) — min/max ของ surveyed_at ──
+  // ── ช่วงวันที่สำรวจจริง (footer pill) — min/max ของ surveyed_at จาก filtered ──
   const periodLabel = useMemo(() => {
     const dates = filteredRows.map(r => r.surveyed_at).filter(Boolean).sort()
     if (!dates.length) return 'ไม่มีข้อมูลวันที่'
@@ -106,7 +113,7 @@ export default function SubstanceUsers() {
     return min === max ? fmtPeriod(min) : `${fmtPeriod(min)} - ${fmtPeriod(max)}`
   }, [filteredRows])
 
-  const yearCtl = { years, selectedYear, onYearChange: setSelectedYear, periodLabel }
+  const yearCtl = { periodLabel }
 
   // ── tab navigation state ──
   const [activeTab, setActiveTab] = useState(hashTab)
@@ -263,7 +270,7 @@ export default function SubstanceUsers() {
   }, [filteredRows])
 
   // ── choropleth layer (section 6) — purple gradient ──
-  const districtLayerKey = `su-${filteredRows.length}-${selectedYear}`
+  const districtLayerKey = `su-${filteredRows.length}-${range?.from || 'all'}`
   const districtLayerStyle = useMemo(() => (feature) => {
     const dn = feature.properties?.dname
     const c = agg.distMap[dn] || 0
@@ -342,6 +349,8 @@ export default function SubstanceUsers() {
           </div>
         </header>
 
+        <DateFilter availableYears={availableYears} />
+
         {/* SECTION 1 — KPI */}
         <section>
           <SectionHeader title="ภาพรวม" desc="ตัวชี้วัดหลักของกลุ่มผู้เสพในระบบ" />
@@ -349,16 +358,16 @@ export default function SubstanceUsers() {
             <KpiCard icon={<Users size={64} />} gradient="bg-gradient-to-br from-indigo-600 to-indigo-700"
               label="ผู้เสพรวม" value={agg.total.toLocaleString()} sub="ทั้งหมดในระบบ" />
             <KpiCard icon={<Activity size={64} />} gradient="bg-gradient-to-br from-sky-500 to-cyan-600"
-              label="อายุเฉลี่ย" value={agg.avgAge.toFixed(1)} sub="ปี" />
+              label="อายุเฉลี่ยของผู้เสพ" value={agg.avgAge.toFixed(1)} sub="ปี" />
             <KpiCard icon={<Clock size={64} />} gradient="bg-gradient-to-br from-violet-500 to-purple-600"
-              label="อายุเริ่มเสพเฉลี่ย"
+              label="อายุที่เริ่มเสพเฉลี่ย"
               value={agg.avgFirstAge > 0 ? agg.avgFirstAge.toFixed(1) : '—'}
               sub={agg.avgFirstAge > 0 ? 'ปี' : 'ไม่มีข้อมูล'} />
             <KpiCard icon={<Shield size={64} />} gradient="bg-gradient-to-br from-rose-500 to-red-600"
-              label="เคยถูกจับ"
+              label="เคยมีประวัติถูกจับกุม"
               value={`${agg.total ? ((agg.arrested / agg.total) * 100).toFixed(0) : 0}%`} sub={`${agg.arrested} ราย`} />
             <KpiCard icon={<Heart size={64} />} gradient="bg-gradient-to-br from-emerald-500 to-green-600"
-              label="เคยบำบัด"
+              label="เคยมีประวัติถูกบำบัด"
               value={`${agg.total ? ((agg.rehabbed / agg.total) * 100).toFixed(0) : 0}%`} sub={`${agg.rehabbed} ราย`} />
           </div>
         </section>
@@ -450,9 +459,9 @@ function DemographicsSection({ agg, yearCtl }) {
     <section>
       <SectionHeader title="ข้อมูลประชากร" desc="อายุ อาชีพ และรายได้ต่อเดือนของผู้เสพ" />
       <div className="space-y-8">
-        <ChartCard title="กลุ่มอายุ" desc="การกระจายตัวตามช่วงอายุ" {...yearCtl}><VBar data={agg.ageGroups} palette="blue" /></ChartCard>
-        <ChartCard title="อาชีพ (10 อันดับแรก)" desc="อาชีพที่พบมากที่สุด" {...yearCtl}><HBar data={agg.occupations} palette="indigo" /></ChartCard>
-        <ChartCard title="รายได้ต่อเดือน" desc="ช่วงรายได้ของผู้เสพ" {...yearCtl}><HBar data={agg.income} palette="emerald" /></ChartCard>
+        <ChartCard title="กลุ่มอายุ" desc="การกระจายตัวตามช่วงอายุ" {...yearCtl}><VBar data={agg.ageGroups} unit=" ราย" palette="blue" /></ChartCard>
+        <ChartCard title="อาชีพ (10 อันดับแรก)" desc="อาชีพที่พบมากที่สุด" {...yearCtl}><HBar data={agg.occupations} unit=" คน" palette="indigo" /></ChartCard>
+        <ChartCard title="รายได้ต่อเดือน" desc="ช่วงรายได้ของผู้เสพ" {...yearCtl}><HBar data={agg.income} unit=" คน" palette="emerald" /></ChartCard>
       </div>
     </section>
   )
@@ -466,8 +475,8 @@ function HistorySection({ agg, yearCtl }) {
         <ChartCard title="อายุที่เริ่มเสพ" desc="ช่วงอายุที่เริ่มใช้ยาเสพติด" {...yearCtl}>
           {agg.firstUseHist.length ? <VBar data={agg.firstUseHist} palette="amber" /> : <Empty />}
         </ChartCard>
-        <ChartCard title="ชนิดยาที่ใช้ครั้งแรก" desc="ชนิดยาเสพติดที่ใช้เป็นครั้งแรก" {...yearCtl}><HBar data={agg.firstDrug} rainbow /></ChartCard>
-        <ChartCard title="สาเหตุการเสพครั้งแรก" desc="เหตุผลที่เริ่มใช้ยาเสพติด" {...yearCtl}><HBar data={agg.firstReason} palette="violet" /></ChartCard>
+        <ChartCard title="ชนิดยาที่ใช้ครั้งแรก" desc="ชนิดยาเสพติดที่ใช้เป็นครั้งแรก" {...yearCtl}><HBar data={agg.firstDrug} unit=" คน" rainbow /></ChartCard>
+        <ChartCard title="สาเหตุการเสพครั้งแรก" desc="เหตุผลที่เริ่มใช้ยาเสพติด" {...yearCtl}><HBar data={agg.firstReason} unit=" คน" palette="violet" /></ChartCard>
       </div>
     </section>
   )
@@ -479,7 +488,7 @@ function DrugsSection({ agg, yearCtl }) {
       <SectionHeader title="ยาที่ใช้ประจำ และ ราคา" desc="ชนิดยาที่ใช้ประจำและราคาเฉลี่ยต่อหน่วย" />
       <div className="space-y-8">
         <ChartCard title="ยาที่ใช้เป็นประจำ" desc="ชนิดยาที่ใช้เป็นประจำ" {...yearCtl}>
-          {agg.regularDrugs.length ? <HBar data={agg.regularDrugs} palette="teal" /> : <Empty />}
+          {agg.regularDrugs.length ? <HBar data={agg.regularDrugs} unit=" ราย" palette="teal" /> : <Empty />}
         </ChartCard>
         <ChartCard title="ราคาเฉลี่ยต่อยา" desc="ราคาเฉลี่ยต่อหน่วย (ผู้ระบุราคา ≥ 3 ราย)" {...yearCtl}>
           {agg.priceAvg.length ? <HBar data={agg.priceAvg} unit=" บาท" palette="orange" /> : <Empty />}
@@ -494,12 +503,12 @@ function ArrestsSection({ agg, yearCtl }) {
     <section>
       <SectionHeader title="ประวัติการถูกจับ และ การบำบัด" desc="ประวัติการถูกจับและการเข้ารับการบำบัด" />
       <div className="space-y-8">
-        <ChartCard title="จำนวนครั้งที่ถูกจับ" desc="การกระจายตามจำนวนครั้งที่ถูกจับ" {...yearCtl}><VBar data={agg.arrestBuckets} palette="red" /></ChartCard>
+        <ChartCard title="จำนวนครั้งที่ถูกจับ" desc="การกระจายตามจำนวนครั้งที่ถูกจับ" {...yearCtl}><VBar data={agg.arrestBuckets} unit=" ครั้ง" palette="red" /></ChartCard>
         <ChartCard title="ชนิดยาตอนถูกจับ" desc="ชนิดยาเสพติดที่พบขณะถูกจับ" {...yearCtl}>
-          {agg.arrestDrugs.length ? <HBar data={agg.arrestDrugs} palette="rose" /> : <Empty />}
+          {agg.arrestDrugs.length ? <HBar data={agg.arrestDrugs} unit=" คน" palette="rose" /> : <Empty />}
         </ChartCard>
         <ChartCard title="ข้อหา" desc="ข้อหาที่ถูกดำเนินคดี" {...yearCtl}>
-          {agg.charges.length ? <HBar data={agg.charges} palette="fuchsia" /> : <Empty />}
+          {agg.charges.length ? <HBar data={agg.charges} unit=" ราย" palette="fuchsia" /> : <Empty />}
         </ChartCard>
       </div>
     </section>
@@ -519,7 +528,6 @@ function DealersSection({ agg, yearCtl, mapKey, districtLayerKey, districtLayerS
               <MapPin size={16} className="text-violet-700 shrink-0" />
               <h3 className="text-sm font-semibold text-slate-900 truncate">แผนที่กรุงเทพมหานคร · เขตที่เข้มกว่า = มีแหล่งซื้อมากกว่า</h3>
             </div>
-            <YearSelect {...yearCtl} />
           </div>
           <div className="relative h-[700px]">
             <IncidentMap
@@ -548,7 +556,7 @@ function DealersSection({ agg, yearCtl, mapKey, districtLayerKey, districtLayerS
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col
           hover:shadow-md transition">
           <div className="px-6 py-4 border-b border-slate-200">
-            <h3 className="text-sm font-semibold text-slate-900 mb-3">เขต × จำนวนราย</h3>
+            <h3 className="text-sm font-semibold text-slate-900 mb-3">เขตพื้นที่ต่อจำนวนคน</h3>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหาเขต..."
@@ -562,7 +570,7 @@ function DealersSection({ agg, yearCtl, mapKey, districtLayerKey, districtLayerS
                   <th className="text-left px-6 py-4 text-xs font-semibold text-slate-700 uppercase tracking-wider">เขต</th>
                   <th onClick={() => setSortDesc(s => !s)}
                     className="text-right px-6 py-4 text-xs font-semibold text-slate-700 uppercase tracking-wider cursor-pointer select-none whitespace-nowrap hover:text-violet-700 transition">
-                    จำนวน {sortDesc ? '▼' : '▲'}
+                    จำนวนคน {sortDesc ? '▼' : '▲'}
                   </th>
                 </tr>
               </thead>
@@ -596,24 +604,6 @@ function SectionHeader({ title, desc }) {
   )
 }
 
-// dropdown ปีงบประมาณ — sync ทุก card ผ่าน state เดียวที่ระดับ page
-function YearSelect({ years, selectedYear, onYearChange }) {
-  return (
-    <div className="flex items-center shrink-0">
-      <label className="text-xs text-slate-500 mr-2 whitespace-nowrap">ปีงบประมาณ:</label>
-      <select
-        value={selectedYear}
-        onChange={e => onYearChange(e.target.value)}
-        className="border border-slate-300 rounded-md px-3 py-1.5 text-sm bg-white text-slate-700
-          focus:border-violet-500 focus:ring-2 focus:ring-violet-100 outline-none"
-      >
-        <option value="all">รวมทุกปีงบ</option>
-        {years.map(y => <option key={y} value={String(y)}>{y}</option>)}
-      </select>
-    </div>
-  )
-}
-
 // pill ช่วงข้อมูล — กึ่งกลางใต้ chart (คำนวณจาก surveyed_at จริง)
 function FooterPill({ periodLabel }) {
   return (
@@ -625,15 +615,12 @@ function FooterPill({ periodLabel }) {
   )
 }
 
-function ChartCard({ title, desc, years, selectedYear, onYearChange, periodLabel, children }) {
+function ChartCard({ title, desc, periodLabel, children }) {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition p-6">
-      <div className="flex justify-between items-start gap-4">
-        <div>
-          <h3 className="text-lg font-bold text-slate-900">{title}</h3>
-          {desc && <p className="text-sm text-slate-500 mt-1">{desc}</p>}
-        </div>
-        <YearSelect years={years} selectedYear={selectedYear} onYearChange={onYearChange} />
+      <div>
+        <h3 className="text-lg font-bold text-slate-900">{title}</h3>
+        {desc && <p className="text-sm text-slate-500 mt-1">{desc}</p>}
       </div>
       <div className="mt-6">{children}</div>
       <FooterPill periodLabel={periodLabel} />
