@@ -139,26 +139,49 @@ export async function upsertBknSummary(rows, batchInfo) {
 }
 
 /**
- * Insert ข้อมูลแบบเก็บผู้เสพเข้าตาราง substance_users
- * รับ raw rows (header แบนจาก Excel) → flatten เป็น jsonb 4 ก้อนก่อน insert
- * ไม่มี natural conflict key → ใช้ insert (อัปซ้ำจะ append แถวใหม่)
+ * Upsert ข้อมูลแบบเก็บผู้เสพเข้าตาราง substance_users
+ * รับ raw rows (header แบนจาก Excel) → flatten เป็น jsonb 4 ก้อนก่อน upsert
+ * natural key = record_uid (จาก 'ประทับเวลา') → อัปไฟล์เดิมซ้ำ = UPDATE ทับ ไม่ append
+ *   (ต้องมี unique constraint บน record_uid ใน DB — แยกเป็น SQL)
  */
 export async function upsertSubstanceUsers(rawRows, batchInfo) {
   if (!rawRows || rawRows.length === 0) return { inserted: 0, updated: 0, failed: 0, error: null }
 
-  const rows = rawRows.map(r => flattenSubstanceUserRow(r, batchInfo.fileName)).map(r => ({
+  const flat = rawRows.map((r, i) => flattenSubstanceUserRow(r, batchInfo.fileName, i + 1)).map(r => ({
     ...r,
     batch_id:    batchInfo.batchId,
     source_file: batchInfo.fileName,
   }))
 
-  let inserted = 0, failed = 0, lastError = null
+  // dedup ภายในไฟล์เดียวกันตาม record_uid (กัน Postgres "ON CONFLICT cannot affect row a second time")
+  // เก็บแถวสุดท้ายที่เจอต่อ record_uid
+  const byUid = new Map()
+  const noUid = []
+  for (const r of flat) {
+    if (r.record_uid) byUid.set(r.record_uid, r)
+    else noUid.push(r)
+  }
+  const rows = [...byUid.values(), ...noUid]
+
+  let inserted = 0, updated = 0, failed = 0, lastError = null
   for (let i = 0; i < rows.length; i += UPSERT_BATCH) {
     const batch = rows.slice(i, i + UPSERT_BATCH)
     try {
-      const { error } = await supabase.from('substance_users').insert(batch)
+      // ตรวจ record_uid ที่มีอยู่แล้วเพื่อแยกนับ insert vs update
+      const uids = batch.map(r => r.record_uid).filter(Boolean)
+      const { data: existing } = await supabase
+        .from('substance_users')
+        .select('record_uid')
+        .in('record_uid', uids)
+      const existingSet = new Set((existing || []).map(r => r.record_uid))
+
+      const { error } = await supabase
+        .from('substance_users')
+        .upsert(batch, { onConflict: 'record_uid', ignoreDuplicates: false })
       if (error) throw error
-      inserted += batch.length
+
+      inserted += batch.filter(r => !existingSet.has(r.record_uid)).length
+      updated  += batch.filter(r =>  existingSet.has(r.record_uid)).length
     } catch (err) {
       failed += batch.length
       lastError = err.message
@@ -180,7 +203,7 @@ export async function upsertSubstanceUsers(rawRows, batchInfo) {
     batchLogError = err.message
   }
 
-  return { inserted, updated: 0, failed, error: lastError, batchLogError }
+  return { inserted, updated, failed, error: lastError, batchLogError }
 }
 
 /**

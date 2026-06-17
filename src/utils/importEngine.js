@@ -231,6 +231,75 @@ function normalizeValue(v) {
   return s
 }
 
+// Helper: hash สั้นๆ จาก string (deterministic, no deps) — ใช้ fallback record_uid
+// คืน hex ดิบ (caller เติม prefix 'h:' เองเพื่อกันชนกับ uid แบบ timestamp)
+function simpleHash(str) {
+  let h = 0
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h + str.charCodeAt(i)) | 0
+  }
+  return (h >>> 0).toString(16)
+}
+
+// ─── Smart price parser — free-form text → ราคา normalize ต่อ 1 หน่วย ──────────
+//   เช่น "50 บาท/เม็ด" → {price:50, unit:'เม็ด'} ; "1.4 กรัม /500 บาท" → {price:357, unit:'กรัม'}
+//   คืน null ถ้า: ไม่มีตัวเลข / ไม่มีหน่วย / ratio / นอกช่วง sanity
+//   หลัก: amount = เลขที่ติดหน่วยด้วย "ช่องว่าง" (= ปริมาณ) ; "เลข/หน่วย" = ราคาต่อหน่วย (amount=1)
+const PRICE_UNIT_RE = '(?:กรัม|เม็ด|จี|ตัก|ถุง|หลอด|ก้อน)'
+function parsePrice(text) {
+  if (!text || typeof text !== 'string') return null
+  const s = text.trim().toLowerCase()
+  if (!s || !/\d/.test(s)) return null              // ไม่มีตัวเลข → "ไม่ทราบราคา", "ปกติ"
+
+  let unit = null                                    // ไม่มีหน่วย → skip ("30", "1/400")
+  if (/กรัม|\/g\b|gram/.test(s)) unit = 'กรัม'
+  else if (/เม็ด/.test(s)) unit = 'เม็ด'
+  else if (/จี/.test(s)) unit = 'จี'
+  else if (/ตัก/.test(s)) unit = 'ตัก'
+  else if (/ถุง/.test(s)) unit = 'ถุง'
+  else if (/หลอด/.test(s)) unit = 'หลอด'
+  else if (/ก้อน/.test(s)) unit = 'ก้อน'
+  if (!unit) return null
+
+  const allNums = (s.match(/[\d.]+/g) || []).map(parseFloat).filter(n => !isNaN(n))
+  if (!allNums.length) return null
+  const avg = (a, b) => (a + b) / 2
+
+  // ปริมาณ (amount): "<เลข> <หน่วย>" (ช่องว่างคั่น) = ปริมาณ ; "<เลข>/หน่วย" = ต่อหน่วย (amount=1)
+  let amount = 1
+  const qtyNums = []
+  const rangeUnit = s.match(new RegExp(`([\\d.]+)\\s*-\\s*([\\d.]+)\\s*${PRICE_UNIT_RE}`))
+  const singleUnit = s.match(new RegExp(`([\\d.]+)\\s*${PRICE_UNIT_RE}`))
+  if (rangeUnit) {
+    amount = avg(parseFloat(rangeUnit[1]), parseFloat(rangeUnit[2]))
+    qtyNums.push(parseFloat(rangeUnit[1]), parseFloat(rangeUnit[2]))
+  } else if (singleUnit) {
+    amount = parseFloat(singleUnit[1])
+    qtyNums.push(parseFloat(singleUnit[1]))
+  }
+
+  // ราคา (price): ใกล้ "บาท"/"฿" ก่อน ; ไม่งั้นใช้เลขที่เหลือ (ตัดปริมาณออก) / ช่วงราคา
+  let price
+  const bahtMatch = s.match(/([\d.]+)\s*(?:บาท|฿)/)
+  if (bahtMatch) {
+    price = parseFloat(bahtMatch[1])
+  } else {
+    const rest = allNums.slice()
+    for (const q of qtyNums) { const i = rest.indexOf(q); if (i >= 0) rest.splice(i, 1) }
+    const priceRange = s.match(/([\d.]+)\s*-\s*([\d.]+)/)
+    if (priceRange && !rangeUnit) price = avg(parseFloat(priceRange[1]), parseFloat(priceRange[2]))
+    else if (rest.length) price = Math.max(...rest)
+    else price = Math.max(...allNums)
+  }
+
+  if (price == null || isNaN(price) || price < 10) return null
+  if (!amount || amount <= 0) amount = 1
+  const normalizedPrice = price / amount
+  if (normalizedPrice < 10 || normalizedPrice > 50000) return null   // sanity
+
+  return { price: Math.round(normalizedPrice), unit, rawPrice: price, amount }
+}
+
 // ─── 1. parseFile ─────────────────────────────────────────────────────────────
 
 /**
@@ -379,7 +448,7 @@ export function mapColumns(rows, type) {
  *  - arrest_count/rehab_count ว่าง → 0
  *  - array item ข้ามเมื่อ key หลักว่าง (arrests/rehabs:ไม่มี drug, regular_drugs:ไม่มี price/ชื่อยาอื่น, dealer:พื้นที่ว่างหมด)
  */
-export function flattenSubstanceUserRow(row, fileName) {
+export function flattenSubstanceUserRow(row, fileName, rowIndex) {
   // ดึง fiscal_year จากชื่อไฟล์ — ถ้าไม่เจอ → null (DB ใส่ default ให้)
   let fiscal_year = null
   if (fileName) {
@@ -419,21 +488,22 @@ export function flattenSubstanceUserRow(row, fileName) {
     rehabs.push({ drug, place: sv(`__rehab_${i}_place`), year: nv(`__rehab_${i}_year`) })
   }
 
-  // regular_drugs: 4 ยา fix (ข้ามถ้า price ว่าง) + 2 ยาอื่น (ข้ามถ้าชื่อยา/price ว่าง)
+  // regular_drugs: 4 ยา fix + 2 ยาอื่น — parse ราคา free-form text → {price, unit, rawPrice, amount}
+  //   ข้ามถ้า parsePrice คืน null (ไม่มีหน่วย/ราคา/นอก sanity) ; ยาอื่นข้ามถ้าชื่อยาว่าง
   const regular_drugs = []
   for (const d of [
     { key: 'yaba', name: 'ยาบ้า' }, { key: 'ice', name: 'ไอซ์' },
     { key: 'heroin', name: 'เฮโรอีน' }, { key: 'ketamine', name: 'คีตามีน' },
   ]) {
-    const price = nv(`__price_${d.key}`)
-    if (price == null) continue
-    regular_drugs.push({ drug: d.name, price, unit: 'บาท', period: sv(`__period_${d.key}`) })
+    const p = parsePrice(sv(`__price_${d.key}`))
+    if (!p) continue
+    regular_drugs.push({ drug: d.name, price: p.price, unit: p.unit, rawPrice: p.rawPrice, amount: p.amount, period: sv(`__period_${d.key}`) })
   }
   for (const i of [1, 2]) {
     const name = sv(`__other_name_${i}`)
-    const price = nv(`__price_other_${i}`)
-    if (!name || price == null) continue
-    regular_drugs.push({ drug: name, price, unit: 'บาท', period: sv(`__period_other_${i}`) })
+    const p = parsePrice(sv(`__price_other_${i}`))
+    if (!name || !p) continue
+    regular_drugs.push({ drug: name, price: p.price, unit: p.unit, rawPrice: p.rawPrice, amount: p.amount, period: sv(`__period_other_${i}`) })
   }
 
   // dealer_locations: 1 แหล่ง (ข้ามถ้า area + community + subdistrict ว่างหมด)
@@ -451,19 +521,43 @@ export function flattenSubstanceUserRow(row, fileName) {
     })
   }
 
+  // scalar fields (คำนวณไว้ก่อนเพื่อใช้ทั้ง record_uid และ output)
+  const surveyed_at   = parseTimestamp(m['surveyed_at'])
+  const age           = nv('age')
+  const occupation    = sv('occupation')
+  const income_range  = sv('income_range')
+  const first_use_age = nv('first_use_age')
+  const first_drug    = sv('first_drug')
+  const first_reason  = sv('first_reason')
+
+  // record_uid — natural key สำหรับ upsert (กันอัปซ้ำ append)
+  //   'ประทับเวลา' ในไฟล์มีแค่วันที่ (ไม่มีเวลา) → ซ้ำกันได้ → ห้ามใช้ timestamp ตรงๆ อย่างเดียว
+  //   จึง hash content เสมอ (+ rowIndex กัน profile เหมือนกันเป๊ะในไฟล์เดียว) แล้วผนวกกับ timestamp
+  //   อัปไฟล์เดิมซ้ำ → uid เท่าเดิม → UPSERT update ; แก้ profile → uid เปลี่ยน → INSERT snapshot ใหม่
+  const rawTimestamp = m['surveyed_at']
+  const district = dealer_locations[0]?.district ?? null   // ไม่มี district ระดับผู้เสพใน schema → ใช้ของแหล่งซื้อ
+  const contentHash = simpleHash(
+    [surveyed_at, age, occupation, income_range, district, first_drug, first_use_age, first_reason, rowIndex]
+      .map(v => v || '').join('|')
+  )
+  const record_uid = rawTimestamp
+    ? 'ts:' + String(rawTimestamp).trim() + ':' + contentHash
+    : 'h:' + contentHash
+
   return {
+    record_uid,
     fiscal_year,
-    surveyed_at:   parseTimestamp(m['surveyed_at']),
-    age:           nv('age'),
-    occupation:    sv('occupation'),
-    income_range:  sv('income_range'),
+    surveyed_at,
+    age,
+    occupation,
+    income_range,
     arrest_count:  cnt('arrest_count'),
     arrests,
     rehab_count:   cnt('rehab_count'),
     rehabs,
-    first_use_age: nv('first_use_age'),
-    first_drug:    sv('first_drug'),
-    first_reason:  sv('first_reason'),
+    first_use_age,
+    first_drug,
+    first_reason,
     regular_drugs,
     dealer_locations,
   }
@@ -471,9 +565,34 @@ export function flattenSubstanceUserRow(row, fileName) {
 
 // ─── 4. buildBatch ────────────────────────────────────────────────────────────
 
+// content fields ต่อ type — ใช้สร้าง record_uid แบบ content-hash (idempotent: อัปไฟล์เดิม = uid เดิม)
+//   ใช้คอลัมน์เนื้อหา "ครบ" เพื่อให้ชนกัน (collapse) เฉพาะแถวที่ซ้ำกันจริงทุก field
+//   complaints ไม่มี free-text/ID → ใช้คอลัมน์ categorical ทั้งหมด ; drug_incidents มี lat/lng เป็นตัวแยกหลัก
+const CONTENT_KEY_FIELDS = {
+  complaints: [
+    'received_date', 'completed_date', 'channel', 'district', 'subdistrict', 'community',
+    'province', 'person_type', 'sex', 'occupation', 'role', 'action_unit', 'urgency',
+    'status', 'drug', 'area_type', 'group_no',
+  ],
+  drug_incidents: [
+    'received_date', 'lat', 'lng', 'district', 'subdistrict', 'community',
+    'behaviors', 'primary_drug', 'primary_action', 'police_station', 'status', 'seq', 'nispa_code',
+  ],
+}
+
+function contentRecordUid(type, row) {
+  const fields = CONTENT_KEY_FIELDS[type]
+  const key = fields.map(f => `${f}=${row[f] ?? ''}`).join('|')
+  return 'h:' + simpleHash(key)
+}
+
 /**
  * เพิ่ม batch_id, source_file, row_index, record_uid ให้ทุกแถว
- * record_uid รูปแบบ: YYYYMMDD-HHmmss#000001
+ * record_uid:
+ *   - complaints / drug_incidents → content-hash ('h:' + simpleHash จาก content fields) → idempotent
+ *       + dedup ในไฟล์ (last-wins) กัน Postgres "ON CONFLICT ... cannot affect row a second time"
+ *   - substance_users → คง record_uid เดิมจาก flattenSubstanceUserRow
+ *   - อื่นๆ → fallback batchId#rowIndex
  */
 export function buildBatch(rows, fileName, type) {
   const now = new Date()
@@ -488,18 +607,28 @@ export function buildBatch(rows, fileName, type) {
     pad(now.getSeconds()),
   ].join('')
 
+  const contentHashed = type === 'complaints' || type === 'drug_incidents'
+
   const enriched = rows.map((row, i) => {
     const rowIndex = i + 1
+    const record_uid = contentHashed
+      ? contentRecordUid(type, row)
+      : (row.record_uid || `${batchId}#${pad(rowIndex, 6)}`)
     return {
       ...row,
       batch_id:    batchId,
       source_file: fileName,
       row_index:   rowIndex,
-      record_uid:  `${batchId}#${pad(rowIndex, 6)}`,
+      record_uid,
     }
   })
 
-  return { batchId, rows: enriched }
+  // dedup ในไฟล์เดียวกันตาม record_uid (เฉพาะ content-hash) — เก็บแถวสุดท้าย
+  const finalRows = contentHashed
+    ? Array.from(new Map(enriched.map(r => [r.record_uid, r])).values())
+    : enriched
+
+  return { batchId, rows: finalRows }
 }
 
 // ─── 5. validateRows ──────────────────────────────────────────────────────────

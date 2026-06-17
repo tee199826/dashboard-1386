@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { flushSync } from 'react-dom'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
+  BarChart, Bar, ComposedChart, Area, Line, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList, ReferenceDot, Label,
 } from 'recharts'
 import {
-  Users, Activity, Clock, Shield, Heart, AlertTriangle, MapPin, Search, LayoutGrid,
+  Users, Activity, Clock, Shield, Heart, AlertTriangle, MapPin, Search, LayoutGrid, Maximize2,
 } from 'lucide-react'
 import { fetchAllPages } from '../utils/supabasePagination'
 import { supabase } from '../lib/supabase'
@@ -47,6 +47,18 @@ const INCOME_ORDER = ['ไม่มีรายได้', 'ต่ำกว่�
 const incomeRank = v => { const i = INCOME_ORDER.findIndex(o => String(v || '').includes(o)); return i === -1 ? 99 : i }
 
 const num = v => (v == null || v === '' ? null : (isNaN(Number(v)) ? null : Number(v)))
+
+// ฐานนิยม (mode) ของ array ตัวเลข — ตัวที่ปรากฏบ่อยที่สุด (ทนทาน outlier กว่า mean)
+function modeOf(arr) {
+  if (!arr.length) return null
+  const freq = {}
+  let max = 0, m = null
+  for (const v of arr) {
+    freq[v] = (freq[v] || 0) + 1
+    if (freq[v] > max) { max = freq[v]; m = v }
+  }
+  return m
+}
 
 function topN(counts, n, otherLabel = 'อื่นๆ') {
   const arr = Object.entries(counts).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
@@ -181,6 +193,12 @@ export default function SubstanceUsers() {
 
     const ages = rows.map(r => num(r.age)).filter(v => v != null)
     const firstAges = rows.map(r => num(r.first_use_age)).filter(v => v != null)
+    // sanity filter — ตัดค่าเพี้ยน (พิมพ์ผิด 0/99 ฯลฯ) ก่อนหา mean ของ KPI อายุ (#2/#3)
+    // หมายเหตุ: ใช้เฉพาะ KPI — histogram กลุ่มอายุ/อายุเริ่มเสพยังใช้ ages/firstAges เต็มชุดตามเดิม
+    const avgAges = ages.filter(v => v >= 5 && v <= 100)
+    const avgFirstAges = firstAges.filter(v => v >= 5 && v <= 80)
+    const ageDropped = ages.length - avgAges.length
+    const firstAgeDropped = firstAges.length - avgFirstAges.length
     const avg = arr => arr.length ? (arr.reduce((s, v) => s + v, 0) / arr.length) : 0
     const arrested = rows.filter(r => num(r.arrest_count) > 0).length
     const rehabbed = rows.filter(r => num(r.rehab_count) > 0).length
@@ -223,19 +241,22 @@ export default function SubstanceUsers() {
     const firstReason = Object.entries(frMap).sort((a, b) => b[1] - a[1]).slice(0, 10)
       .map(([name, value]) => ({ name, value }))
 
-    // [4] regular_drugs unnest
-    const rdCount = {}, rdPriceSum = {}, rdPriceN = {}
-    rows.forEach(r => (r.regular_drugs || []).forEach(d => {
-      const name = (d?.drug || '').trim(); if (!name) return
-      rdCount[name] = (rdCount[name] || 0) + 1
-      const p = num(d?.price)
-      if (p != null) { rdPriceSum[name] = (rdPriceSum[name] || 0) + p; rdPriceN[name] = (rdPriceN[name] || 0) + 1 }
-    }))
+    // [4] regular_drugs unnest — count + ราคา/หน่วย (normalize ต่อ 1 หน่วยจาก parsePrice) ติด month
+    const rdCount = {}
+    const priceRecords = {}   // drug → [{ amount, unit, date:'YYYY-MM-DD', month:'YYYY-MM' }]
+    rows.forEach(r => {
+      const date = r.surveyed_at ? String(r.surveyed_at).slice(0, 10) : null
+      const month = date ? date.slice(0, 7) : null
+      ;(r.regular_drugs || []).forEach(d => {
+        const name = (d?.drug || '').trim(); if (!name) return
+        rdCount[name] = (rdCount[name] || 0) + 1
+        const amount = num(d?.price)               // ราคา normalize (number) จาก parser
+        const unit = (d?.unit || '').trim() || null
+        if (amount != null && unit && month) (priceRecords[name] ||= []).push({ amount, unit, date, month })
+      })
+    })
     const regularDrugs = Object.entries(rdCount).filter(([, v]) => v >= 1)
       .sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }))
-    const priceAvg = Object.keys(rdPriceN).filter(k => rdPriceN[k] >= 3)
-      .map(k => ({ name: k, value: Math.round(rdPriceSum[k] / rdPriceN[k]) }))
-      .sort((a, b) => b.value - a.value)
 
     // [5.1] arrest count buckets
     const arBuckets = { '0': 0, '1': 0, '2': 0, '3+': 0 }
@@ -253,19 +274,25 @@ export default function SubstanceUsers() {
     const charges = topN(acMap, 5)
 
     // [6] dealer_locations[].district → count
+    // กรองเฉพาะเขต กทม. (ขึ้นต้น "เขต") — ตัดอำเภอนอก กทม. ออกจาก choropleth + ตาราง (raw ใน DB คงไว้)
+    const isBangkokDistrict = dn => dn.startsWith('เขต')
     const distMap = {}
+    let dealerDropped = 0
     rows.forEach(r => (r.dealer_locations || []).forEach(d => {
-      const dn = (d?.district || '').trim(); if (dn) distMap[dn] = (distMap[dn] || 0) + 1
+      const dn = (d?.district || '').trim(); if (!dn) return
+      if (!isBangkokDistrict(dn)) { dealerDropped++; return }
+      distMap[dn] = (distMap[dn] || 0) + 1
     }))
     const districtMax = Math.max(1, ...Object.values(distMap))
     const districtTable = Object.entries(distMap).map(([name, count]) => ({ name, count }))
 
     return {
       total,
-      avgAge: avg(ages), avgFirstAge: avg(firstAges), arrested, rehabbed,
+      avgAge: avg(avgAges), avgFirstAge: avg(avgFirstAges), ageDropped, firstAgeDropped, arrested, rehabbed,
       ageGroups, occupations, income, firstUseHist, firstDrug, firstReason,
-      regularDrugs, priceAvg, arrestBuckets, arrestDrugs, charges,
-      distMap, districtMax, districtTable,
+      regularDrugs, priceRecords,
+      arrestBuckets, arrestDrugs, charges,
+      distMap, districtMax, districtTable, dealerDropped,
     }
   }, [filteredRows])
 
@@ -292,9 +319,16 @@ export default function SubstanceUsers() {
   }, [agg.districtTable, search, sortDesc])
 
   if (loading) return (
-    <div className="p-16 text-center">
-      <div className="inline-block w-12 h-12 border-4 border-slate-200 border-t-violet-600 rounded-full animate-spin mb-4" />
-      <p className="text-slate-500">กำลังโหลดข้อมูล...</p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-violet-50/30">
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+        <div className="h-40 rounded-2xl bg-gradient-to-r from-violet-200 to-purple-200 animate-pulse" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          {Array.from({ length: 5 }).map((_, i) => <KpiSkeleton key={i} />)}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {Array.from({ length: 4 }).map((_, i) => <ChartSkeleton key={i} />)}
+        </div>
+      </div>
     </div>
   )
   if (error) return (
@@ -334,41 +368,59 @@ export default function SubstanceUsers() {
   }
 
   return (
-    <div className="bg-white min-h-screen">
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-12">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-violet-50/30">
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
 
-        {/* Hero */}
-        <header className="bg-gradient-to-br from-purple-900 via-violet-800 to-purple-900 rounded-xl px-8 py-8 text-white shadow-xl shadow-purple-900/20">
-          <div className="flex items-start justify-between gap-4">
+        {/* Hero — ม่วง gradient + glassmorphism + count badge */}
+        <header className="relative overflow-hidden rounded-2xl px-8 py-7 text-white
+          bg-gradient-to-r from-violet-700 via-purple-700 to-violet-800 shadow-2xl shadow-violet-900/30">
+          <div className="absolute -top-12 -right-12 w-48 h-48 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-8 -left-8 w-40 h-40 bg-fuchsia-400/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="relative flex items-start justify-between gap-4">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-widest text-violet-300 mb-2">Substance Users · Drug Survey Data</div>
+              <div className="text-xs font-semibold uppercase tracking-widest text-violet-200 mb-2">Substance Users · Drug Survey Data</div>
               <h1 className="text-4xl font-bold tracking-tight">แบบเก็บข้อมูลจากผู้เสพ</h1>
-              <p className="text-violet-200 text-base mt-2 leading-relaxed">สรุปผลจาก {agg.total} ราย · ข้อมูลสำรวจผู้เสพยาเสพติด</p>
+              <p className="text-violet-200 text-base mt-2 leading-relaxed">ข้อมูลสำรวจผู้เสพยาเสพติด · ภาพรวมเชิงบริหาร</p>
             </div>
-            <HeroActions onRefresh={load} refreshing={loading} sourceInfo={sourceInfo} />
+            <div className="flex flex-col items-end gap-3 shrink-0">
+              <HeroActions onRefresh={load} refreshing={loading} sourceInfo={sourceInfo} />
+              <div className="text-right">
+                <div className="text-4xl font-bold text-white tabular-nums leading-none"><AnimatedCounter value={agg.total} /></div>
+                <div className="text-xs text-white/70 mt-1">รายในระบบ</div>
+              </div>
+            </div>
           </div>
         </header>
 
-        <DateFilter availableYears={availableYears} />
+        {/* Sticky bar — DateFilter + ช่วงข้อมูล + อัปเดตล่าสุด */}
+        <div className="sticky top-0 z-30 -mx-6 px-6 py-3 print:hidden bg-white/80 backdrop-blur-md border-b border-slate-200">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <DateFilter availableYears={availableYears} />
+              <span className="text-xs text-slate-500">ข้อมูลช่วง {periodLabel} · {agg.total.toLocaleString()} ราย</span>
+            </div>
+            {lastUpload && <div className="text-xs text-slate-400">อัปเดตล่าสุด {lastUpload}</div>}
+          </div>
+        </div>
 
         {/* SECTION 1 — KPI */}
         <section>
           <SectionHeader title="ภาพรวม" desc="ตัวชี้วัดหลักของกลุ่มผู้เสพในระบบ" />
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            <KpiCard icon={<Users size={64} />} gradient="bg-gradient-to-br from-indigo-600 to-indigo-700"
-              label="ผู้เสพรวม" value={agg.total.toLocaleString()} sub="ทั้งหมดในระบบ" />
-            <KpiCard icon={<Activity size={64} />} gradient="bg-gradient-to-br from-sky-500 to-cyan-600"
-              label="อายุเฉลี่ยของผู้เสพ" value={agg.avgAge.toFixed(1)} sub="ปี" />
-            <KpiCard icon={<Clock size={64} />} gradient="bg-gradient-to-br from-violet-500 to-purple-600"
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <KpiCard icon={<Users size={26} />} gradient="from-violet-500 to-purple-600" shadow="shadow-violet-500/30"
+              label="ผู้เสพรวม" value={<AnimatedCounter value={agg.total} />} sub="ทั้งหมดในระบบ" />
+            <KpiCard icon={<Activity size={26} />} gradient="from-cyan-500 to-blue-600" shadow="shadow-cyan-500/30"
+              label="อายุเฉลี่ยของผู้เสพ" value={<AnimatedCounter value={agg.avgAge} decimals={1} />} sub="ปี" />
+            <KpiCard icon={<Clock size={26} />} gradient="from-fuchsia-500 to-purple-600" shadow="shadow-fuchsia-500/30"
               label="อายุที่เริ่มเสพเฉลี่ย"
-              value={agg.avgFirstAge > 0 ? agg.avgFirstAge.toFixed(1) : '—'}
+              value={agg.avgFirstAge > 0 ? <AnimatedCounter value={agg.avgFirstAge} decimals={1} /> : '—'}
               sub={agg.avgFirstAge > 0 ? 'ปี' : 'ไม่มีข้อมูล'} />
-            <KpiCard icon={<Shield size={64} />} gradient="bg-gradient-to-br from-rose-500 to-red-600"
+            <KpiCard icon={<Shield size={26} />} gradient="from-rose-500 to-pink-600" shadow="shadow-rose-500/30"
               label="เคยมีประวัติถูกจับกุม"
-              value={`${agg.total ? ((agg.arrested / agg.total) * 100).toFixed(0) : 0}%`} sub={`${agg.arrested} ราย`} />
-            <KpiCard icon={<Heart size={64} />} gradient="bg-gradient-to-br from-emerald-500 to-green-600"
+              value={<AnimatedCounter value={agg.total ? (agg.arrested / agg.total) * 100 : 0} suffix="%" />} sub={`${agg.arrested} ราย`} />
+            <KpiCard icon={<Heart size={26} />} gradient="from-emerald-500 to-teal-600" shadow="shadow-emerald-500/30"
               label="เคยมีประวัติถูกบำบัด"
-              value={`${agg.total ? ((agg.rehabbed / agg.total) * 100).toFixed(0) : 0}%`} sub={`${agg.rehabbed} ราย`} />
+              value={<AnimatedCounter value={agg.total ? (agg.rehabbed / agg.total) * 100 : 0} suffix="%" />} sub={`${agg.rehabbed} ราย`} />
           </div>
         </section>
 
@@ -407,6 +459,8 @@ export default function SubstanceUsers() {
 
 // ─── tab navigation ───────────────────────────────────────────────────────────
 
+const TAB_ICONS = { demographics: Users, history: Clock, drugs: Activity, arrests: Shield, dealers: MapPin }
+
 function TabBar({ tabs, active, onChange, viewMode, setViewMode }) {
   const onKeyDown = (e, idx) => {
     if (e.key === 'ArrowRight') { e.preventDefault(); onChange(tabs[(idx + 1) % tabs.length].id) }
@@ -414,11 +468,11 @@ function TabBar({ tabs, active, onChange, viewMode, setViewMode }) {
   }
   const allOn = viewMode === 'all'
   return (
-    <div className="tab-bar print:hidden sticky top-0 z-20 -mx-2 px-2 py-2 mb-8 flex items-center justify-between gap-3
-      bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl shadow-sm">
-      <div role="tablist" aria-label="หมวดข้อมูลผู้เสพ" className="flex items-center gap-2 px-2 overflow-x-auto">
+    <div className="tab-bar print:hidden border-b border-slate-200">
+      <nav role="tablist" aria-label="หมวดข้อมูลผู้เสพ" className="flex gap-1 -mb-px overflow-x-auto">
         {tabs.map((t, i) => {
           const isActive = t.id === active
+          const Icon = TAB_ICONS[t.id]
           return (
             <button
               key={t.id}
@@ -427,27 +481,26 @@ function TabBar({ tabs, active, onChange, viewMode, setViewMode }) {
               tabIndex={isActive ? 0 : -1}
               onClick={() => onChange(t.id)}
               onKeyDown={e => onKeyDown(e, i)}
-              className={`min-w-[140px] text-center px-6 py-4 text-sm rounded-lg transition-colors duration-200 whitespace-nowrap
-                ${isActive
-                  ? 'text-violet-700 font-semibold bg-violet-50/50 border-b-2 border-violet-600 rounded-b-none'
-                  : 'text-slate-600 font-medium hover:text-violet-700 hover:bg-violet-50/50'}`}
+              className={`relative px-4 py-3 text-sm font-medium transition whitespace-nowrap hover:text-violet-700
+                ${isActive ? 'text-violet-700' : 'text-slate-500'}`}
             >
-              {t.label}
+              <span className="flex items-center gap-2">{Icon && <Icon size={16} />}{t.label}</span>
+              {isActive && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-gradient-to-r from-violet-500 to-purple-600" />
+              )}
             </button>
           )
         })}
-      </div>
-      <button
-        onClick={() => setViewMode(allOn ? 'tabs' : 'all')}
-        aria-pressed={allOn}
-        className={`shrink-0 inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg border transition-colors duration-200
-          ${allOn
-            ? 'bg-violet-100 border-violet-400 text-violet-700'
-            : 'bg-white border-slate-200 text-slate-600 hover:border-violet-300 hover:bg-violet-50'}`}
-      >
-        <LayoutGrid size={16} />
-        แสดงทั้งหมด
-      </button>
+        <button
+          onClick={() => setViewMode(allOn ? 'tabs' : 'all')}
+          aria-pressed={allOn}
+          className={`ml-auto px-4 py-3 text-sm font-medium transition whitespace-nowrap inline-flex items-center gap-1.5
+            ${allOn ? 'text-violet-700' : 'text-slate-500 hover:text-violet-700'}`}
+        >
+          <LayoutGrid size={16} />
+          แสดงทั้งหมด
+        </button>
+      </nav>
     </div>
   )
 }
@@ -458,7 +511,7 @@ function DemographicsSection({ agg, yearCtl }) {
   return (
     <section>
       <SectionHeader title="ข้อมูลประชากร" desc="อายุ อาชีพ และรายได้ต่อเดือนของผู้เสพ" />
-      <div className="space-y-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard title="กลุ่มอายุ" desc="การกระจายตัวตามช่วงอายุ" {...yearCtl}><VBar data={agg.ageGroups} unit=" ราย" palette="blue" /></ChartCard>
         <ChartCard title="อาชีพ (10 อันดับแรก)" desc="อาชีพที่พบมากที่สุด" {...yearCtl}><HBar data={agg.occupations} unit=" คน" palette="indigo" /></ChartCard>
         <ChartCard title="รายได้ต่อเดือน" desc="ช่วงรายได้ของผู้เสพ" {...yearCtl}><HBar data={agg.income} unit=" คน" palette="emerald" /></ChartCard>
@@ -471,7 +524,7 @@ function HistorySection({ agg, yearCtl }) {
   return (
     <section>
       <SectionHeader title="ประวัติการเสพ" desc="อายุที่เริ่มเสพ ชนิดยา และสาเหตุการเสพครั้งแรก" />
-      <div className="space-y-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard title="อายุที่เริ่มเสพ" desc="ช่วงอายุที่เริ่มใช้ยาเสพติด" {...yearCtl}>
           {agg.firstUseHist.length ? <VBar data={agg.firstUseHist} palette="amber" /> : <Empty />}
         </ChartCard>
@@ -490,9 +543,7 @@ function DrugsSection({ agg, yearCtl }) {
         <ChartCard title="ยาที่ใช้เป็นประจำ" desc="ชนิดยาที่ใช้เป็นประจำ" {...yearCtl}>
           {agg.regularDrugs.length ? <HBar data={agg.regularDrugs} unit=" ราย" palette="teal" /> : <Empty />}
         </ChartCard>
-        <ChartCard title="ราคาเฉลี่ยต่อยา" desc="ราคาเฉลี่ยต่อหน่วย (ผู้ระบุราคา ≥ 3 ราย)" {...yearCtl}>
-          {agg.priceAvg.length ? <HBar data={agg.priceAvg} unit=" บาท" palette="orange" /> : <Empty />}
-        </ChartCard>
+        <PriceTrend records={agg.priceRecords} periodLabel={yearCtl.periodLabel} />
       </div>
     </section>
   )
@@ -502,7 +553,7 @@ function ArrestsSection({ agg, yearCtl }) {
   return (
     <section>
       <SectionHeader title="ประวัติการถูกจับ และ การบำบัด" desc="ประวัติการถูกจับและการเข้ารับการบำบัด" />
-      <div className="space-y-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard title="จำนวนครั้งที่ถูกจับ" desc="การกระจายตามจำนวนครั้งที่ถูกจับ" {...yearCtl}><VBar data={agg.arrestBuckets} unit=" ครั้ง" palette="red" /></ChartCard>
         <ChartCard title="ชนิดยาตอนถูกจับ" desc="ชนิดยาเสพติดที่พบขณะถูกจับ" {...yearCtl}>
           {agg.arrestDrugs.length ? <HBar data={agg.arrestDrugs} unit=" คน" palette="rose" /> : <Empty />}
@@ -617,19 +668,51 @@ function FooterPill({ periodLabel }) {
 
 function ChartCard({ title, desc, periodLabel, children }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition p-6">
-      <div>
-        <h3 className="text-lg font-bold text-slate-900">{title}</h3>
-        {desc && <p className="text-sm text-slate-500 mt-1">{desc}</p>}
+    <div className="group relative bg-white rounded-2xl p-6 border border-slate-100
+      shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_40px_rgba(124,58,237,0.12)]
+      hover:border-violet-200 hover:-translate-y-0.5 transition-all duration-300">
+      {/* accent line top */}
+      <div className="absolute top-0 left-6 right-6 h-0.5 bg-gradient-to-r from-transparent via-violet-300 to-transparent opacity-0 group-hover:opacity-100 transition" />
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-bold text-slate-900">{title}</h3>
+          {desc && <p className="text-sm text-slate-500 mt-0.5">{desc}</p>}
+        </div>
+        <div className="flex items-center gap-1 text-slate-300">
+          <button type="button" className="hover:text-violet-600 p-1 transition" aria-label="ขยาย"><Maximize2 size={14} /></button>
+          <button type="button" className="hover:text-violet-600 px-1 text-lg leading-none -mt-1 transition" aria-label="เพิ่มเติม">⋯</button>
+        </div>
       </div>
-      <div className="mt-6">{children}</div>
+      {children}
       <FooterPill periodLabel={periodLabel} />
     </div>
   )
 }
 
-function Empty() {
-  return <div className="h-[320px] flex items-center justify-center text-slate-400 text-sm">ไม่มีข้อมูล</div>
+// empty state — illustration + ข้อความ
+function Empty({ message = 'ไม่มีข้อมูล' }) {
+  return (
+    <div className="h-[320px] flex flex-col items-center justify-center text-center">
+      <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+        <Search className="w-7 h-7 text-slate-400" />
+      </div>
+      <div className="text-sm text-slate-500">{message}</div>
+    </div>
+  )
+}
+
+// loading skeletons
+function ChartSkeleton() {
+  return (
+    <div className="bg-white rounded-2xl p-6 border border-slate-100">
+      <div className="h-5 w-32 bg-slate-100 rounded animate-pulse mb-2" />
+      <div className="h-4 w-48 bg-slate-100 rounded animate-pulse mb-6" />
+      <div className="h-64 bg-slate-50 rounded-lg animate-pulse" />
+    </div>
+  )
+}
+function KpiSkeleton() {
+  return <div className="rounded-2xl bg-slate-100 animate-pulse h-32" />
 }
 
 const TOOLTIP_STYLE = {
@@ -690,15 +773,383 @@ function HBar({ data, height = 380, unit = '', rainbow = false, palette = 'viole
   )
 }
 
-// KpiCard — vivid gradient + ตัวเลขขาวใหญ่ + icon โปร่งหลังการ์ด
-function KpiCard({ icon, label, value, sub, gradient }) {
+// ── ราคายา — ค่าเฉลี่ยรายเดือน (ปีงบ) · vibrant Active-users style + เทียบปีก่อน ──
+const DRUG_PRICE_COLORS = {
+  'ยาบ้า': '#f43f5e',   // rose-500
+  'ไอซ์': '#a855f7',    // purple-500
+  'คีตามีน': '#3b82f6', // blue-500
+  'เฮโรอีน': '#f59e0b', // amber-500
+  'ยาอี': '#ec4899',    // pink-500
+  'กัญชา': '#10b981',   // emerald-500
+  'ยาเค': '#06b6d4',    // cyan-500
+  'อื่นๆ': '#6b7280',   // gray-500
+}
+// สีเส้น "ปีก่อน" (จางลง) — ใช้ตอนเทียบปีงบก่อน
+const DRUG_PREV_COLORS = {
+  'ยาบ้า': '#fda4af', 'ไอซ์': '#d8b4fe', 'คีตามีน': '#93c5fd', 'เฮโรอีน': '#fcd34d',
+  'ยาอี': '#f9a8d4', 'กัญชา': '#6ee7b7', 'ยาเค': '#67e8f9', 'อื่นๆ': '#d1d5db',
+}
+// gradient พื้นหลัง KPI card (literal — ให้ Tailwind scan เจอ)
+const DRUG_KPI_GRADIENT = {
+  'ยาบ้า': 'from-rose-500 to-pink-600',
+  'ไอซ์': 'from-violet-500 to-purple-600',
+  'คีตามีน': 'from-blue-500 to-indigo-600',
+  'เฮโรอีน': 'from-amber-500 to-orange-600',
+  'ยาอี': 'from-pink-500 to-rose-600',
+  'กัญชา': 'from-emerald-500 to-green-600',
+  'ยาเค': 'from-cyan-500 to-sky-600',
+}
+// glow shadow สีเดียวกับยา (KPI card)
+const DRUG_KPI_SHADOW = {
+  'ยาบ้า': 'shadow-rose-500/30 hover:shadow-rose-500/40',
+  'ไอซ์': 'shadow-purple-500/30 hover:shadow-purple-500/40',
+  'คีตามีน': 'shadow-blue-500/30 hover:shadow-blue-500/40',
+  'เฮโรอีน': 'shadow-amber-500/30 hover:shadow-amber-500/40',
+  'ยาอี': 'shadow-pink-500/30 hover:shadow-pink-500/40',
+  'กัญชา': 'shadow-emerald-500/30 hover:shadow-emerald-500/40',
+  'ยาเค': 'shadow-cyan-500/30 hover:shadow-cyan-500/40',
+}
+// chip ยา active — นูน + ring + scale (literal)
+const DRUG_CHIP_ACTIVE = {
+  'ยาบ้า': 'bg-rose-500 text-white shadow-lg shadow-rose-500/40 ring-2 ring-rose-200 scale-105',
+  'ไอซ์': 'bg-violet-500 text-white shadow-lg shadow-violet-500/40 ring-2 ring-violet-200 scale-105',
+  'คีตามีน': 'bg-blue-500 text-white shadow-lg shadow-blue-500/40 ring-2 ring-blue-200 scale-105',
+  'เฮโรอีน': 'bg-amber-500 text-white shadow-lg shadow-amber-500/40 ring-2 ring-amber-200 scale-105',
+  'ยาอี': 'bg-pink-500 text-white shadow-lg shadow-pink-500/40 ring-2 ring-pink-200 scale-105',
+  'กัญชา': 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 ring-2 ring-emerald-200 scale-105',
+  'ยาเค': 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/40 ring-2 ring-cyan-200 scale-105',
+}
+const drugColor = d => DRUG_PRICE_COLORS[d] || '#6b7280'
+const drugPrevColor = d => DRUG_PREV_COLORS[d] || '#d1d5db'
+// fiscalMonth (1-12) → ชื่อเดือน (ต.ค.=1 … ก.ย.=12)
+const FISCAL_MONTH_LABELS = ['', 'ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.']
+const getFiscalMonth = date => { const m = date.getMonth() + 1; return m >= 10 ? m - 9 : m + 3 }
+const normUnit = u => (u === 'จี' ? 'กรัม' : u)        // normalize: จี → กรัม
+const mean = arr => arr.reduce((s, v) => s + v, 0) / arr.length
+
+// เตรียม records: normalize unit, หา unit หลักต่อยา (mode), กรองเฉพาะ unit หลัก, ติด fy/fm
+function prepPriceData(records) {
+  const unitByDrug = {}
+  const cleanRecs = {}   // drug → [{ amount, fy, fm }]
+  for (const [drug, recs] of Object.entries(records)) {
+    const normed = recs.map(r => ({ amount: r.amount, date: r.date, u: normUnit(r.unit) }))
+    const mainUnit = modeOf(normed.map(r => r.u)) || '?'
+    unitByDrug[drug] = mainUnit
+    cleanRecs[drug] = normed
+      .filter(r => r.u === mainUnit)
+      .map(r => ({ amount: r.amount, fy: dateToFiscalYear(r.date), fm: getFiscalMonth(new Date(r.date)) }))
+      .filter(r => r.fy != null && r.fm != null)
+  }
+  return { unitByDrug, cleanRecs }
+}
+
+// mode 'drugs' — x=fiscalMonth, คอลัมน์=ยา, ค่า=mean (n ≥ 1 ต่อ ยา×เดือน), เก็บ __n ไว้คุมขนาด dot
+function buildDrugsData(cleanRecs, drugs) {
+  const out = []
+  for (let fm = 1; fm <= 12; fm++) {
+    const point = { fiscalMonth: fm, label: FISCAL_MONTH_LABELS[fm] }
+    let has = false
+    drugs.forEach(drug => {
+      const amts = (cleanRecs[drug] || []).filter(r => r.fm === fm).map(r => r.amount)
+      if (amts.length >= 1) { point[drug] = Math.round(mean(amts)); point[`${drug}__n`] = amts.length; has = true }
+    })
+    if (has) out.push(point)
+  }
+  return out
+}
+
+// เทียบปีก่อน — x=fiscalMonth, ต่อยา 2 คีย์ `${drug}_${curFY}` / `${drug}_${prevFY}` (mean, n ≥ 1)
+function buildCompareData(cleanRecs, drugs, curFY, prevFY) {
+  const out = []
+  for (let fm = 1; fm <= 12; fm++) {
+    const point = { fiscalMonth: fm, label: FISCAL_MONTH_LABELS[fm] }
+    let has = false
+    drugs.forEach(drug => {
+      const recs = cleanRecs[drug] || []
+      ;[curFY, prevFY].forEach(fy => {
+        if (fy == null) return
+        const amts = recs.filter(r => r.fm === fm && r.fy === fy).map(r => r.amount)
+        if (amts.length >= 1) { point[`${drug}_${fy}`] = Math.round(mean(amts)); point[`${drug}_${fy}__n`] = amts.length; has = true }
+      })
+    })
+    if (has) out.push(point)
+  }
+  return out
+}
+
+// ยาที่ผ่านเกณฑ์ — records (unit หลัก) ≥ 5, เรียงตามจำนวน
+function eligiblePriceDrugs(cleanRecs) {
+  return Object.keys(cleanRecs)
+    .filter(d => cleanRecs[d].length >= 5)
+    .sort((a, b) => cleanRecs[b].length - cleanRecs[a].length)
+}
+
+// จุดสูงสุดของแต่ละเส้น (สำหรับ ReferenceDot highlight)
+function findPeak(data, key) {
+  let max = -Infinity, peak = null
+  for (const d of data) { if (d[key] != null && d[key] > max) { max = d[key]; peak = d } }
+  return peak
+}
+
+// custom dot — n ≥ 3 → จุดใหญ่ทึบ ; n = 1-2 → จุดเล็ก จาง (บอกว่า data น้อย)
+const renderPriceDot = color => props => {
+  const { cx, cy, payload, dataKey, index } = props
+  if (cx == null || cy == null || payload?.[dataKey] == null) return <g key={index} />
+  const n = payload[`${dataKey}__n`] ?? 0
+  const big = n >= 3
+  return <circle key={index} cx={cx} cy={cy} r={big ? 5 : 3} fill={color}
+    stroke="#fff" strokeWidth={3} opacity={big ? 1 : 0.7} />
+}
+
+// KPI card — gradient สด + glow shadow สีเดียวกับยา + นูนเมื่อ hover
+function PriceKpiCard({ drug, value, unit, change, gradient, shadow }) {
+  const up = change != null && change >= 0
   return (
-    <div className={`relative overflow-hidden rounded-2xl p-6 shadow-lg ${gradient}
-      hover:shadow-xl hover:scale-[1.02] transition`}>
-      <div className="absolute right-4 top-4 text-white/30 pointer-events-none">{icon}</div>
-      <div className="text-sm text-white/90 font-medium">{label}</div>
-      <div className="text-4xl font-bold text-white tabular-nums mt-3 leading-none">{value}</div>
-      <div className="text-xs text-white/70 mt-2">{sub}</div>
+    <div className={`relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br ${gradient} shadow-lg ${shadow} hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer`}>
+      <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 blur-2xl" />
+      <div className="relative">
+        <div className="text-xs text-white/80">{drug}</div>
+        <div className="text-2xl font-bold text-white tabular-nums mt-1">
+          {value != null ? <>฿{value.toLocaleString()}<span className="text-sm text-white/70 ml-1">/{unit}</span></> : '—'}
+        </div>
+        {change != null && (
+          <div className="text-xs text-white/90 mt-1 flex items-center gap-1">
+            {up ? '▲' : '▼'} {Math.abs(change).toFixed(1)}% vs ปีก่อน
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// custom tooltip — popup สวย ; dedupe Area+Line ที่ dataKey เดียวกัน (เก็บ Line)
+function PriceTooltip({ active, payload, label, unitFor }) {
+  if (!active || !payload?.length) return null
+  const byKey = {}
+  payload.forEach(p => { if (p.value != null) byKey[p.dataKey] = p })   // Line render หลัง → ทับ Area
+  const rows = Object.values(byKey)
+  if (!rows.length) return null
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 min-w-[180px]">
+      <div className="text-xs text-slate-500 font-medium mb-2 pb-2 border-b border-slate-100">{label}</div>
+      <div className="space-y-1.5">
+        {rows.map(p => (
+          <div key={p.dataKey} className="flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
+              <span className="text-slate-700">{p.name}</span>
+            </div>
+            <span className="font-semibold tabular-nums text-slate-900">
+              ฿{p.value.toLocaleString()}{unitFor?.(p.dataKey) ? `/${unitFor(p.dataKey)}` : ''}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// chart — ComposedChart: Area gradient จัด + Line นูน (glow) + highlight จุดสูงสุด
+function PriceComposedChart({ data, lines, unitFor }) {
+  return (
+    <ResponsiveContainer width="100%" height={340}>
+      <ComposedChart data={data} margin={{ top: 28, right: 24, left: 0, bottom: 0 }}>
+        <defs>
+          {lines.map((line, idx) => (
+            <linearGradient key={line.key} id={`pricegrad-${idx}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={line.color} stopOpacity={0.45} />
+              <stop offset="100%" stopColor={line.color} stopOpacity={0.05} />
+            </linearGradient>
+          ))}
+          <filter id="pricedot-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+            <feMerge>
+              <feMergeNode in="coloredBlur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} tickMargin={8} />
+        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickMargin={8} width={56} tickFormatter={v => `฿${v}`} />
+        <Tooltip content={<PriceTooltip unitFor={unitFor} />} cursor={{ stroke: '#6366f1', strokeDasharray: '3 3' }} />
+        {lines.map((line, idx) => (
+          <Area key={`area-${line.key}`} type="monotone" dataKey={line.key} stroke="none"
+            fill={`url(#pricegrad-${idx})`} legendType="none" connectNulls={false} isAnimationActive={false} />
+        ))}
+        {lines.map(line => (
+          <Line key={line.key} type="monotone" dataKey={line.key} name={line.name}
+            stroke={line.color} strokeWidth={line.isPrevYear ? 2.5 : 3}
+            strokeDasharray={line.isPrevYear ? '6 4' : undefined}
+            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}
+            dot={renderPriceDot(line.color)}
+            activeDot={{ r: 8, stroke: '#fff', strokeWidth: 3, fill: line.color, filter: 'url(#pricedot-glow)' }}
+            connectNulls={false} />
+        ))}
+        {/* highlight จุดสูงสุดแต่ละเส้น — ring + label + glow */}
+        {lines.filter(l => !l.isPrevYear).map(line => {
+          const peak = findPeak(data, line.key)
+          if (!peak) return null
+          return (
+            <ReferenceDot key={`peak-${line.key}`} x={peak.label} y={peak[line.key]}
+              r={9} fill="none" stroke={line.color} strokeWidth={3} filter="url(#pricedot-glow)" isFront>
+              <Label value={`สูงสุด ฿${peak[line.key].toLocaleString()}`} position="top" offset={12}
+                fill={line.color} fontSize={11} fontWeight={700} />
+            </ReferenceDot>
+          )
+        })}
+        <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: 13, paddingTop: 12 }} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  )
+}
+
+// ราคายา — mean รายเดือน (ปีงบ) + toggle เทียบปีก่อน · vibrant
+function PriceTrend({ records, periodLabel }) {
+  const { unitByDrug, cleanRecs } = useMemo(() => prepPriceData(records), [records])
+  const eligible = useMemo(() => eligiblePriceDrugs(cleanRecs), [cleanRecs])
+
+  const [selectedDrugs, setSelectedDrugs] = useState([])     // [] = ทุกยา
+  const [compareLastYear, setCompareLastYear] = useState(false)
+
+  const activeDrugs = selectedDrugs.length ? eligible.filter(d => selectedDrugs.includes(d)) : eligible
+  const toggleDrug = d => setSelectedDrugs(prev => {
+    if (prev.length === 0) return [d]               // จาก "ทุกยา" → เลือกตัวเดียว
+    const next = prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
+    return next.length === eligible.length ? [] : next
+  })
+
+  // ปีงบล่าสุด/ก่อน จากยาที่เลือก
+  const { curFY, prevFY } = useMemo(() => {
+    const fys = [...new Set(activeDrugs.flatMap(d => (cleanRecs[d] || []).map(r => r.fy)))].sort((a, b) => b - a)
+    const cur = fys[0] ?? null
+    return { curFY: cur, prevFY: cur != null ? cur - 1 : null }
+  }, [activeDrugs, cleanRecs])
+
+  // KPI cards (สูงสุด 4) — value=mean รวม, change=ปีงบล่าสุด vs ก่อน
+  const kpis = useMemo(() => activeDrugs.slice(0, 4).map(drug => {
+    const recs = cleanRecs[drug] || []
+    const all = recs.map(r => r.amount)
+    const cur = recs.filter(r => r.fy === curFY).map(r => r.amount)
+    const prev = recs.filter(r => r.fy === prevFY).map(r => r.amount)
+    const mc = cur.length ? mean(cur) : null
+    const mp = prev.length ? mean(prev) : null
+    const change = (mc != null && mp != null && mp !== 0) ? (mc - mp) / mp * 100 : null
+    return { drug, value: all.length ? Math.round(mean(all)) : null, unit: unitByDrug[drug], change,
+      gradient: DRUG_KPI_GRADIENT[drug] || 'from-slate-500 to-slate-600',
+      shadow: DRUG_KPI_SHADOW[drug] || 'shadow-slate-500/30 hover:shadow-slate-500/40' }
+  }), [activeDrugs, cleanRecs, unitByDrug, curFY, prevFY])
+
+  // chartData + lines — OFF: 1 เส้น/ยา ; ON: 2 เส้น/ยา (ปีปัจจุบัน + ปีก่อนเส้นประ)
+  const { chartData, lines } = useMemo(() => {
+    if (!compareLastYear) {
+      const data = buildDrugsData(cleanRecs, activeDrugs)
+      const ls = activeDrugs.map(d => ({ key: d, name: d, color: drugColor(d), isPrevYear: false }))
+      return { chartData: data, lines: ls }
+    }
+    const data = buildCompareData(cleanRecs, activeDrugs, curFY, prevFY)
+    const ls = activeDrugs.flatMap(d => [
+      { key: `${d}_${curFY}`, name: `${d} ${curFY}`, color: drugColor(d), isPrevYear: false },
+      { key: `${d}_${prevFY}`, name: `${d} ${prevFY}`, color: drugPrevColor(d), isPrevYear: true },
+    ])
+    return { chartData: data, lines: ls }
+  }, [compareLastYear, cleanRecs, activeDrugs, curFY, prevFY])
+
+  const unitFor = dk => unitByDrug[String(dk).replace(/_\d+$/, '')]
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.08)] hover:shadow-[0_12px_40px_rgb(99,102,241,0.15)] transition-all duration-300 p-6">
+      {/* header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">ราคายา</h3>
+          <p className="text-sm text-slate-500 mt-0.5">ค่าเฉลี่ยรายเดือน (ปีงบ ต.ค.–ก.ย.)</p>
+        </div>
+        <div className="flex items-center gap-1 text-slate-300">
+          <button type="button" className="p-1.5 rounded-lg hover:bg-slate-50 hover:text-slate-500 transition" aria-label="ขยาย"><Maximize2 size={16} /></button>
+          <button type="button" className="px-1.5 rounded-lg hover:bg-slate-50 hover:text-slate-500 transition text-lg leading-none -mt-1" aria-label="เพิ่มเติม">⋯</button>
+        </div>
+      </div>
+
+      {!eligible.length ? <Empty /> : (
+        <>
+          {/* KPI cards — gradient สด */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
+            {kpis.map(kpi => <PriceKpiCard key={kpi.drug} {...kpi} />)}
+          </div>
+
+          {/* drug selector — chip สีของยา */}
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <span className="text-xs text-slate-500 mr-1">เลือกยา:</span>
+            {eligible.map(drug => {
+              const on = selectedDrugs.length === 0 || selectedDrugs.includes(drug)
+              return (
+                <button key={drug} type="button" onClick={() => toggleDrug(drug)}
+                  className={`h-8 px-3 text-xs font-medium rounded-full transition-all duration-200 ${
+                    on ? (DRUG_CHIP_ACTIVE[drug] || 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/40 ring-2 ring-indigo-200 scale-105')
+                       : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:shadow-md'}`}>
+                  ● {drug}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* toggle เทียบปีก่อน */}
+          <label className="flex items-center gap-2 cursor-pointer mb-4 w-fit">
+            <div className={`relative w-10 h-6 rounded-full transition-all ${compareLastYear ? 'bg-gradient-to-r from-indigo-500 to-purple-500 shadow-md shadow-indigo-500/30' : 'bg-slate-300'}`}>
+              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all shadow ${compareLastYear ? 'left-[18px]' : 'left-0.5'}`} />
+            </div>
+            <input type="checkbox" className="sr-only" checked={compareLastYear} onChange={e => setCompareLastYear(e.target.checked)} />
+            <span className="text-sm text-slate-700">เทียบกับปีงบก่อน</span>
+            {compareLastYear && curFY != null && (
+              <span className="text-xs text-slate-500">({prevFY} vs {curFY})</span>
+            )}
+          </label>
+
+          {/* chart */}
+          {chartData.length ? (
+            <PriceComposedChart data={chartData} lines={lines} unitFor={unitFor} />
+          ) : (
+            <div className="text-slate-400 text-sm text-center py-16">ไม่มีข้อมูลราคาในช่วงที่เลือก</div>
+          )}
+        </>
+      )}
+      <FooterPill periodLabel={periodLabel} />
+    </div>
+  )
+}
+
+// counter เด้งเลขขึ้นแบบ ease-out cubic (~0.8s) — รับ value เป็นตัวเลข
+function AnimatedCounter({ value, decimals = 0, suffix = '', prefix = '' }) {
+  const [display, setDisplay] = useState(0)
+  useEffect(() => {
+    if (typeof value !== 'number' || isNaN(value)) return
+    let raf
+    const start = performance.now()
+    const duration = 800
+    const tick = now => {
+      const p = Math.min((now - start) / duration, 1)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setDisplay(value * eased)
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [value])
+  const text = decimals ? display.toFixed(decimals) : Math.round(display).toLocaleString()
+  return <>{prefix}{text}{suffix}</>
+}
+
+// KpiCard — premium gradient + glow shadow + นูน + decoration
+function KpiCard({ icon, label, value, sub, gradient, shadow = 'shadow-violet-500/30' }) {
+  return (
+    <div className={`group relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br ${gradient} shadow-xl ${shadow}
+      hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-pointer`}>
+      <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition" />
+      <div className="relative z-10 text-white/90 mb-2">{icon}</div>
+      <div className="relative z-10 text-3xl font-bold text-white tabular-nums leading-none">{value}</div>
+      <div className="relative z-10 text-sm text-white/85 mt-1.5">{label}</div>
+      {sub && <div className="relative z-10 text-xs text-white/65 mt-0.5">{sub}</div>}
     </div>
   )
 }

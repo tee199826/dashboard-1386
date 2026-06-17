@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Upload, FileText, AlertTriangle, CheckCircle2,
   X, ChevronDown, RefreshCw, Info, LayoutDashboard,
+  BookOpen, Sparkles, BarChart3, MapPin, Shield, Map as MapIcon, TrendingUp, Users,
 } from 'lucide-react'
 import { parseFile, detectType, mapColumns, buildBatch, validateRows, parse115B, parse114, flattenSubstanceUserRow } from '../utils/importEngine'
 import { upsertRecords, upsertBknSummary, upsertRpt114, upsertSubstanceUsers } from '../utils/uploadService'
@@ -47,7 +48,7 @@ function genBatchId() {
 
 function computePreview(raw, type, fileName) {
   const mapped = type === 'substance_users'
-    ? raw.map(r => flattenSubstanceUserRow(r, fileName))
+    ? raw.map((r, i) => flattenSubstanceUserRow(r, fileName, i + 1))
     : mapColumns(raw, type)
   const b      = buildBatch(mapped, fileName, type)
   const v      = validateRows(b.rows, type)
@@ -71,6 +72,8 @@ export default function UploadPage() {
   const [storedWorkbook, setStoredWorkbook] = useState(null)
   const [detectedType, setDetectedType] = useState('unknown')
   const [selectedType, setSelectedType] = useState('complaints')
+  const [userOverride, setUserOverride] = useState(false)   // user เปลี่ยน type เองหลัง auto-detect
+  const [typeMenuOpen, setTypeMenuOpen] = useState(false)
 
   // complaints / drug_incidents state
   const [mappedRows, setMappedRows]     = useState([])
@@ -122,6 +125,8 @@ export default function UploadPage() {
       setStoredWorkbook(wb)
       setDetectedType(detected)
       setSelectedType(effectiveType)
+      setUserOverride(false)
+      setTypeMenuOpen(detected === 'unknown')   // detect ไม่ได้ → เปิด dropdown ให้เลือกเลย
 
       if (effectiveType === 'bkn_summary') {
         try {
@@ -172,10 +177,11 @@ export default function UploadPage() {
     }
   }
 
-  // ─── เปลี่ยนประเภทข้อมูล (กรณี unknown) ─────────────────────
-  const handleTypeChange = (e) => {
-    const newType = e.target.value
+  // ─── เปลี่ยนประเภทข้อมูล (override auto-detect ได้เสมอ) → reparse + revalidate ──
+  const applyType = (newType) => {
     setSelectedType(newType)
+    setUserOverride(true)
+    setTypeMenuOpen(false)
     if (!file) return
     setBkn115Error(null)
     setRpt114Error(null)
@@ -255,6 +261,8 @@ export default function UploadPage() {
     setLoadError(null)
     setDetectedType('unknown')
     setSelectedType('complaints')
+    setUserOverride(false)
+    setTypeMenuOpen(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -335,6 +343,9 @@ export default function UploadPage() {
         </div>
         <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-400 via-sky-300 to-blue-600 opacity-75" />
       </div>
+
+      {/* คู่มือ Data Flow — หน้าเว็บ ↔ ไฟล์ ↔ ตาราง DB */}
+      <DataFlowGuide />
 
       {/* ════════════ IDLE — drop zone ════════════ */}
       {phase === 'idle' && (
@@ -424,32 +435,53 @@ export default function UploadPage() {
               </button>
             </div>
 
-            {/* ประเภทข้อมูล */}
+            {/* ประเภทข้อมูล — คลิก pill เพื่อเปลี่ยน type เองได้เสมอ */}
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-slate-600 font-medium">ประเภทข้อมูล:</span>
-              {detectedType !== 'unknown' ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium border border-blue-200">
-                  <CheckCircle2 size={13} />
-                  {TYPE_LABELS[detectedType]}
-                  <span className="text-blue-400 text-xs">(ตรวจพบอัตโนมัติ)</span>
-                </span>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <AlertTriangle size={14} className="text-amber-500 flex-shrink-0" />
-                  <span className="text-xs text-amber-700">ตรวจประเภทไม่ได้ กรุณาเลือกเอง:</span>
-                  <div className="relative">
-                    <select value={selectedType} onChange={handleTypeChange}
-                      className="appearance-none pl-3 pr-8 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400">
-                      <option value="complaints">📋 เรื่องร้องเรียน</option>
-                      <option value="drug_incidents">🗺️ เหตุการณ์ยาเสพติด</option>
-                      <option value="bkn_summary">📊 สรุป บก.น. (RPT_115_B)</option>
-                      <option value="report_114">📑 รายงาน RPT_114</option>
-                      <option value="substance_users">🧑 แบบเก็บข้อมูลผู้เสพ (substance_users)</option>
-                    </select>
-                    <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-amber-600 pointer-events-none" />
-                  </div>
-                </div>
-              )}
+              <div className="relative">
+                {(() => {
+                  const undetected = detectedType === 'unknown' && !userOverride
+                  const tone = (userOverride || undetected)
+                    ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                    : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                  return (
+                    <button type="button" onClick={() => setTypeMenuOpen(o => !o)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition ${tone}`}>
+                      {undetected ? (
+                        <><AlertTriangle size={13} /> กรุณาเลือกประเภท</>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={13} />
+                          {TYPE_LABELS[selectedType]}
+                          <span className={`text-xs ${userOverride ? 'text-amber-500' : 'text-blue-400'}`}>
+                            ({userOverride ? 'ผู้ใช้เลือก' : 'ตรวจพบอัตโนมัติ'})
+                          </span>
+                        </>
+                      )}
+                      <ChevronDown size={14} className={`transition-transform ${typeMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                  )
+                })()}
+
+                {typeMenuOpen && (
+                  <>
+                    {/* click-away */}
+                    <div className="fixed inset-0 z-10" onClick={() => setTypeMenuOpen(false)} />
+                    <div className="absolute left-0 top-full mt-1 z-20 w-72 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden py-1">
+                      <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">เลือกประเภทข้อมูล</div>
+                      {Object.entries(TYPE_LABELS).map(([val, label]) => (
+                        <button key={val} type="button" onClick={() => applyType(val)}
+                          className={`w-full text-left px-3 py-2 text-sm transition flex items-center gap-2 ${
+                            selectedType === val ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-700 hover:bg-slate-50'
+                          }`}>
+                          <CheckCircle2 size={13} className={`flex-shrink-0 ${selectedType === val ? 'opacity-100' : 'opacity-0'}`} />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* สรุปตัวเลข */}
@@ -779,6 +811,109 @@ export default function UploadPage() {
                 ดูข้อมูลล่าสุดในแดชบอร์ด
               </button>
             )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Data Flow Guide — คู่มือ หน้าเว็บ ↔ ไฟล์ ↔ ตาราง DB ──────────────────────────
+
+// class literal ต่อสี (ให้ Tailwind scan เจอ) — gradient ไอคอน + border/shadow ตอน hover
+const FLOW_COLORS = {
+  blue:   { grad: 'from-blue-500 to-blue-600',     border: 'hover:border-blue-200',   shadow: 'hover:shadow-blue-500/10' },
+  indigo: { grad: 'from-indigo-500 to-indigo-600', border: 'hover:border-indigo-200', shadow: 'hover:shadow-indigo-500/10' },
+  slate:  { grad: 'from-slate-500 to-slate-600',   border: 'hover:border-slate-300',  shadow: 'hover:shadow-slate-500/10' },
+  cyan:   { grad: 'from-cyan-500 to-cyan-600',     border: 'hover:border-cyan-200',   shadow: 'hover:shadow-cyan-500/10' },
+  amber:  { grad: 'from-amber-500 to-amber-600',   border: 'hover:border-amber-200',  shadow: 'hover:shadow-amber-500/10' },
+  violet: { grad: 'from-violet-500 to-violet-600', border: 'hover:border-violet-200', shadow: 'hover:shadow-violet-500/10' },
+}
+
+const FLOW_MAP = [
+  { page: 'ภาพรวม', route: '/', icon: BarChart3, color: 'blue', files: ['ทุกไฟล์ — แสดงรวม'], tables: ['ทุกตาราง'] },
+  { page: 'รายเขต', route: '/districts', icon: MapPin, color: 'indigo', files: ['เรื่องร้องเรียน', 'เหตุการณ์ยาเสพติด', 'แบบเก็บข้อมูลผู้เสพ'], tables: ['complaints', 'drug_incidents', 'substance_users'] },
+  { page: 'สถิติ บก.น.', route: '/bkn', icon: Shield, color: 'slate', files: ['สรุป บก.น. (RPT 115_B)'], tables: ['bkn_summary'] },
+  { page: 'แผนที่ยาเสพติด', route: '/radar', icon: MapIcon, color: 'cyan', files: ['เหตุการณ์ยาเสพติด (ต้องมี lat/lng)'], tables: ['drug_incidents'] },
+  { page: 'ผลการดำเนินงาน', route: '/operations', icon: TrendingUp, color: 'amber', files: ['รายงาน 114 (RPT_114)'], tables: ['report_114'] },
+  { page: 'ผลเก็บข้อมูลผู้เสพ', route: '/substance-users', icon: Users, color: 'violet', files: ['แบบเก็บข้อมูลจากผู้เสพ (Google Form export)'], tables: ['substance_users'] },
+]
+
+function DataFlowGuide() {
+  // default: เปิดบน tablet+ (≥768px), ปิดบน mobile
+  const [open, setOpen] = useState(() =>
+    typeof window === 'undefined' ? true : window.matchMedia('(min-width: 768px)').matches)
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition mb-6 overflow-hidden">
+      {/* header — collapsible toggle */}
+      <button onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md shadow-blue-500/30">
+            <BookOpen className="w-5 h-5 text-white" />
+          </div>
+          <div className="text-left">
+            <h3 className="font-bold text-slate-900">คู่มือการนำเข้าข้อมูล</h3>
+            <p className="text-xs text-slate-500">ดูว่าไฟล์แต่ละชนิดจะแสดงในหน้าใดบ้าง</p>
+          </div>
+        </div>
+        <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {/* body */}
+      {open && (
+        <div className="px-6 pb-6 border-t border-slate-100 pt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {FLOW_MAP.map(item => {
+              const c = FLOW_COLORS[item.color] || FLOW_COLORS.blue
+              const Icon = item.icon
+              return (
+                <div key={item.route}
+                  className={`group bg-white border border-slate-100 rounded-xl p-4 transition-all duration-200 hover:shadow-md ${c.border} ${c.shadow}`}>
+                  {/* page header */}
+                  <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br ${c.grad}`}>
+                      <Icon className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-slate-900 truncate">{item.page}</div>
+                      <div className="text-xs text-slate-400 font-mono">{item.route}</div>
+                    </div>
+                  </div>
+                  {/* files */}
+                  <div className="mb-2">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">ไฟล์ที่อัป</div>
+                    <div className="space-y-1">
+                      {item.files.map(f => (
+                        <div key={f} className="flex items-start gap-1.5 text-xs">
+                          <FileText className="w-3 h-3 mt-0.5 text-slate-400 flex-shrink-0" />
+                          <span className="text-slate-700">{f}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {/* tables */}
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">ตาราง DB</div>
+                    <div className="flex flex-wrap gap-1">
+                      {item.tables.map(t => (
+                        <span key={t} className="text-[10px] font-mono px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">{t}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* info bar */}
+          <div className="mt-4 flex items-start gap-2 p-3 bg-blue-50/60 border border-blue-100 rounded-lg">
+            <Sparkles className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="text-xs text-slate-700">
+              <span className="font-semibold text-blue-700">Auto-detect:</span>{' '}
+              ระบบตรวจสอบชนิดไฟล์อัตโนมัติจากชื่อ column ถ้าตรวจผิด คลิกที่ป้ายชนิดไฟล์เพื่อเปลี่ยนเอง
+            </div>
           </div>
         </div>
       )}

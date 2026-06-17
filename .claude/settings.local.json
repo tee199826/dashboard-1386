@@ -57,7 +57,13 @@
       "Bash(cat tailwind.config.js)",
       "Bash(cat tailwind.config.cjs)",
       "Bash(grep -rn \"fontFamily\\\\|Sarabun\\\\|Prompt\\\\|Kanit\\\\|Noto\" tailwind.config.* vite.config.*)",
-      "PowerShell(npm run *)"
+      "PowerShell(npm run *)",
+      "PowerShell(npx eslint src/pages/SubstanceUsers.jsx)",
+      "Bash(cp /tmp/audit_report.mjs \"C:/Users/Acer/dashboard-1386/_audit_tmp.mjs\")",
+      "Bash(rm -f \"C:/Users/Acer/dashboard-1386/_audit_tmp.mjs\")",
+      "PowerShell(npx eslint src/pages/SubstanceRadar.jsx)",
+      "Bash(cat)",
+      "PowerShell(npx eslint src/utils/importEngine.js src/pages/SubstanceUsers.jsx)"
     ]
   }
 }

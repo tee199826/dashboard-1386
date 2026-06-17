@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { MapPin, ArrowLeft, Search, Menu, AlertTriangle } from 'lucide-react'
+import { MapPin, ArrowLeft, Search, Menu, AlertTriangle, Plus, X, SlidersHorizontal, Lightbulb, Info } from 'lucide-react'
 import { THAI_MONTHS, DNAME_TO_GROUP } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
 import { thaiDateRange } from '../utils/formatDate'
@@ -31,6 +31,14 @@ const DRUG_CATEGORIES = {
     title: 'ยาเสพติดประเภทอื่นๆ',
     subtitle: 'แสดงตำแหน่งการตรวจพบ',
   },
+}
+
+// รายชื่อยาทุกชนิด (รวมทุกหมวด) — ใช้กับมุมมอง "ดูทั้งหมด"
+const ALL_DRUGS = Object.values(DRUG_CATEGORIES).flatMap(c => c.drugs)
+const ALL_VIEW_CFG = {
+  drugs: ALL_DRUGS,
+  title: 'การกระจายตัวยาเสพติดทุกชนิด',
+  subtitle: 'แสดงตำแหน่งการตรวจพบ (ทุกชนิดยา)',
 }
 
 const DRUG_COLORS = {
@@ -132,7 +140,8 @@ export default function SubstanceRadar() {
   const { isPresentation } = usePresentation()
   const [incidents, setIncidents] = useState([])
   const [loading, setLoading] = useState(true)
-  const [category, setCategory] = useState('Club Drugs')
+  const [category, setCategory] = useState('all')
+  const [drugExpanded, setDrugExpanded] = useState(false)
   const [year, setYear] = useState('all')
   const [month, setMonth] = useState('all')
   const [viewMode, setViewMode] = useState('point')
@@ -146,6 +155,10 @@ export default function SubstanceRadar() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [loadError, setLoadError] = useState(null)
   const [retryCount, setRetryCount] = useState(0)
+  // ── floating panels (fullscreen/presentation only) — default เปิดบน desktop, ปิดบน mobile ──
+  const [controlOpen, setControlOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 768 : true)
+  const [insightOpen, setInsightOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 768 : true)
+  const [fsDrugDetail, setFsDrugDetail] = useState(false)
 
   useEffect(() => {
     if (groupFilter === 'all') setGroupDisplayMode('all')
@@ -167,8 +180,10 @@ export default function SubstanceRadar() {
     load()
   }, [retryCount])
 
-  const cfg = DRUG_CATEGORIES[category]
+  const cfg = category === 'all' ? ALL_VIEW_CFG : DRUG_CATEGORIES[category]
   const targetDrugs = cfg.drugs
+  // แผงแยกชนิดยาเปิดเมื่อกดเปิดเอง หรือมีการเลือกชนิดยาอยู่ (เพื่อให้เห็นตัวเลือกที่ active เสมอ)
+  const drugPanelOpen = drugExpanded || category !== 'all'
 
   const years = useMemo(() => {
     const s = new Set()
@@ -203,6 +218,25 @@ export default function SubstanceRadar() {
     })
     return m
   }, [points, targetDrugs])
+
+  // ── floating insights (fullscreen) — สรุปจาก points ที่กรองแล้ว (เขตนับเฉพาะ "เขต*") ──
+  const insights = useMemo(() => {
+    const total = points.length
+    if (!total) return null
+    const dCounts = {}
+    for (const r of points) { const d = r.primary_drug || 'ไม่ระบุ'; dCounts[d] = (dCounts[d] || 0) + 1 }
+    const td = Object.entries(dCounts).sort((a, b) => b[1] - a[1])[0]
+    const distCounts = {}
+    for (const r of points) { if (!r.district?.startsWith('เขต')) continue; distCounts[r.district] = (distCounts[r.district] || 0) + 1 }
+    const tdist = Object.entries(distCounts).sort((a, b) => b[1] - a[1])[0]
+    return {
+      total,
+      topDrug: td ? { name: td[0], count: td[1], pct: td[1] / total * 100 } : null,
+      topDistrict: tdist ? { name: tdist[0], count: tdist[1], pct: tdist[1] / total * 100 } : null,
+      districtsCount: Object.keys(distCounts).length,
+      drugTypesCount: Object.keys(dCounts).length,
+    }
+  }, [points])
 
   const districtStats = useMemo(() => {
     const stats = {}
@@ -431,15 +465,51 @@ export default function SubstanceRadar() {
                 <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center"><MapPin size={16} /></div>
                 <h3 className="font-bold text-slate-800 text-base">เลือกมุมมองข้อมูล</h3>
               </div>
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                {Object.keys(DRUG_CATEGORIES).map(cat => (
-                  <button key={cat} onClick={() => setCategory(cat)}
-                    className={`px-3 py-2 rounded-lg text-xs font-medium transition ${
-                      category === cat ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}>
-                    {cat}
+              <div className="mb-4">
+                {/* ดูทั้งหมด — default (รวมทุกชนิดยา) */}
+                <button onClick={() => setCategory('all')}
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition ${
+                    category === 'all' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}>
+                  <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${category === 'all' ? 'border-white' : 'border-slate-400'}`}>
+                    {category === 'all' && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </span>
+                  ดูทั้งหมด
+                  <span className={`ml-auto text-xs font-normal ${category === 'all' ? 'text-blue-100' : 'text-slate-400'}`}>รวมทุกชนิดยา</span>
+                </button>
+
+                {/* ปุ่ม [+ แยกชนิดยา] — แสดงเฉพาะตอนยุบ */}
+                {!drugPanelOpen && (
+                  <button onClick={() => setDrugExpanded(true)}
+                    className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-blue-600 bg-white border border-dashed border-blue-300 hover:bg-blue-50 transition">
+                    <Plus size={14} /> แยกชนิดยา
                   </button>
-                ))}
+                )}
+
+                {/* แผงเลือกชนิดยา — expand แบบ smooth (grid-rows 0fr → 1fr) */}
+                <div className={`grid transition-all duration-300 ease-out ${
+                  drugPanelOpen ? 'grid-rows-[1fr] opacity-100 mt-2' : 'grid-rows-[0fr] opacity-0'
+                }`}>
+                  <div className="overflow-hidden">
+                    <div className="flex items-center justify-between mb-2 px-0.5">
+                      <span className="text-xs text-slate-500 uppercase font-bold">เลือกชนิดยา</span>
+                      <button onClick={() => { setDrugExpanded(false); setCategory('all') }}
+                        className="flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-slate-600 transition">
+                        <X size={12} /> ปิด
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.keys(DRUG_CATEGORIES).map(cat => (
+                        <button key={cat} onClick={() => setCategory(cat)}
+                          className={`px-3 py-2 rounded-lg text-xs font-medium transition ${
+                            category === cat ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}>
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             </>
           )}
@@ -674,6 +744,134 @@ export default function SubstanceRadar() {
             <span className="font-medium text-slate-700">ขอบเขต 50 เขต กรุงเทพมหานคร</span>
           </div>
         </div>
+
+        {/* ── Floating panels — fullscreen (presentation) เท่านั้น ── */}
+        {isPresentation && (
+          <>
+            {/* [1] Control panel — มุมซ้ายบน */}
+            <div className="absolute top-2 left-2 md:top-4 md:left-4 z-[1100] max-w-[calc(100vw-1rem)] md:max-w-xs">
+              {!controlOpen ? (
+                <button onClick={() => setControlOpen(true)} aria-label="เปิดตัวกรอง"
+                  className="bg-white/95 backdrop-blur shadow-lg rounded-full p-2.5 hover:scale-105 transition">
+                  <SlidersHorizontal className="w-5 h-5 text-slate-700" />
+                </button>
+              ) : (
+                <div className="bg-white/95 backdrop-blur-md shadow-xl border border-slate-200 rounded-xl p-4 w-72 max-w-full">
+                  <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <SlidersHorizontal className="w-4 h-4 text-cyan-600" />
+                      <span className="font-semibold text-sm text-slate-900">ตัวกรอง</span>
+                    </div>
+                    <button onClick={() => setControlOpen(false)} aria-label="ปิด" className="text-slate-400 hover:text-slate-600 p-1"><X className="w-4 h-4" /></button>
+                  </div>
+                  {/* ช่วงเวลา (year/month เดิม) */}
+                  <div className="mb-3">
+                    <label className="text-xs text-slate-500 block mb-1.5">ช่วงเวลา</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <select value={year} onChange={e => setYear(e.target.value)} className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                        <option value="all">ทุกปี</option>
+                        {years.map(y => <option key={y} value={y}>พ.ศ. {y}</option>)}
+                      </select>
+                      <select value={month} onChange={e => setMonth(e.target.value)} className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                        <option value="all">ทุกเดือน</option>
+                        {THAI_MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  {/* ชนิดยา (reuse category — ดูทั้งหมด / แยกชนิด) */}
+                  <div>
+                    <label className="text-xs text-slate-500 block mb-1.5">ชนิดยา</label>
+                    {!fsDrugDetail ? (
+                      <div className="flex items-center justify-between bg-slate-50 rounded-lg p-2">
+                        <span className="text-sm text-slate-700">{category === 'all' ? 'ดูทั้งหมด' : category}</span>
+                        <button onClick={() => setFsDrugDetail(true)} className="text-xs text-cyan-600 hover:underline">+ แยกชนิด</button>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Object.keys(DRUG_CATEGORIES).map(k => {
+                            const active = category === k
+                            return (
+                              <button key={k} onClick={() => setCategory(active ? 'all' : k)}
+                                className={`h-7 px-2.5 text-xs rounded-full transition ${active ? 'bg-cyan-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                                {k}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <button onClick={() => { setFsDrugDetail(false); setCategory('all') }} className="text-xs text-slate-400 hover:text-slate-600 mt-2">× ปิด</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* [2] Insight box — มุมขวาล่าง */}
+            <div className="absolute bottom-2 right-2 md:bottom-4 md:right-4 z-[1100] max-w-[calc(100vw-1rem)] md:max-w-sm">
+              {!insightOpen ? (
+                <button onClick={() => setInsightOpen(true)}
+                  className="bg-cyan-600 text-white shadow-lg rounded-full p-2.5 pr-4 hover:scale-105 transition flex items-center gap-2">
+                  <Lightbulb className="w-5 h-5" /><span className="text-sm font-medium">สรุปข้อมูล</span>
+                </button>
+              ) : (
+                <div className="bg-white/95 backdrop-blur-md shadow-xl border border-slate-200 rounded-xl p-4 w-80 max-w-full">
+                  <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-md shadow-cyan-500/30">
+                        <Lightbulb className="w-4 h-4 text-white" />
+                      </div>
+                      <span className="font-semibold text-sm text-slate-900">สรุปข้อมูลแผนที่</span>
+                    </div>
+                    <button onClick={() => setInsightOpen(false)} aria-label="ปิด" className="text-slate-400 hover:text-slate-600 p-1"><X className="w-4 h-4" /></button>
+                  </div>
+                  {!insights ? (
+                    <div className="text-sm text-slate-400 text-center py-6">ไม่มีข้อมูลในช่วงที่เลือก</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {insights.topDrug && (
+                        <div className="bg-rose-50 border border-rose-100 rounded-lg p-3">
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-rose-600">ยาที่พบมากสุด</span>
+                          <div className="font-bold text-slate-900">{insights.topDrug.name}</div>
+                          <div className="text-xs text-slate-600 mt-0.5">{insights.topDrug.count.toLocaleString()} ครั้ง
+                            <span className="font-semibold text-rose-700 ml-1">({insights.topDrug.pct.toFixed(1)}% ของทั้งหมด)</span>
+                          </div>
+                        </div>
+                      )}
+                      {insights.topDistrict && (
+                        <div className="bg-violet-50 border border-violet-100 rounded-lg p-3">
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600">เขตที่พบมากสุด</span>
+                          <div className="font-bold text-slate-900">{insights.topDistrict.name}</div>
+                          <div className="text-xs text-slate-600 mt-0.5">{insights.topDistrict.count.toLocaleString()} ครั้ง
+                            <span className="font-semibold text-violet-700 ml-1">({insights.topDistrict.pct.toFixed(1)}% ของ กทม.)</span>
+                          </div>
+                        </div>
+                      )}
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-slate-600">รวมทั้งหมด</span>
+                          <span className="font-bold text-slate-900 tabular-nums">{insights.total.toLocaleString()} ครั้ง</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs mt-1.5">
+                          <span className="text-slate-500">เขตที่มีข้อมูล</span>
+                          <span className="font-semibold tabular-nums">{insights.districtsCount} / 50 เขต</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs mt-1">
+                          <span className="text-slate-500">ชนิดยาที่พบ</span>
+                          <span className="font-semibold tabular-nums">{insights.drugTypesCount} ชนิด</span>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2 px-1 pt-1">
+                        <Info className="w-3.5 h-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
+                        <p className="text-[11px] text-slate-500 leading-relaxed">คลิกที่จุดบนแผนที่เพื่อดูรายละเอียดเหตุการณ์</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
     </PresentationSlides>
