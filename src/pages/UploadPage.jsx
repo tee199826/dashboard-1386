@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Upload, FileText, AlertTriangle, CheckCircle2,
   X, ChevronDown, RefreshCw, Info, LayoutDashboard,
-  BookOpen, Sparkles, BarChart3, MapPin, Shield, Map as MapIcon, TrendingUp, Users,
+  BookOpen, Sparkles, BarChart3, MapPin, Shield, Map as MapIcon, TrendingUp, Users, ExternalLink,
+  Check, Circle, ChevronRight, ArrowLeft,
 } from 'lucide-react'
 import { parseFile, detectType, mapColumns, buildBatch, validateRows, parse115B, parse114, flattenSubstanceUserRow } from '../utils/importEngine'
 import { upsertRecords, upsertBknSummary, upsertRpt114, upsertSubstanceUsers } from '../utils/uploadService'
@@ -19,6 +20,33 @@ const TYPE_LABELS = {
   bkn_summary:    '📊 สรุป บก.น. 1–9 (RPT_115_B)',
   report_114:     '📑 รายงาน RPT_114 (การดำเนินการตามร้องเรียน)',
   substance_users:'🧑 แบบเก็บข้อมูลผู้เสพ (substance_users)',
+}
+
+// Reverse mapping: ประเภทข้อมูล (ตาราง) → หน้าเว็บที่ได้รับผลกระทบเมื่ออัปไฟล์นี้
+const TABLE_TO_PAGES = {
+  complaints: [
+    { name: 'ภาพรวม', route: '/', icon: BarChart3 },
+    { name: 'รายเขต', route: '/districts', icon: MapPin },
+    { name: 'ผลการดำเนินงาน', route: '/operations', icon: TrendingUp },
+  ],
+  drug_incidents: [
+    { name: 'ภาพรวม', route: '/', icon: BarChart3 },
+    { name: 'รายเขต', route: '/districts', icon: MapPin },
+    { name: 'แผนที่ยาเสพติด', route: '/radar', icon: MapIcon },
+  ],
+  bkn_summary: [
+    { name: 'ภาพรวม', route: '/', icon: BarChart3 },
+    { name: 'สถิติ บก.น.', route: '/bkn', icon: Shield },
+  ],
+  report_114: [
+    { name: 'ภาพรวม', route: '/', icon: BarChart3 },
+    { name: 'ผลการดำเนินงาน', route: '/operations', icon: TrendingUp },
+  ],
+  substance_users: [
+    { name: 'ภาพรวม', route: '/', icon: BarChart3 },
+    { name: 'รายเขต', route: '/districts', icon: MapPin },
+    { name: 'ผลเก็บข้อมูลผู้เสพ', route: '/substance-users', icon: Users },
+  ],
 }
 
 const COL_LABELS = {
@@ -37,7 +65,68 @@ const COL_LABELS = {
 
 const HIDE_COLS = new Set(['batch_id', 'source_file', 'row_index', 'record_uid'])
 
+// ─── Guided mode ("อัปตามหน้า") — เลือกหน้าก่อน แล้วบอกว่าต้องอัปไฟล์อะไรบ้าง ──────
+const PAGES = [
+  { id: 'overview',        name: 'ภาพรวม',            route: '/',                 icon: BarChart3,  gradient: 'from-blue-500 to-indigo-600',   shadow: 'shadow-blue-500/30',   requiredFiles: ['complaints', 'drug_incidents', 'bkn_summary', 'report_114', 'substance_users'] },
+  { id: 'districts',       name: 'รายเขต',            route: '/districts',        icon: MapPin,     gradient: 'from-indigo-500 to-purple-600', shadow: 'shadow-indigo-500/30', requiredFiles: ['complaints', 'drug_incidents', 'substance_users'] },
+  { id: 'bkn',             name: 'สถิติ บก.น.',        route: '/bkn',              icon: Shield,     gradient: 'from-slate-600 to-slate-800',   shadow: 'shadow-slate-500/30',  requiredFiles: ['bkn_summary'] },
+  { id: 'radar',           name: 'แผนที่ยาเสพติด',     route: '/radar',            icon: MapIcon,    gradient: 'from-cyan-500 to-blue-600',     shadow: 'shadow-cyan-500/30',   requiredFiles: ['drug_incidents'] },
+  { id: 'operations',      name: 'ผลการดำเนินงาน',     route: '/operations',       icon: TrendingUp, gradient: 'from-amber-500 to-orange-600',  shadow: 'shadow-amber-500/30',  requiredFiles: ['report_114', 'complaints'] },
+  { id: 'substance-users', name: 'ผลเก็บข้อมูลผู้เสพ',  route: '/substance-users',  icon: Users,      gradient: 'from-violet-500 to-purple-600', shadow: 'shadow-violet-500/30', requiredFiles: ['substance_users'] },
+]
+
+const FILE_LABELS = {
+  complaints:      'ไฟล์เรื่องร้องเรียน 1386',
+  drug_incidents:  'ไฟล์เหตุการณ์ยาเสพติด',
+  bkn_summary:     'ไฟล์สรุป บก.น. (RPT 115_B)',
+  report_114:      'ไฟล์รายงาน 114 (RPT_114)',
+  substance_users: 'ไฟล์แบบเก็บข้อมูลผู้เสพ',
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const cn = (...c) => c.filter(Boolean).join(' ')
+
+function timeAgo(ts, now) {
+  const s = Math.max(0, Math.floor((now - ts) / 1000))
+  if (s < 60) return `${s} วินาทีที่แล้ว`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m} นาทีที่แล้ว`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h} ชั่วโมงที่แล้ว`
+  return `${Math.floor(h / 24)} วันที่แล้ว`
+}
+
+// ตรวจไฟล์ (parse + detect) ก่อนอัป — ใช้ util เดิม ไม่แตะ parser
+async function detectFileType(file) {
+  const ext = file.name.split('.').pop().toLowerCase()
+  if (!['xlsx', 'xls', 'csv'].includes(ext)) throw new Error('รองรับเฉพาะไฟล์ .xlsx, .xls, .csv เท่านั้น')
+  const { rows: raw, workbook: wb } = await parseFile(file)
+  if (!raw || raw.length === 0) throw new Error('ไม่พบข้อมูลในไฟล์หรือไฟล์ว่างเปล่า')
+  return { raw, wb, detected: detectType(raw) }
+}
+
+// อัปไฟล์เข้าตาราง table — dispatch ไป upsert service เดิม (ไม่แตะ UPSERT logic)
+async function uploadParsedFor(table, raw, wb, fileName) {
+  const batchId = genBatchId()
+  if (table === 'bkn_summary') {
+    const data = parse115B(wb)
+    const result = await upsertBknSummary(data, { batchId, fileName })
+    return { total: data.length, result }
+  }
+  if (table === 'report_114') {
+    const data = parse114(wb)
+    const result = await upsertRpt114(data, { batchId, fileName })
+    return { total: data.length, result }
+  }
+  if (table === 'substance_users') {
+    const result = await upsertSubstanceUsers(raw, { batchId, fileName })
+    return { total: raw.length, result }
+  }
+  const { batch } = computePreview(raw, table, fileName)
+  const result = await upsertRecords(table, batch.rows, { batchId: batch.batchId, fileName })
+  return { total: batch.rows.length, result }
+}
 
 function genBatchId() {
   const now = new Date()
@@ -66,6 +155,7 @@ const GROUP_NAMES = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function UploadPage() {
+  const [uploadMode, setUploadMode]     = useState('guided')   // 'guided' = อัปตามหน้า (default) | 'manual' = อัปทีละไฟล์ (เดิม)
   const [phase, setPhase]               = useState('idle')
   const [file, setFile]                 = useState(null)
   const [rawRows, setRawRows]           = useState([])
@@ -347,8 +437,42 @@ export default function UploadPage() {
       {/* คู่มือ Data Flow — หน้าเว็บ ↔ ไฟล์ ↔ ตาราง DB */}
       <DataFlowGuide />
 
-      {/* ════════════ IDLE — drop zone ════════════ */}
-      {phase === 'idle' && (
+      {/* ════════════ MODE SWITCHER ════════════ */}
+      <div>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-2 inline-flex gap-1">
+          <button
+            onClick={() => setUploadMode('guided')}
+            className={cn(
+              'h-9 px-4 text-sm font-medium rounded-lg transition',
+              uploadMode === 'guided'
+                ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50',
+            )}
+          >
+            <Sparkles className="w-4 h-4 inline mr-1.5" />
+            อัปตามหน้า
+            <span className="ml-1 text-xs opacity-75">(แนะนำ)</span>
+          </button>
+          <button
+            onClick={() => setUploadMode('manual')}
+            className={cn(
+              'h-9 px-4 text-sm font-medium rounded-lg transition',
+              uploadMode === 'manual'
+                ? 'bg-slate-200 text-slate-900'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50',
+            )}
+          >
+            <FileText className="w-4 h-4 inline mr-1.5" />
+            อัปทีละไฟล์
+          </button>
+        </div>
+      </div>
+
+      {/* ════════════ GUIDED MODE — อัปตามหน้า ════════════ */}
+      {uploadMode === 'guided' && <GuidedUpload navigate={navigate} reload={reload} />}
+
+      {/* ════════════ IDLE — drop zone (manual) ════════════ */}
+      {uploadMode === 'manual' && phase === 'idle' && (
         <div
           onDrop={handleDrop}
           onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
@@ -407,11 +531,15 @@ export default function UploadPage() {
               {loadError}
             </div>
           )}
+
+          <p className="text-xs text-slate-400 mt-4 text-center">
+            💡 ใช้โหมด "อัปตามหน้า" เพื่อเห็นว่าหน้าไหนต้องอัปไฟล์อะไรบ้าง
+          </p>
         </div>
       )}
 
-      {/* ════════════ PREVIEW ════════════ */}
-      {phase === 'preview' && file && (
+      {/* ════════════ PREVIEW (manual) ════════════ */}
+      {uploadMode === 'manual' && phase === 'preview' && file && (
         <div className="space-y-4">
 
           {/* ── Info card ── */}
@@ -483,6 +611,9 @@ export default function UploadPage() {
                 )}
               </div>
             </div>
+
+            {/* Reverse mapping — ไฟล์นี้จะกระทบหน้าไหนบ้าง */}
+            <ImpactedPages type={selectedType} />
 
             {/* สรุปตัวเลข */}
             {selectedType === 'bkn_summary' ? (
@@ -724,8 +855,8 @@ export default function UploadPage() {
         </div>
       )}
 
-      {/* ════════════ UPLOADING ════════════ */}
-      {phase === 'uploading' && (
+      {/* ════════════ UPLOADING (manual) ════════════ */}
+      {uploadMode === 'manual' && phase === 'uploading' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-16 text-center">
           <div className="inline-block w-14 h-14 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-5" />
           <p className="text-lg font-bold text-slate-700">กำลังอัปโหลดข้อมูล...</p>
@@ -734,8 +865,8 @@ export default function UploadPage() {
         </div>
       )}
 
-      {/* ════════════ DONE ════════════ */}
-      {phase === 'done' && uploadResult && (
+      {/* ════════════ DONE (manual) ════════════ */}
+      {uploadMode === 'manual' && phase === 'done' && uploadResult && (
         <div className="space-y-4">
           <div className={`rounded-2xl p-6 border ${
             uploadResult.failed === 0
@@ -813,6 +944,335 @@ export default function UploadPage() {
             )}
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Impacted Pages — ไฟล์นี้จะอัปเดตหน้าไหนบ้าง (reverse mapping) ────────────────
+
+function ImpactedPages({ type }) {
+  const pages = TABLE_TO_PAGES[type]
+  if (!pages || pages.length === 0) return null
+
+  return (
+    <div className="mt-4 p-4 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100">
+      <div className="flex items-center gap-2 mb-3">
+        <Sparkles className="w-4 h-4 text-blue-600" />
+        <span className="text-sm font-semibold text-blue-900">
+          ไฟล์นี้จะอัปเดตหน้า ({pages.length} หน้า)
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {pages.map(p => (
+          <div
+            key={p.route}
+            className="inline-flex items-center gap-2 bg-white border border-blue-200 rounded-lg px-3 py-1.5 text-sm hover:border-blue-400 hover:shadow-sm transition cursor-pointer"
+            onClick={() => window.open(p.route, '_blank')}
+            title={`เปิด ${p.name} ในแท็บใหม่`}
+          >
+            <p.icon className="w-3.5 h-3.5 text-blue-600" />
+            <span className="text-slate-700 font-medium">{p.name}</span>
+            <span className="text-xs text-slate-400 font-mono">{p.route}</span>
+            <ExternalLink className="w-3 h-3 text-slate-400" />
+          </div>
+        ))}
+      </div>
+
+      <p className="text-xs text-slate-600 mt-3 leading-relaxed">
+        💡 หลังกดยืนยันอัปโหลด ข้อมูลจะ sync ทันที คุณสามารถเปิดหน้าด้านบนเพื่อดูผลได้
+      </p>
+    </div>
+  )
+}
+
+// ─── Guided Upload ("อัปตามหน้า") ────────────────────────────────────────────────
+
+// dropzone เล็กต่อ slot — รับไฟล์เดียวแล้วส่งให้ onFile
+function FileDropzone({ onFile, busy, className }) {
+  const ref = useRef(null)
+  const [drag, setDrag] = useState(false)
+  return (
+    <div
+      onDrop={e => { e.preventDefault(); setDrag(false); if (busy) return; const f = e.dataTransfer.files?.[0]; if (f) onFile(f) }}
+      onDragOver={e => { e.preventDefault(); if (!busy) setDrag(true) }}
+      onDragLeave={() => setDrag(false)}
+      onClick={() => !busy && ref.current?.click()}
+      className={cn(
+        'border-2 border-dashed rounded-lg px-4 py-3 text-center transition',
+        busy ? 'opacity-60 cursor-wait border-slate-300' : 'cursor-pointer',
+        drag ? 'border-blue-500 bg-blue-50' : (!busy && 'border-slate-300 hover:border-blue-400'),
+        className,
+      )}
+    >
+      {busy ? (
+        <span className="text-xs text-slate-500 inline-flex items-center gap-2">
+          <span className="w-3 h-3 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin" />
+          กำลังอัปโหลด...
+        </span>
+      ) : (
+        <span className="text-xs text-slate-500">ลากไฟล์มาวางหรือคลิก</span>
+      )}
+      <input ref={ref} type="file" accept={ACCEPT} className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = '' }} />
+    </div>
+  )
+}
+
+// 1 slot = 1 ตารางที่หน้านั้นต้องการ (state-aware: idle / busy / mismatch / done / error)
+function FileSlot({ table, slot, now, onFile, onConfirmMismatch, onReset }) {
+  const status = slot?.status || 'idle'
+
+  if (status === 'done') {
+    return (
+      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-emerald-500 flex items-center justify-center shadow-md shadow-emerald-500/30 flex-shrink-0">
+            <Check className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-slate-900">
+              {FILE_LABELS[table]}
+              <span className="ml-2 text-xs text-emerald-700 font-normal">✓ อัปแล้ว</span>
+            </div>
+            <div className="text-xs text-slate-600 mt-0.5">
+              {slot.total.toLocaleString()} row · {timeAgo(slot.uploadedAt, now)}
+            </div>
+          </div>
+          <button onClick={onReset} title="อัปไฟล์นี้ใหม่"
+            className="text-slate-400 hover:text-slate-600 transition flex-shrink-0 p-1">
+            <RefreshCw size={15} />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (status === 'mismatch') {
+    const p = slot.pending
+    return (
+      <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-5">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+            <AlertTriangle className="w-5 h-5 text-amber-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-slate-900">{FILE_LABELS[table]}</div>
+            <p className="text-xs text-amber-800 mt-1">
+              ไฟล์นี้ถูก detect เป็น <strong>{TYPE_LABELS[p.detected] ?? p.detected}</strong> ไม่ใช่ <strong>{FILE_LABELS[table]}</strong>
+            </p>
+            <div className="flex gap-2 mt-3">
+              <button onClick={() => onConfirmMismatch(table)}
+                className="px-3 py-1.5 text-xs font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition shadow-sm shadow-amber-500/30">
+                ใช้ไฟล์นี้แทน
+              </button>
+              <button onClick={onReset}
+                className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition">
+                เปลี่ยนไฟล์
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // idle / busy / error
+  return (
+    <div className="bg-white border-2 border-dashed border-slate-300 rounded-xl p-5 hover:border-blue-400 transition">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-lg border-2 border-slate-200 flex items-center justify-center flex-shrink-0">
+          <Upload className="w-5 h-5 text-slate-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-slate-900">{FILE_LABELS[table]}</div>
+          <div className="text-xs text-slate-500 font-mono mt-0.5">ตาราง: {table}</div>
+          {status === 'error' && (
+            <div className="text-xs text-rose-600 mt-1.5 flex items-start gap-1">
+              <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" /> {slot.error}
+            </div>
+          )}
+          <FileDropzone onFile={f => onFile(table, f)} busy={status === 'busy'} className="mt-3" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// modal เตือนเมื่ออัปไม่ครบ
+function PartialWarningModal({ page, missing, uploaded, total, onClose, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+            <AlertTriangle className="w-6 h-6 text-amber-600" />
+          </div>
+          <div>
+            <div className="font-bold text-slate-900">ข้อมูลยังไม่ครบ</div>
+            <div className="text-sm text-slate-500">อัปแล้ว {uploaded}/{total} ไฟล์</div>
+          </div>
+        </div>
+
+        <p className="text-sm text-slate-700 mb-3">
+          เพื่อให้ <strong>{page.name}</strong> แสดงข้อมูลสมบูรณ์ ควรอัปไฟล์อีก {missing.length} ไฟล์:
+        </p>
+
+        <ul className="space-y-1.5 mb-4">
+          {missing.map(table => (
+            <li key={table} className="flex items-center gap-2 text-sm text-slate-700">
+              <Circle className="w-3 h-3 text-slate-400 flex-shrink-0" />
+              {FILE_LABELS[table]}
+            </li>
+          ))}
+        </ul>
+
+        <div className="flex gap-2 justify-end">
+          <button onClick={onClose}
+            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">
+            อัปต่อ
+          </button>
+          <button onClick={onConfirm}
+            className="px-4 py-2 text-sm bg-amber-500 text-white hover:bg-amber-600 rounded-lg shadow-md shadow-amber-500/30 transition">
+            ข้ามและไป {page.name}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function GuidedUpload({ navigate, reload }) {
+  const [selectedPage, setSelectedPage] = useState(null)
+  const [slots, setSlots] = useState({})   // table -> { status, total, uploadedAt, error, pending }
+  const [warnOpen, setWarnOpen] = useState(false)
+  const [now, setNow] = useState(Date.now())
+
+  // tick ทุก 10 วิ ให้ "X วินาทีที่แล้ว" อัปเดต
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 10000)
+    return () => clearInterval(id)
+  }, [])
+
+  const page = PAGES.find(p => p.id === selectedPage) || null
+  const setSlot = (table, patch) => setSlots(s => ({ ...s, [table]: { ...s[table], ...patch } }))
+
+  const doUpload = async (table, raw, wb, fileName) => {
+    setSlot(table, { status: 'busy', error: null, pending: null })
+    try {
+      const { total } = await uploadParsedFor(table, raw, wb, fileName)
+      setSlot(table, { status: 'done', total, uploadedAt: Date.now(), pending: null })
+    } catch (err) {
+      setSlot(table, { status: 'error', error: err.message })
+    }
+  }
+
+  const handleFile = async (table, file) => {
+    setSlot(table, { status: 'busy', error: null, pending: null })
+    try {
+      const { raw, wb, detected } = await detectFileType(file)
+      if (detected !== 'unknown' && detected !== table) {
+        setSlot(table, { status: 'mismatch', pending: { raw, wb, fileName: file.name, detected } })
+        return
+      }
+      await doUpload(table, raw, wb, file.name)
+    } catch (err) {
+      setSlot(table, { status: 'error', error: err.message })
+    }
+  }
+
+  const confirmMismatch = (table) => {
+    const p = slots[table]?.pending
+    if (p) doUpload(table, p.raw, p.wb, p.fileName)
+  }
+
+  const resetSlot = (table) => setSlot(table, { status: 'idle', error: null, pending: null })
+
+  const required = page?.requiredFiles || []
+  const uploadedCount = required.filter(t => slots[t]?.status === 'done').length
+  const missing = required.filter(t => slots[t]?.status !== 'done')
+  const allDone = required.length > 0 && missing.length === 0
+
+  const goToPage = async () => { await reload(); navigate(page.route) }
+  const handleFinish = () => { if (allDone) goToPage(); else setWarnOpen(true) }
+
+  const backToPages = () => { setSelectedPage(null); setSlots({}); setWarnOpen(false) }
+
+  // ── STEP 1: เลือกหน้า ──
+  if (!page) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {PAGES.map(p => (
+          <button key={p.id} onClick={() => setSelectedPage(p.id)}
+            className="group p-6 rounded-2xl bg-white border border-slate-200 hover:border-blue-300 hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 text-left">
+            <div className="flex items-start justify-between mb-3">
+              <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br shadow-md', p.gradient, p.shadow)}>
+                <p.icon className="w-6 h-6 text-white" />
+              </div>
+              <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition" />
+            </div>
+            <div className="font-bold text-slate-900 text-lg mb-1">{p.name}</div>
+            <div className="text-xs text-slate-500 font-mono mb-3">{p.route}</div>
+            <div className="flex items-center gap-1 text-xs text-slate-600">
+              <FileText className="w-3 h-3" /> ต้องอัป {p.requiredFiles.length} ไฟล์
+            </div>
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  // ── STEP 2: รายการไฟล์ที่ต้องอัป ──
+  return (
+    <div className="space-y-4">
+      <button onClick={backToPages}
+        className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition">
+        <ArrowLeft size={15} /> เลือกหน้าอื่น
+      </button>
+
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-6 space-y-5">
+        <div className="flex items-center gap-3">
+          <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br shadow-md', page.gradient, page.shadow)}>
+            <page.icon className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">อัปข้อมูล: {page.name}</h2>
+            <p className="text-sm text-slate-500">
+              ต้องอัป {required.length} ไฟล์ — อัปเดตข้อมูลให้ครบเพื่อความสมบูรณ์
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {required.map(table => (
+            <FileSlot key={table} table={table} slot={slots[table]} now={now}
+              onFile={handleFile} onConfirmMismatch={confirmMismatch} onReset={() => resetSlot(table)} />
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between pt-1">
+          <button onClick={backToPages}
+            className="px-5 py-2.5 border border-slate-300 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition">
+            กลับ
+          </button>
+          <button onClick={handleFinish}
+            className={cn(
+              'px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow flex items-center gap-2',
+              allDone
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/30'
+                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/30',
+            )}>
+            {allDone ? <Check size={16} /> : <CheckCircle2 size={16} />}
+            เสร็จสิ้น ({uploadedCount}/{required.length})
+          </button>
+        </div>
+      </div>
+
+      {warnOpen && (
+        <PartialWarningModal
+          page={page} missing={missing} uploaded={uploadedCount} total={required.length}
+          onClose={() => setWarnOpen(false)} onConfirm={goToPage} />
       )}
     </div>
   )

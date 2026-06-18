@@ -59,9 +59,15 @@ export default function AllDistricts() {
 
   // ดึง drug_incidents + substance dealer_locations (complaints มาจาก useData)
   useEffect(() => {
-    fetchAllPages('drug_incidents', 'district, received_date').then(setIncidents).catch(() => {})
-    fetchAllPages('substance_users', 'dealer_locations, surveyed_at').then(setDealerRows).catch(() => {})
-    getLastUploadDate(supabase, ['complaints', 'drug_incidents', 'substance_users']).then(setLastUpload).catch(() => {})
+    fetchAllPages('drug_incidents', 'district, received_date')
+      .then(rows => { console.log('[/districts] drug_incidents loaded:', rows.length); setIncidents(rows) })
+      .catch(err => { console.error('[/districts] fetch drug_incidents failed:', err); return [] })
+    fetchAllPages('substance_users', 'dealer_locations, surveyed_at')
+      .then(rows => { console.log('[/districts] substance_users loaded:', rows.length); setDealerRows(rows) })
+      .catch(err => { console.error('[/districts] fetch substance_users failed:', err); return [] })
+    getLastUploadDate(supabase, ['complaints', 'drug_incidents', 'substance_users'])
+      .then(setLastUpload)
+      .catch(err => { console.error('[/districts] fetch lastUpload failed:', err); return null })
   }, [])
 
   // ช่วงข้อมูล = min-max ของ complaints + drug_incidents (received_date) — ใช้ raw
@@ -87,6 +93,14 @@ export default function AllDistricts() {
     dealerRows.forEach(r => { const fy = dateToFiscalYear(r.surveyed_at); if (fy) s.add(fy) })
     return [...s].sort((a, b) => b - a)
   }, [records, incidents, dealerRows])
+
+  // DEBUG: จำนวน rows ต่อ source + ปีงบที่คำนวณได้
+  useEffect(() => {
+    console.log('[/districts] complaints loaded:', records.length)
+    console.log('[/districts] drug_incidents loaded:', incidents.length)
+    console.log('[/districts] substance_users loaded:', dealerRows.length)
+    console.log('[/districts] availableYears:', availableYears)
+  }, [records, incidents, dealerRows, availableYears])
 
   // กรองตามช่วงก่อน aggregate (complaints.date / incidents.received_date / dealer.surveyed_at)
   const fRecords = useMemo(() => filterByDateColumn(records, 'date', range), [records, range?.from, range?.to])

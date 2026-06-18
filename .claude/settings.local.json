@@ -63,7 +63,8 @@
       "Bash(rm -f \"C:/Users/Acer/dashboard-1386/_audit_tmp.mjs\")",
       "PowerShell(npx eslint src/pages/SubstanceRadar.jsx)",
       "Bash(cat)",
-      "PowerShell(npx eslint src/utils/importEngine.js src/pages/SubstanceUsers.jsx)"
+      "PowerShell(npx eslint src/utils/importEngine.js src/pages/SubstanceUsers.jsx)",
+      "PowerShell(npm install *)"
     ]
   }
 }
