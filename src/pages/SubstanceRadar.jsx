@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { MapPin, ArrowLeft, Search, Menu, AlertTriangle, Plus, X, SlidersHorizontal, Lightbulb, Info, BarChart3, Printer } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, Legend } from 'recharts'
+import { ComposedChart, Area, ReferenceDot, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, Legend } from 'recharts'
 import { THAI_MONTHS, DNAME_TO_GROUP } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
 import { thaiDateRange } from '../utils/formatDate'
@@ -246,38 +246,6 @@ export default function SubstanceRadar() {
     if (!r.primary_drug) return false
     return targetDrugs.includes(r.primary_drug)
   }), [filteredIncidents, targetDrugs])
-
-  // ── Phase 3: stats + trend เปรียบเทียบ 2 เขต ──
-  //   stats ใช้ year+month (ymFiltered) · trend ใช้ year-only (โชว์ 12 เดือน)
-  const compareData = useMemo(() => {
-    if (!compareOpen || !compareA || !compareB) return null
-    const statsFor = (dname) => {
-      const drugs = {}, khwaengs = new Set()
-      let total = 0
-      for (const r of ymFiltered) {
-        if (r.district !== dname || !r.primary_drug) continue
-        total++
-        drugs[r.primary_drug] = (drugs[r.primary_drug] || 0) + 1
-        if (r.subdistrict?.trim()) khwaengs.add(r.subdistrict.trim())
-      }
-      return { total, drugs, khwaengCount: khwaengs.size, perKhwaeng: khwaengs.size ? total / khwaengs.size : 0 }
-    }
-    const trendFor = (dname) => {
-      const arr = Array(12).fill(0)
-      for (const r of incidents) {
-        if (r.district !== dname || !r.received_date) continue
-        if (year !== 'all' && parseInt(r.received_date.slice(0, 4)) + 543 !== parseInt(year)) continue
-        arr[fyMonthIdx(parseInt(r.received_date.slice(5, 7)))]++
-      }
-      return arr
-    }
-    const a = statsFor(compareA), b = statsFor(compareB)
-    const drugKeys = [...new Set([...Object.keys(a.drugs), ...Object.keys(b.drugs)])]
-      .sort((x, y) => (b.drugs[y] || 0) + (a.drugs[y] || 0) - (b.drugs[x] || 0) - (a.drugs[x] || 0))
-    const ta = trendFor(compareA), tb = trendFor(compareB)
-    const trend = FY_MONTHS.map((label, i) => ({ label, A: ta[i], B: tb[i] }))
-    return { a, b, drugKeys, trend }
-  }, [compareOpen, compareA, compareB, ymFiltered, incidents, year])
 
   const drugCounts = useMemo(() => {
     const m = {}
@@ -1028,11 +996,11 @@ export default function SubstanceRadar() {
     </div>
     </PresentationSlides>
 
-    {compareOpen && compareData && (
+    {compareOpen && compareA && compareB && (
       <CompareModal
         a={compareA} b={compareB} setA={setCompareA} setB={setCompareB}
-        options={districtOptions} data={compareData} ymFiltered={ymFiltered}
-        periodLabel={`${year === 'all' ? 'ทุกปี' : 'พ.ศ. ' + year} · ${month === 'all' ? 'ทุกเดือน' : THAI_MONTHS.find(m => m.v === month)?.l || month}`}
+        options={districtOptions} incidents={incidents} years={years}
+        initialYear={year} initialMonth={month}
         onClose={() => setCompareOpen(false)}
       />
     )}
@@ -1040,99 +1008,187 @@ export default function SubstanceRadar() {
   )
 }
 
-// ── Phase 3: Compare modal (side-by-side 2 เขต) ──
-function Delta({ a, b, decimal }) {
-  const d = a - b
-  if (Math.abs(d) < (decimal ? 0.05 : 0.5)) return <span className="text-slate-400">= 0</span>
-  const v = decimal ? Math.abs(d).toFixed(1) : Math.abs(d).toLocaleString()
-  return <span className={`font-semibold ${d > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{d > 0 ? '▲ +' : '▼ -'}{v}</span>
+// ── Phase 3 + premium: Compare modal (side-by-side 2 เขต) ──
+
+// คำนวณ stats + trend ของเขตเดียว ตาม year/month
+function computeDistrict(incidents, dname, year, month) {
+  const drugs = {}, khwaengs = new Set()
+  let total = 0
+  const trend = Array(12).fill(0)
+  for (const r of incidents) {
+    if (r.district !== dname || !r.received_date) continue
+    const y = parseInt(r.received_date.slice(0, 4)) + 543
+    const m = parseInt(r.received_date.slice(5, 7))
+    if (year !== 'all' && y !== parseInt(year)) continue
+    if (r.primary_drug) trend[fyMonthIdx(m)]++   // trend = year-only (ไม่กรองเดือน)
+    if (month !== 'all' && m !== parseInt(month)) continue
+    if (!r.primary_drug) continue
+    total++
+    drugs[r.primary_drug] = (drugs[r.primary_drug] || 0) + 1
+    if (r.subdistrict?.trim()) khwaengs.add(r.subdistrict.trim())
+  }
+  return { total, drugs, khwaengCount: khwaengs.size, perKhwaeng: khwaengs.size ? total / khwaengs.size : 0, trend }
 }
 
-function CompareModal({ a, b, setA, setB, options, data, ymFiltered, periodLabel, onClose }) {
-  const ptsA = useMemo(() => ymFiltered.filter(r => r.district === a && r.lat && r.lng), [ymFiltered, a])
-  const ptsB = useMemo(() => ymFiltered.filter(r => r.district === b && r.lat && r.lng), [ymFiltered, b])
-  const getColor = p => DRUG_COLORS[p.primary_drug] || '#94A3B8'
+const drugTop = (drugs) => { let d = null, n = 0; for (const k in drugs) if (drugs[k] > n) { d = k; n = drugs[k] }; return d ? { drug: d, count: n } : null }
+const peakMonth = (trend, key) => { let i = 0, n = -1; trend.forEach((p, idx) => { if (p[key] > n) { n = p[key]; i = idx } }); return n > 0 ? { label: trend[i].label, value: n } : null }
+
+// สรุปอัตโนมัติเป็นภาษาธรรมชาติ (งาน6)
+function buildInsights(A, B, aName, bName, drugKeys, trend, yearLabel) {
+  const out = []
+  const dt = A.total - B.total
+  if (dt !== 0 && Math.min(A.total, B.total) > 0) {
+    const more = dt > 0 ? aName : bName, less = dt > 0 ? bName : aName
+    out.push(`${more} มีจำนวนรวมมากกว่า ${less} ${Math.abs(dt).toLocaleString()} จุด (+${(Math.abs(dt) / Math.min(A.total, B.total) * 100).toFixed(1)}%)`)
+  }
+  const tA = drugTop(A.drugs), tB = drugTop(B.drugs)
+  if (tA && (!tB || tA.count >= tB.count)) out.push(`${aName} เด่นเรื่อง ${tA.drug} (${tA.count.toLocaleString()} จุด) — สูงสุดในทั้ง 2 เขต`)
+  else if (tB) out.push(`${bName} เด่นเรื่อง ${tB.drug} (${tB.count.toLocaleString()} จุด) — สูงสุดในทั้ง 2 เขต`)
+  let big = null
+  for (const d of drugKeys) {
+    const av = A.drugs[d] || 0, bv = B.drugs[d] || 0, mn = Math.min(av, bv), mx = Math.max(av, bv)
+    if (mx < 5) continue
+    const ratio = mn > 0 ? (mx - mn) / mn : 999
+    if (!big || ratio > big.ratio) big = { drug: d, av, bv, ratio, mx, mn }
+  }
+  if (big) {
+    const more = big.av > big.bv ? aName : bName
+    const pct = big.mn > 0 ? `+${((big.mx - big.mn) / big.mn * 100).toFixed(0)}%` : 'อีกเขตแทบไม่มี'
+    out.push(`${more} มี ${big.drug} สูงกว่ามาก (${big.av} vs ${big.bv} จุด, ${pct})`)
+  }
+  const pA = peakMonth(trend, 'A'), pB = peakMonth(trend, 'B')
+  if (pA || pB) out.push(`เดือนที่มีเหตุสูงสุด — ${aName}: ${pA ? pA.label + ' ' + yearLabel : '—'} · ${bName}: ${pB ? pB.label + ' ' + yearLabel : '—'}`)
+  return out
+}
+
+function CompareModal({ a, b, setA, setB, options, incidents, years, initialYear, initialMonth, onClose }) {
+  const [mYear, setMYear] = useState(initialYear)
+  const [mMonth, setMMonth] = useState(initialMonth)
   const aName = a.replace(/^เขต/, ''), bName = b.replace(/^เขต/, '')
+  const yearLabel = mYear === 'all' ? 'ทุกปี' : 'พ.ศ. ' + mYear
+  const monthLabel = mMonth === 'all' ? 'ทุกเดือน' : THAI_MONTHS.find(m => m.v === mMonth)?.l || mMonth
+  const usingMain = mYear === initialYear && mMonth === initialMonth
+
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = e => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => { document.body.style.overflow = prev; document.removeEventListener('keydown', onKey) }
+  }, [onClose])
+
+  const data = useMemo(() => {
+    const A = computeDistrict(incidents, a, mYear, mMonth)
+    const B = computeDistrict(incidents, b, mYear, mMonth)
+    const drugKeys = [...new Set([...Object.keys(A.drugs), ...Object.keys(B.drugs)])]
+      .sort((x, y) => (B.drugs[y] || 0) + (A.drugs[y] || 0) - (B.drugs[x] || 0) - (A.drugs[x] || 0))
+    const trend = FY_MONTHS.map((label, i) => ({ label, A: A.trend[i], B: B.trend[i] }))
+    const ptsA = incidents.filter(r => r.district === a && r.lat && r.lng && (mYear === 'all' || parseInt(r.received_date?.slice(0, 4)) + 543 === parseInt(mYear)) && (mMonth === 'all' || parseInt(r.received_date?.slice(5, 7)) === parseInt(mMonth)))
+    const ptsB = incidents.filter(r => r.district === b && r.lat && r.lng && (mYear === 'all' || parseInt(r.received_date?.slice(0, 4)) + 543 === parseInt(mYear)) && (mMonth === 'all' || parseInt(r.received_date?.slice(5, 7)) === parseInt(mMonth)))
+    const insights = buildInsights(A, B, aName, bName, drugKeys, trend, yearLabel)
+    // avg |Δ| ของชนิดยา → ใช้ highlight row ที่ Δ สูง
+    const diffs = drugKeys.map(d => Math.abs((A.drugs[d] || 0) - (B.drugs[d] || 0)))
+    const avgDiff = diffs.length ? diffs.reduce((s, v) => s + v, 0) / diffs.length : 0
+    return { A, B, drugKeys, trend, ptsA, ptsB, insights, hiDiff: avgDiff * 1.5 }
+  }, [incidents, a, b, mYear, mMonth, aName, bName, yearLabel])
 
   return createPortal(
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-3 sm:p-6 bg-slate-900/50 backdrop-blur-sm print-hide" onClick={onClose}>
-      <div className="print-area bg-white rounded-2xl shadow-2xl w-full max-w-7xl max-h-[92vh] flex flex-col overflow-hidden animate-rise" onClick={e => e.stopPropagation()}>
-        {/* header */}
-        <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-slate-100 flex-shrink-0">
-          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2"><BarChart3 size={20} className="text-violet-600" /> เปรียบเทียบเขต</h2>
-          <div className="flex items-center gap-2 print-hide">
-            <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition"><Printer size={15} /> Export PDF</button>
-            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg"><X size={18} /></button>
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-0 sm:p-6 bg-slate-900/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="print-area bg-slate-50 sm:rounded-3xl shadow-2xl w-full max-w-7xl h-full sm:h-auto sm:max-h-[94vh] flex flex-col overflow-hidden animate-rise" onClick={e => e.stopPropagation()}>
+
+        {/* งาน4: Hero header gradient + orbs + glass */}
+        <div className="relative overflow-hidden px-6 sm:px-8 py-5 text-white bg-gradient-to-br from-violet-700 via-purple-800 to-fuchsia-900 flex-shrink-0">
+          <div className="orb absolute -top-10 -left-6 w-44 h-44 rounded-full bg-fuchsia-500/30 blur-3xl pointer-events-none" />
+          <div className="orb absolute -bottom-16 right-1/4 w-52 h-52 rounded-full bg-violet-400/30 blur-3xl pointer-events-none" style={{ animationDelay: '2s' }} />
+          <div className="noise-overlay absolute inset-0 opacity-[0.12] mix-blend-overlay pointer-events-none" />
+          <div className="dot-pattern absolute inset-0 text-white/10 opacity-40 pointer-events-none" />
+          <div className="relative z-10 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-2xl font-bold tracking-tight">📊 เปรียบเทียบเขต กทม.</h2>
+              <p className="text-sm text-white/70 mt-0.5">Side-by-side analysis · {aName} vs {bName}</p>
+              <span className="inline-flex items-center gap-1.5 text-xs text-white/90 bg-white/10 backdrop-blur-md ring-1 ring-white/20 rounded-full px-3 py-1.5 mt-3">
+                ⏱ ช่วง: {yearLabel} · {monthLabel}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 print-hide flex-shrink-0">
+              <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md ring-1 ring-white/20 text-white rounded-xl text-sm font-medium transition"><Printer size={15} /> <span className="hidden sm:inline">Export PDF</span></button>
+              <button onClick={onClose} className="w-9 h-9 flex items-center justify-center bg-white/10 hover:bg-white/20 backdrop-blur-md ring-1 ring-white/20 text-white rounded-xl transition"><X size={18} /></button>
+            </div>
           </div>
         </div>
 
-        <div className="overflow-y-auto p-6 space-y-5">
-          {/* dropdowns */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <select value={a} onChange={e => setA(e.target.value)} className="px-3 py-2 bg-violet-50 border border-violet-200 rounded-lg text-sm font-semibold text-violet-700 outline-none">
-              {options.map(d => <option key={d} value={d} disabled={d === b}>{d}</option>)}
-            </select>
-            <span className="text-slate-400 text-sm font-medium">vs</span>
-            <select value={b} onChange={e => setB(e.target.value)} className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm font-semibold text-amber-700 outline-none">
-              {options.map(d => <option key={d} value={d} disabled={d === a}>{d}</option>)}
-            </select>
-            <span className="text-xs text-slate-400 ml-auto">ช่วง: {periodLabel}</span>
+        <div className="overflow-y-auto p-6 sm:p-8 space-y-6">
+          {/* dropdown เขต + งาน1: filter ปี/เดือน */}
+          <div className="bg-white rounded-2xl ring-1 ring-slate-200 p-4 space-y-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <select value={a} onChange={e => setA(e.target.value)} className="flex-1 min-w-[120px] px-3 py-2 bg-violet-50 border border-violet-200 rounded-lg text-sm font-bold text-violet-700 outline-none">
+                {options.map(d => <option key={d} value={d} disabled={d === b}>{d}</option>)}
+              </select>
+              <span className="text-slate-400 text-sm font-semibold">vs</span>
+              <select value={b} onChange={e => setB(e.target.value)} className="flex-1 min-w-[120px] px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm font-bold text-amber-700 outline-none">
+                {options.map(d => <option key={d} value={d} disabled={d === a}>{d}</option>)}
+              </select>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap border-t border-slate-100 pt-3">
+              <select value={mYear} onChange={e => setMYear(e.target.value)} className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none">
+                <option value="all">ทุกปี</option>
+                {years.map(y => <option key={y} value={y}>พ.ศ. {y}</option>)}
+              </select>
+              <select value={mMonth} onChange={e => setMMonth(e.target.value)} className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none">
+                <option value="all">ทุกเดือน</option>
+                {THAI_MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+              </select>
+              {!usingMain && (
+                <button onClick={() => { setMYear(initialYear); setMMonth(initialMonth) }}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-violet-600 hover:bg-violet-50 rounded-lg transition">
+                  ⟲ ใช้ filter หน้าหลัก
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* mini maps */}
+          {/* งาน3: mini-map premium ribbon */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {[{ n: aName, full: a, pts: ptsA, c: 'violet' }, { n: bName, full: b, pts: ptsB, c: 'amber' }].map((m) => (
-              <div key={m.full} className={`rounded-xl overflow-hidden ring-1 ${m.c === 'violet' ? 'ring-violet-200' : 'ring-amber-200'}`}>
-                <div className={`px-3 py-1.5 text-sm font-semibold ${m.c === 'violet' ? 'bg-violet-50 text-violet-700' : 'bg-amber-50 text-amber-700'}`}>🗺️ {m.full} · {m.pts.length} จุด</div>
-                <div className="h-[240px]">
-                  <IncidentMap mini points={m.pts} getColor={getColor} highlightDistrict={m.full} viewMode="point" className="w-full h-full" />
-                </div>
-              </div>
-            ))}
+            <RibbonMap side="A" full={a} pts={data.ptsA} stat={data.A} />
+            <RibbonMap side="B" full={b} pts={data.ptsB} stat={data.B} />
           </div>
 
-          {/* stats table */}
-          <div className="rounded-xl ring-1 ring-slate-200 overflow-hidden">
+          {/* งาน5: stats table premium */}
+          <div className="bg-white rounded-2xl ring-1 ring-slate-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-xs text-slate-500 border-b border-slate-200">
-                  <th className="text-left px-4 py-2.5 font-semibold">ตัวชี้วัด</th>
-                  <th className="text-right px-4 py-2.5 font-semibold text-violet-700">A: {aName}</th>
-                  <th className="text-right px-4 py-2.5 font-semibold text-amber-700">B: {bName}</th>
-                  <th className="text-right px-4 py-2.5 font-semibold">Δ</th>
+                  <th className="text-left px-4 py-3 font-semibold sticky left-0 bg-slate-50">ตัวชี้วัด</th>
+                  <th className="text-right px-4 py-3 font-bold text-violet-700">A: {aName}</th>
+                  <th className="text-right px-4 py-3 font-bold text-amber-700">B: {bName}</th>
+                  <th className="text-right px-4 py-3 font-semibold">Δ</th>
                 </tr>
               </thead>
               <tbody>
-                <Row label="จำนวนรวม" a={data.a.total} b={data.b.total} bold />
-                <SectionRow label="ชนิดยา" />
+                <Row label="จำนวนรวม" a={data.A.total} b={data.B.total} bold />
+                <SectionRow icon="💊" label="ชนิดยา" />
                 {data.drugKeys.map(d => (
-                  <Row key={d} label={d} dot={DRUG_COLORS[d]} a={data.a.drugs[d] || 0} b={data.b.drugs[d] || 0} />
+                  <Row key={d} label={d} dot={DRUG_COLORS[d]} a={data.A.drugs[d] || 0} b={data.B.drugs[d] || 0} hi={Math.abs((data.A.drugs[d] || 0) - (data.B.drugs[d] || 0)) > data.hiDiff} />
                 ))}
-                <SectionRow label="พื้นที่" />
-                <Row label="จำนวนแขวง" a={data.a.khwaengCount} b={data.b.khwaengCount} />
-                <Row label="จุดต่อแขวง" a={data.a.perKhwaeng} b={data.b.perKhwaeng} decimal />
+                <SectionRow icon="📍" label="พื้นที่" />
+                <Row label="จำนวนแขวง" a={data.A.khwaengCount} b={data.B.khwaengCount} />
+                <Row label="จุดต่อแขวง" a={data.A.perKhwaeng} b={data.B.perKhwaeng} decimal />
               </tbody>
             </table>
           </div>
 
-          {/* trend chart */}
-          <div className="rounded-xl ring-1 ring-slate-200 p-4">
-            <div className="text-sm font-semibold text-slate-700 mb-2">📉 แนวโน้มรายเดือน (ปีงบ ต.ค.→ก.ย.)</div>
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={data.trend} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
-                <RTooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="A" name={aName} stroke="#7c3aed" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="B" name={bName} stroke="#f59e0b" strokeWidth={2.5} strokeDasharray="6 3" dot={false} activeDot={{ r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
+          {/* งาน2: trend chart premium */}
+          <div className="bg-white rounded-2xl ring-1 ring-slate-200 p-6">
+            <div className="text-base font-semibold text-slate-800">📉 แนวโน้มรายเดือน (12 เดือน)</div>
+            <div className="text-xs text-slate-400 mb-3">ปีงบ {yearLabel} · ต.ค. → ก.ย.</div>
+            <PremiumTrendChart data={data.trend} aName={aName} bName={bName} />
           </div>
+
+          {/* งาน6: insights */}
+          <InsightsCard insights={data.insights} />
         </div>
 
-        <div className="flex justify-end gap-2 px-6 py-3 border-t border-slate-100 flex-shrink-0 print-hide">
+        <div className="flex justify-end gap-2 px-6 sm:px-8 py-3 border-t border-slate-200 bg-white flex-shrink-0 print-hide">
           <button onClick={onClose} className="px-5 py-2 border border-slate-300 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 transition">ปิด</button>
         </div>
       </div>
@@ -1141,22 +1197,116 @@ function CompareModal({ a, b, setA, setB, options, data, ymFiltered, periodLabel
   )
 }
 
-function Row({ label, a, b, dot, bold, decimal }) {
+// งาน3: mini-map พร้อม ribbon header + border สี + overlay stat
+function RibbonMap({ side, full, pts, stat }) {
+  const isA = side === 'A'
+  const ribbon = isA ? 'from-violet-500 to-violet-700' : 'from-amber-500 to-amber-700'
+  const ring = isA ? 'ring-violet-300' : 'ring-amber-300'
+  const getColor = p => DRUG_COLORS[p.primary_drug] || '#94A3B8'
+  return (
+    <div className={`rounded-3xl overflow-hidden ring-2 ${ring} shadow-2xl bg-white`}>
+      <div className={`bg-gradient-to-r ${ribbon} px-4 py-2.5 text-white`}>
+        <div className="flex items-center gap-2">
+          <span className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-xs font-bold">{side}</span>
+          <span className="font-bold">{full}</span>
+        </div>
+        <div className="text-xs text-white/85 mt-0.5">{pts.length.toLocaleString()} จุด · {stat.khwaengCount} แขวง</div>
+      </div>
+      <div className="relative h-[240px]">
+        <IncidentMap mini points={pts} getColor={getColor} highlightDistrict={full} viewMode="point" className="w-full h-full" />
+        <div className="absolute top-2 right-2 z-[500] bg-white/90 backdrop-blur rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-700 shadow print-hide">
+          เฉลี่ย/แขวง: {stat.perKhwaeng.toFixed(0)}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// งาน2: premium trend chart (gradient fill + peak markers + custom tooltip)
+function PremiumTrendChart({ data, aName, bName }) {
+  const peakA = data.reduce((mx, p, i) => p.A > data[mx].A ? i : mx, 0)
+  const peakB = data.reduce((mx, p, i) => p.B > data[mx].B ? i : mx, 0)
+  const maxY = Math.max(1, ...data.map(p => Math.max(p.A, p.B)))
+  return (
+    <ResponsiveContainer width="100%" height={320}>
+      <ComposedChart data={data} margin={{ top: 24, right: 20, left: 0, bottom: 4 }}>
+        <defs>
+          <linearGradient id="cmpA" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#7c3aed" stopOpacity={0.22} /><stop offset="100%" stopColor="#7c3aed" stopOpacity={0.02} /></linearGradient>
+          <linearGradient id="cmpB" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f59e0b" stopOpacity={0.18} /><stop offset="100%" stopColor="#f59e0b" stopOpacity={0.02} /></linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="2 4" stroke="#e2e8f0" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+        <YAxis domain={[0, Math.ceil(maxY * 1.15)]} ticks={[0, maxY]} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={28} />
+        <RTooltip content={<TrendTooltip aName={aName} bName={bName} />} />
+        <Legend wrapperStyle={{ fontSize: 12, paddingTop: 6 }} />
+        <Area type="monotone" dataKey="A" name={aName} stroke="#7c3aed" strokeWidth={3} fill="url(#cmpA)" dot={false} activeDot={{ r: 5 }} isAnimationActive animationDuration={1000} />
+        <Area type="monotone" dataKey="B" name={bName} stroke="#f59e0b" strokeWidth={2.5} strokeDasharray="6 3" fill="url(#cmpB)" dot={false} activeDot={{ r: 5 }} isAnimationActive animationDuration={1000} />
+        {data[peakA].A > 0 && <ReferenceDot x={data[peakA].label} y={data[peakA].A} r={5} fill="#7c3aed" stroke="#fff" strokeWidth={2} label={{ value: data[peakA].A, position: 'top', fontSize: 11, fontWeight: 700, fill: '#7c3aed' }} />}
+        {data[peakB].B > 0 && <ReferenceDot x={data[peakB].label} y={data[peakB].B} r={5} fill="#f59e0b" stroke="#fff" strokeWidth={2} label={{ value: data[peakB].B, position: 'bottom', fontSize: 11, fontWeight: 700, fill: '#d97706' }} />}
+      </ComposedChart>
+    </ResponsiveContainer>
+  )
+}
+function TrendTooltip({ active, payload, label, aName, bName }) {
+  if (!active || !payload?.length) return null
+  const A = payload.find(p => p.dataKey === 'A')?.value ?? 0
+  const B = payload.find(p => p.dataKey === 'B')?.value ?? 0
+  const d = A - B
+  const pct = Math.min(A, B) > 0 ? (Math.abs(d) / Math.min(A, B) * 100).toFixed(0) : null
+  return (
+    <div className="bg-white rounded-lg ring-1 ring-slate-200 shadow-xl px-3 py-2 text-xs">
+      <div className="font-bold text-slate-800 mb-1">{label}</div>
+      <div className="flex items-center justify-between gap-4"><span className="text-violet-600">● {aName}</span><span className="font-bold tabular-nums">{A.toLocaleString()}</span></div>
+      <div className="flex items-center justify-between gap-4"><span className="text-amber-600">● {bName}</span><span className="font-bold tabular-nums">{B.toLocaleString()}</span></div>
+      {d !== 0 && <div className={`mt-1 pt-1 border-t border-slate-100 text-right font-bold ${d > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>Δ {d > 0 ? '+' : ''}{d}{pct ? ` (${d > 0 ? '▲' : '▼'} ${pct}%)` : ''}</div>}
+    </div>
+  )
+}
+
+// งาน5: premium row + Δ badge
+function Delta({ a, b, decimal }) {
+  const d = a - b
+  const eq = Math.abs(d) < (decimal ? 0.05 : 0.5)
+  const v = decimal ? Math.abs(d).toFixed(1) : Math.abs(d).toLocaleString()
+  const cls = eq ? 'bg-slate-100 text-slate-500' : d > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+  return <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${cls}`}>{eq ? '= 0' : `${d > 0 ? '▲ +' : '▼ -'}${v}`}</span>
+}
+function Row({ label, a, b, dot, bold, decimal, hi }) {
   const fmt = (v) => decimal ? v.toFixed(1) : v.toLocaleString()
   return (
-    <tr className={`border-b border-slate-100 last:border-0 ${bold ? 'bg-slate-50/60' : ''}`}>
-      <td className="px-4 py-2 text-slate-700">
+    <tr className={`border-b border-slate-100 last:border-0 transition-colors hover:bg-slate-50 ${bold ? 'bg-slate-50/60' : hi ? 'bg-violet-50/40' : ''}`}>
+      <td className="px-4 py-2.5 text-slate-700 sticky left-0 bg-inherit">
         <span className="inline-flex items-center gap-2">
-          {dot && <span className="w-2.5 h-2.5 rounded-full" style={{ background: dot }} />}
+          {dot && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: dot }} />}
           <span className={bold ? 'font-bold' : ''}>{label}</span>
         </span>
       </td>
-      <td className={`px-4 py-2 text-right tabular-nums ${bold ? 'font-bold' : ''} text-slate-800`}>{fmt(a)}</td>
-      <td className={`px-4 py-2 text-right tabular-nums ${bold ? 'font-bold' : ''} text-slate-800`}>{fmt(b)}</td>
-      <td className="px-4 py-2 text-right tabular-nums"><Delta a={a} b={b} decimal={decimal} /></td>
+      <td className={`px-4 py-2.5 text-right tabular-nums font-bold text-violet-600 ${bold ? 'text-base' : ''}`}>{fmt(a)}</td>
+      <td className={`px-4 py-2.5 text-right tabular-nums font-bold text-amber-600 ${bold ? 'text-base' : ''}`}>{fmt(b)}</td>
+      <td className="px-4 py-2.5 text-right"><Delta a={a} b={b} decimal={decimal} /></td>
     </tr>
   )
 }
-function SectionRow({ label }) {
-  return <tr className="bg-slate-100/70"><td colSpan={4} className="px-4 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wide">── {label} ──</td></tr>
+function SectionRow({ icon, label }) {
+  return <tr className="bg-slate-100/60"><td colSpan={4} className="px-4 py-1.5 text-xs font-semibold text-slate-500 tracking-wide">{icon} {label}</td></tr>
+}
+
+// งาน6: auto insights card
+function InsightsCard({ insights }) {
+  if (!insights?.length) return null
+  return (
+    <div className="bg-gradient-to-br from-violet-50 to-fuchsia-50 rounded-2xl ring-1 ring-violet-100 p-6">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-lg">💡</span>
+        <h3 className="text-base font-semibold text-slate-800">ข้อสังเกต</h3>
+      </div>
+      <ul className="space-y-2">
+        {insights.map((t, i) => (
+          <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+            <span className="text-violet-400 mt-0.5 flex-shrink-0">•</span><span>{t}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
 }
