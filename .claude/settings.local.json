@@ -64,7 +64,15 @@
       "PowerShell(npx eslint src/pages/SubstanceRadar.jsx)",
       "Bash(cat)",
       "PowerShell(npx eslint src/utils/importEngine.js src/pages/SubstanceUsers.jsx)",
-      "PowerShell(npm install *)"
+      "PowerShell(npm install *)",
+      "Bash(npx eslint *)",
+      "Bash(echo \"=== exit: $? ===\")",
+      "Bash(echo \"=== lint exit: $? ===\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(grep -nE \"SUBSTANCE_USERS_COLUMNS|[\\\\[]\\\\\\\\\\\\\\\\/\\\\\\\\\\\\\\\\-\\\\.\")",
+      "Bash(git commit -q -m ' *)"
     ]
   }
 }
