@@ -72,7 +72,9 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(grep -nE \"SUBSTANCE_USERS_COLUMNS|[\\\\[]\\\\\\\\\\\\\\\\/\\\\\\\\\\\\\\\\-\\\\.\")",
-      "Bash(git commit -q -m ' *)"
+      "Bash(git commit -q -m ' *)",
+      "Bash(sort -t: -k2 -V)",
+      "Bash(awk -F: '{print \"  line \"$1\": \"$2}')"
     ]
   }
 }
