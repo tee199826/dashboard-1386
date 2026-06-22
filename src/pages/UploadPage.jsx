@@ -161,7 +161,7 @@ const recordWord = (t) => (t === 'bkn_summary' || t === 'report_114') ? 'record'
 function computePreview(raw, type, fileName) {
   const mapped = type === 'substance_users'
     ? raw.map((r, i) => flattenSubstanceUserRow(r, fileName, i + 1))
-    : mapColumns(raw, type)
+    : mapColumns(raw, type, fileName)
   const b      = buildBatch(mapped, fileName, type)
   const v      = validateRows(b.rows, type)
   return { mapped, batch: b, validation: v }
@@ -956,6 +956,23 @@ function ConfirmRow({ label, value, mono }) {
   )
 }
 
+// แปลง Postgres error → ข้อความที่อ่านง่าย (คืน null ถ้าไม่รู้จัก → โชว์ raw)
+function humanizeError(msg) {
+  if (!msg) return null
+  const m = String(msg).match(/null value in column "(\w+)"/)
+  if (m) {
+    const col = m[1]
+    return {
+      title: `ขาดข้อมูล column: ${col}`,
+      causes: ['ไฟล์ไม่มี column นี้', 'Parser ไม่ได้ extract ค่าจาก filename'],
+      hint: col === 'group_no'
+        ? "สำหรับไฟล์ complaints: ตั้งชื่อไฟล์ให้มี 'กลุ่ม N' เช่น 'กลุ่ม 1 ปีงบ 66.xlsx'"
+        : null,
+    }
+  }
+  return null
+}
+
 // Result modal — success / error / partial (variant ตาม failed/ok)
 function UploadResultModal({ open, result, fileName, type, onClose, onDashboard, closeLabel, dashboardLabel }) {
   const [copied, setCopied] = useState(false)
@@ -1033,11 +1050,34 @@ function UploadResultModal({ open, result, fileName, type, onClose, onDashboard,
             ⏱️ ใช้เวลา: {durationS}s
           </div>
         )}
-        {result.error && (
-          <div className="flex items-start gap-2 text-sm text-rose-700 bg-rose-50 rounded-lg px-3 py-2 border border-rose-200">
-            <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" /> <span className="break-words">{result.error}</span>
-          </div>
-        )}
+        {result.error && (() => {
+          const h = humanizeError(result.error)
+          if (!h) return (
+            <div className="flex items-start gap-2 text-sm text-rose-700 bg-rose-50 rounded-lg px-3 py-2 border border-rose-200">
+              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" /> <span className="break-words">{result.error}</span>
+            </div>
+          )
+          return (
+            <div className="text-sm bg-rose-50 rounded-lg px-3 py-3 border border-rose-200 space-y-2">
+              <div className="flex items-start gap-2 font-semibold text-rose-700">
+                <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" /> ❌ {h.title}
+              </div>
+              <div className="text-xs text-rose-700">
+                <div className="font-medium mb-0.5">สาเหตุที่เป็นไปได้:</div>
+                <ul className="list-disc list-inside space-y-0.5 text-rose-600">
+                  {h.causes.map((c, i) => <li key={i}>{c}</li>)}
+                </ul>
+              </div>
+              {h.hint && (
+                <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">💡 {h.hint}</div>
+              )}
+              <details className="text-[11px] text-slate-400">
+                <summary className="cursor-pointer">ดู error เดิม</summary>
+                <span className="break-words font-mono">{result.error}</span>
+              </details>
+            </div>
+          )
+        })()}
         {rowErrors.length > 0 && (
           <div className="bg-rose-50 rounded-lg px-3 py-2 border border-rose-200">
             <p className="text-xs font-semibold text-rose-700 mb-1">ข้อผิดพลาดรายแถว:</p>

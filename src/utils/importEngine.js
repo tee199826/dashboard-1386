@@ -460,12 +460,38 @@ export function detectTypeScored(rows, fileName = '') {
 
 const DATE_COLUMNS = new Set(['received_date', 'completed_date'])
 
+// column ที่อาจเก็บเลขกลุ่ม บก.น. (complaints.group_no = NOT NULL)
+const GROUP_COL_ALIASES = ['group_no', 'กลุ่ม', 'หมายเลขกลุ่ม', 'บก.น.', 'กลุ่มเรื่อง']
+
+/**
+ * ดึงเลขกลุ่ม บก.น. จากชื่อไฟล์
+ *   "กลุ่ม 1 ปีงบ 66.XLSX" → 1 ; "กลุ่ม 4..." → 4 ; "complaints_g2.xlsx" → 2 ; "random.xlsx" → null
+ */
+export function extractGroupFromFilename(fileName) {
+  if (!fileName) return null
+  const s = String(fileName)
+  const m = s.match(/กลุ่ม\s*(\d+)/) || s.match(/group[\s_-]*(\d+)/i) || s.match(/(?:^|[\s_(-])g(\d+)/i)
+  return m ? parseInt(m[1], 10) : null
+}
+
+// resolve group_no: a) column ในไฟล์  b) filename  (คืน int หรือ null)
+function resolveGroupNo(row, fileGroup) {
+  for (const [k, v] of Object.entries(row)) {
+    if (GROUP_COL_ALIASES.includes(k.trim())) {
+      const digits = String(v ?? '').match(/\d+/)
+      if (digits) return parseInt(digits[0], 10)
+    }
+  }
+  return fileGroup
+}
+
 /**
  * แปลง key ภาษาไทยจาก Excel → ชื่อคอลัมน์ DB
  * วันที่แปลงเป็น YYYY-MM-DD, ค่าว่าง/'-'/'null' เป็น null
  * คอลัมน์ที่ไม่อยู่ใน mapping จะถูกข้าม
+ * complaints: group_no resolve จาก column → filename → throw (กัน NOT NULL violation)
  */
-export function mapColumns(rows, type) {
+export function mapColumns(rows, type, fileName) {
   const mapping = type === 'drug_incidents' ? DRUG_INCIDENTS_MAP : COMPLAINTS_MAP
   const dbCols  = type === 'drug_incidents' ? DRUG_INCIDENTS_COLUMNS : COMPLAINTS_COLUMNS
 
@@ -484,6 +510,9 @@ export function mapColumns(rows, type) {
     }
   }
 
+  // complaints: เลขกลุ่มจากชื่อไฟล์ (fallback ถ้าไม่มี column)
+  const fileGroup = type === 'complaints' ? extractGroupFromFilename(fileName) : null
+
   return rows.map(row => {
     const mapped = {}
     for (const [rawKey, rawVal] of Object.entries(row)) {
@@ -499,6 +528,14 @@ export function mapColumns(rows, type) {
       } else {
         mapped[dbCol] = normalizeValue(rawVal)
       }
+    }
+    // complaints.group_no NOT NULL → resolve column → filename ; ไม่ได้เลย → throw
+    if (type === 'complaints') {
+      const g = resolveGroupNo(row, fileGroup)
+      if (g == null) {
+        throw new Error("ไม่พบเลขกลุ่ม บก.น. ใน column หรือชื่อไฟล์ — โปรดตั้งชื่อไฟล์ให้มี 'กลุ่ม N' เช่น 'กลุ่ม 1 ปีงบ 66.xlsx'")
+      }
+      mapped.group_no = g
     }
     return mapped
   })
