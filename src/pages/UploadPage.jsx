@@ -4,11 +4,14 @@ import {
   Upload, FileText, AlertTriangle, CheckCircle2,
   X, ChevronDown, RefreshCw, Info, LayoutDashboard,
   BookOpen, Sparkles, BarChart3, MapPin, Shield, Map as MapIcon, TrendingUp, Users, ExternalLink,
-  Check, Circle, ChevronRight, ArrowLeft,
+  Circle, Copy, Clock,
 } from 'lucide-react'
-import { parseFile, detectType, mapColumns, buildBatch, validateRows, parse115B, parse114, flattenSubstanceUserRow } from '../utils/importEngine'
+import Modal from '../components/Modal'
+import { parseFile, detectType, detectTypeScored, mapColumns, buildBatch, validateRows, parse115B, parse114, flattenSubstanceUserRow, assignDrugIncidentDistricts } from '../utils/importEngine'
 import { upsertRecords, upsertBknSummary, upsertRpt114, upsertSubstanceUsers } from '../utils/uploadService'
 import { useData } from '../context/DataContext'
+import { supabase } from '../lib/supabase'
+import { getLastUploadDate } from '../utils/heroMeta'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -65,36 +68,38 @@ const COL_LABELS = {
 
 const HIDE_COLS = new Set(['batch_id', 'source_file', 'row_index', 'record_uid'])
 
-// ─── Guided mode ("อัปตามหน้า") — เลือกหน้าก่อน แล้วบอกว่าต้องอัปไฟล์อะไรบ้าง ──────
-const PAGES = [
-  { id: 'overview',        name: 'ภาพรวม',            route: '/',                 icon: BarChart3,  gradient: 'from-blue-500 to-indigo-600',   shadow: 'shadow-blue-500/30',   requiredFiles: ['complaints', 'drug_incidents', 'bkn_summary', 'report_114', 'substance_users'] },
-  { id: 'districts',       name: 'รายเขต',            route: '/districts',        icon: MapPin,     gradient: 'from-indigo-500 to-purple-600', shadow: 'shadow-indigo-500/30', requiredFiles: ['complaints', 'drug_incidents', 'substance_users'] },
-  { id: 'bkn',             name: 'สถิติ บก.น.',        route: '/bkn',              icon: Shield,     gradient: 'from-slate-600 to-slate-800',   shadow: 'shadow-slate-500/30',  requiredFiles: ['bkn_summary'] },
-  { id: 'radar',           name: 'แผนที่ยาเสพติด',     route: '/radar',            icon: MapIcon,    gradient: 'from-cyan-500 to-blue-600',     shadow: 'shadow-cyan-500/30',   requiredFiles: ['drug_incidents'] },
-  { id: 'operations',      name: 'ผลการดำเนินงาน',     route: '/operations',       icon: TrendingUp, gradient: 'from-amber-500 to-orange-600',  shadow: 'shadow-amber-500/30',  requiredFiles: ['report_114', 'complaints'] },
-  { id: 'substance-users', name: 'ผลเก็บข้อมูลผู้เสพ',  route: '/substance-users',  icon: Users,      gradient: 'from-violet-500 to-purple-600', shadow: 'shadow-violet-500/30', requiredFiles: ['substance_users'] },
+// Guided mode ใหม่ — เลือก "ตาราง" ที่จะอัปตรงๆ (mental model: 1 ไฟล์ = 1 ตาราง)
+const TABLES = [
+  { id: 'drug_incidents',  emoji: '🎯', name: 'เหตุการณ์ยาเสพติด',     icon: MapIcon,    grad: 'from-violet-500 to-purple-600',  shadow: 'shadow-violet-500/30' },
+  { id: 'complaints',      emoji: '📞', name: 'เรื่องร้องเรียน 1386',    icon: FileText,   grad: 'from-blue-500 to-indigo-600',    shadow: 'shadow-blue-500/30' },
+  { id: 'substance_users', emoji: '🧑', name: 'แบบเก็บข้อมูลผู้เสพ',     icon: Users,      grad: 'from-emerald-500 to-teal-600',   shadow: 'shadow-emerald-500/30' },
+  { id: 'bkn_summary',     emoji: '📊', name: 'สรุป บก.น. (RPT 115_B)',  icon: Shield,     grad: 'from-amber-500 to-orange-600',   shadow: 'shadow-amber-500/30' },
+  { id: 'report_114',      emoji: '📑', name: 'รายงาน RPT_114',          icon: TrendingUp, grad: 'from-rose-500 to-pink-600',       shadow: 'shadow-rose-500/30' },
 ]
-
-const FILE_LABELS = {
-  complaints:      'ไฟล์เรื่องร้องเรียน 1386',
-  drug_incidents:  'ไฟล์เหตุการณ์ยาเสพติด',
-  bkn_summary:     'ไฟล์สรุป บก.น. (RPT 115_B)',
-  report_114:      'ไฟล์รายงาน 114 (RPT_114)',
-  substance_users: 'ไฟล์แบบเก็บข้อมูลผู้เสพ',
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const cn = (...c) => c.filter(Boolean).join(' ')
 
-function timeAgo(ts, now) {
-  const s = Math.max(0, Math.floor((now - ts) / 1000))
-  if (s < 60) return `${s} วินาทีที่แล้ว`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m} นาทีที่แล้ว`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h} ชั่วโมงที่แล้ว`
-  return `${Math.floor(h / 24)} วันที่แล้ว`
+// timing helper ที่ module scope (เลี่ยง react-hooks/purity ที่ flag Date.now() ตรงๆ ใน component)
+const nowMs = () => Date.now()
+
+// จำนวนวันจาก ISO ถึงตอนนี้ (null ถ้าไม่มี)
+function daysSince(iso) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d)) return null
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000))
+}
+const dayLabel = (n) => n == null ? null : n === 0 ? 'วันนี้' : `${n} วันก่อน`
+
+// ดึงสถานะ DB ต่อตาราง (row count + วันอัปล่าสุด) — ใช้ใน Guided mode
+async function fetchTableStat(table) {
+  const [{ count }, lastUpload] = await Promise.all([
+    supabase.from(table).select('*', { count: 'exact', head: true }).then(r => r, () => ({ count: null })),
+    getLastUploadDate(supabase, table).catch(() => null),
+  ])
+  return { count: count ?? null, lastUpload }
 }
 
 // ตรวจไฟล์ (parse + detect) ก่อนอัป — ใช้ util เดิม ไม่แตะ parser
@@ -103,7 +108,8 @@ async function detectFileType(file) {
   if (!['xlsx', 'xls', 'csv'].includes(ext)) throw new Error('รองรับเฉพาะไฟล์ .xlsx, .xls, .csv เท่านั้น')
   const { rows: raw, workbook: wb } = await parseFile(file)
   if (!raw || raw.length === 0) throw new Error('ไม่พบข้อมูลในไฟล์หรือไฟล์ว่างเปล่า')
-  return { raw, wb, detected: detectType(raw) }
+  const detection = detectTypeScored(raw, file.name)
+  return { raw, wb, detection, rowCount: previewCount(detection.type, raw, wb) ?? raw.length }
 }
 
 // อัปไฟล์เข้าตาราง table — dispatch ไป upsert service เดิม (ไม่แตะ UPSERT logic)
@@ -124,8 +130,15 @@ async function uploadParsedFor(table, raw, wb, fileName) {
     return { total: raw.length, result }
   }
   const { batch } = computePreview(raw, table, fileName)
+  // drug_incidents: เติม district อัตโนมัติจาก lat/lng ก่อน upsert (กัน district = NULL)
+  let districtAssigned = 0
+  if (table === 'drug_incidents') {
+    const a = await assignDrugIncidentDistricts(batch.rows)
+    districtAssigned = a.districtAssigned
+    if (a.unmatched.length) console.warn('[upload] drug_incidents มี lat/lng แต่ไม่ match polygon (row_index):', a.unmatched)
+  }
   const result = await upsertRecords(table, batch.rows, { batchId: batch.batchId, fileName })
-  return { total: batch.rows.length, result }
+  return { total: batch.rows.length, result, districtAssigned }
 }
 
 function genBatchId() {
@@ -134,6 +147,16 @@ function genBatchId() {
   return [now.getFullYear(), p(now.getMonth() + 1), p(now.getDate())].join('') +
     '-' + [p(now.getHours()), p(now.getMinutes()), p(now.getSeconds())].join('')
 }
+
+// นับจำนวนแถวที่จะอัป (ไม่เขียน DB) — ใช้โชว์ใน confirm modal
+function previewCount(table, raw, wb) {
+  try {
+    if (table === 'bkn_summary') return parse115B(wb).length
+    if (table === 'report_114') return parse114(wb).length
+  } catch { return null }
+  return raw.length   // complaints / drug_incidents / substance_users
+}
+const recordWord = (t) => (t === 'bkn_summary' || t === 'report_114') ? 'record' : 'แถว'
 
 function computePreview(raw, type, fileName) {
   const mapped = type === 'substance_users'
@@ -156,6 +179,7 @@ const GROUP_NAMES = {
 
 export default function UploadPage() {
   const [uploadMode, setUploadMode]     = useState('guided')   // 'guided' = อัปตามหน้า (default) | 'manual' = อัปทีละไฟล์ (เดิม)
+  const [confirmOpen, setConfirmOpen]   = useState(false)      // confirm modal ก่อนอัป (manual)
   const [phase, setPhase]               = useState('idle')
   const [file, setFile]                 = useState(null)
   const [rawRows, setRawRows]           = useState([])
@@ -359,6 +383,8 @@ export default function UploadPage() {
   // ─── ยืนยันอัปโหลด ───────────────────────────────────────────
   const handleConfirm = async () => {
     if (!file) return
+    setConfirmOpen(false)
+    const startedAt = nowMs()
     setPhase('uploading')
     const totalRows = confirmCount
     setUploadProgress(
@@ -370,30 +396,44 @@ export default function UploadPage() {
     )
 
     let result
-    if (selectedType === 'bkn_summary') {
-      result = await upsertBknSummary(bkn115Rows, {
-        batchId:  bkn115BatchId || genBatchId(),
-        fileName: file.name,
-      })
-    } else if (selectedType === 'report_114') {
-      result = await upsertRpt114(rpt114Rows, {
-        batchId:  rpt114BatchId || genBatchId(),
-        fileName: file.name,
-      })
-    } else if (selectedType === 'substance_users') {
-      // ส่ง raw rows — upsertSubstanceUsers flatten เป็น jsonb ภายในเอง
-      result = await upsertSubstanceUsers(rawRows, {
-        batchId:  batch?.batchId || genBatchId(),
-        fileName: file.name,
-      })
-    } else {
-      if (!batch) { setPhase('preview'); return }
-      result = await upsertRecords(selectedType, batch.rows, {
-        batchId:  batch.batchId,
-        fileName: file.name,
-      })
+    try {
+      if (selectedType === 'bkn_summary') {
+        result = await upsertBknSummary(bkn115Rows, {
+          batchId:  bkn115BatchId || genBatchId(),
+          fileName: file.name,
+        })
+      } else if (selectedType === 'report_114') {
+        result = await upsertRpt114(rpt114Rows, {
+          batchId:  rpt114BatchId || genBatchId(),
+          fileName: file.name,
+        })
+      } else if (selectedType === 'substance_users') {
+        // ส่ง raw rows — upsertSubstanceUsers flatten เป็น jsonb ภายในเอง
+        result = await upsertSubstanceUsers(rawRows, {
+          batchId:  batch?.batchId || genBatchId(),
+          fileName: file.name,
+        })
+      } else {
+        if (!batch) { setPhase('preview'); return }
+        // drug_incidents: เติม district อัตโนมัติจาก lat/lng ก่อน upsert (กัน district = NULL)
+        let districtAssigned = 0
+        if (selectedType === 'drug_incidents') {
+          const a = await assignDrugIncidentDistricts(batch.rows)
+          districtAssigned = a.districtAssigned
+          if (a.unmatched.length) console.warn('[upload] drug_incidents มี lat/lng แต่ไม่ match polygon (row_index):', a.unmatched)
+        }
+        result = await upsertRecords(selectedType, batch.rows, {
+          batchId:  batch.batchId,
+          fileName: file.name,
+        })
+        if (districtAssigned) result = { ...result, districtAssigned }
+      }
+    } catch (err) {
+      // เผื่อ service throw (ปกติ return error ใน result) — กัน spinner ค้าง
+      result = { inserted: 0, updated: 0, failed: confirmCount, error: err?.message || String(err) }
     }
 
+    result = { ...result, durationMs: nowMs() - startedAt }
     setUploadResult(result)
     setPhase('done')
   }
@@ -844,12 +884,12 @@ export default function UploadPage() {
               ยกเลิก
             </button>
             <button
-              onClick={handleConfirm}
+              onClick={() => setConfirmOpen(true)}
               disabled={!canConfirm}
               className="px-7 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-sm font-bold transition-all shadow flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Upload size={15} />
-              ยืนยันอัปโหลด {confirmCount.toLocaleString()} {selectedType === 'bkn_summary' || selectedType === 'report_114' ? 'record' : 'แถว'}
+              อัปโหลด {confirmCount.toLocaleString()} {selectedType === 'bkn_summary' || selectedType === 'report_114' ? 'record' : 'แถว'}
             </button>
           </div>
         </div>
@@ -865,87 +905,160 @@ export default function UploadPage() {
         </div>
       )}
 
-      {/* ════════════ DONE (manual) ════════════ */}
-      {uploadMode === 'manual' && phase === 'done' && uploadResult && (
-        <div className="space-y-4">
-          <div className={`rounded-2xl p-6 border ${
-            uploadResult.failed === 0
-              ? 'bg-emerald-50 border-emerald-200'
-              : uploadResult.failed === (uploadResult.inserted + uploadResult.updated + uploadResult.failed)
-              ? 'bg-rose-50 border-rose-200'
-              : 'bg-amber-50 border-amber-200'
-          }`}>
-            <div className="flex items-center gap-3 mb-6">
-              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow ${
-                uploadResult.failed === 0 ? 'bg-emerald-500'
-                : uploadResult.inserted + uploadResult.updated === 0 ? 'bg-rose-500'
-                : 'bg-amber-500'
-              }`}>
-                {uploadResult.failed === 0
-                  ? <CheckCircle2 size={22} className="text-white" />
-                  : <AlertTriangle size={22} className="text-white" />
-                }
-              </div>
-              <div>
-                <h2 className="font-bold text-lg text-slate-800">
-                  {uploadResult.failed === 0 ? 'อัปโหลดสำเร็จ'
-                   : uploadResult.inserted + uploadResult.updated === 0 ? 'อัปโหลดไม่สำเร็จ'
-                   : 'อัปโหลดเสร็จสิ้น (บางส่วน)'}
-                </h2>
-                <p className="text-sm text-slate-500">{file?.name}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div className="bg-white rounded-xl p-4 text-center shadow-sm">
-                <p className="text-3xl font-bold text-emerald-600">{uploadResult.inserted.toLocaleString()}</p>
-                <p className="text-xs text-slate-500 mt-1.5 font-medium">เพิ่มใหม่</p>
-              </div>
-              <div className="bg-white rounded-xl p-4 text-center shadow-sm">
-                <p className="text-3xl font-bold text-blue-600">{uploadResult.updated.toLocaleString()}</p>
-                <p className="text-xs text-slate-500 mt-1.5 font-medium">อัปเดต</p>
-              </div>
-              <div className="bg-white rounded-xl p-4 text-center shadow-sm">
-                <p className={`text-3xl font-bold ${uploadResult.failed > 0 ? 'text-rose-600' : 'text-slate-300'}`}>
-                  {uploadResult.failed.toLocaleString()}
-                </p>
-                <p className="text-xs text-slate-500 mt-1.5 font-medium">ผิดพลาด</p>
-              </div>
-            </div>
-
-            {uploadResult.error && (
-              <div className="flex items-start gap-2 text-sm text-rose-700 bg-rose-50 rounded-xl px-4 py-3 border border-rose-200">
-                <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
-                <span>{uploadResult.error}</span>
-              </div>
-            )}
-            {uploadResult.batchLogError && (
-              <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 rounded-xl px-4 py-3 border border-amber-200">
-                <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
-                <span>⚠️ บันทึก upload log ไม่สำเร็จ (ข้อมูลหลักถูกบันทึกแล้ว): {uploadResult.batchLogError}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col-reverse sm:flex-row gap-3 justify-end">
-            <button onClick={handleReset}
-              className="px-6 py-2.5 border border-slate-300 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition flex items-center justify-center gap-2">
-              <RefreshCw size={15} />
-              อัปโหลดไฟล์ใหม่
+      {/* ════════════ CONFIRM MODAL (manual — ก่อนอัป) ════════════ */}
+      <Modal
+        open={uploadMode === 'manual' && confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title="ยืนยันการอัปโหลด"
+        icon={<Upload size={20} />}
+        actions={
+          <>
+            <button onClick={() => setConfirmOpen(false)}
+              className="px-5 py-2.5 border border-slate-300 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition">
+              ยกเลิก
             </button>
-            {uploadResult && uploadResult.failed < (uploadResult.inserted + uploadResult.updated + uploadResult.failed) && (
-              <button
-                onClick={async () => { await reload(); navigate('/') }}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-sm font-semibold transition-all shadow flex items-center justify-center gap-2"
-              >
-                <LayoutDashboard size={15} />
-                ดูข้อมูลล่าสุดในแดชบอร์ด
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+            <button onClick={handleConfirm}
+              className="px-6 py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white rounded-xl text-sm font-bold transition shadow-md shadow-violet-500/30 flex items-center justify-center gap-2">
+              <Upload size={15} /> ยืนยันอัปโหลด
+            </button>
+          </>
+        }
+      >
+        <p className="text-slate-600 mb-3">ตรวจสอบรายละเอียดก่อนบันทึกเข้าฐานข้อมูล:</p>
+        <dl className="space-y-2.5">
+          <ConfirmRow label="ชื่อไฟล์" value={file?.name} mono />
+          <ConfirmRow label="ประเภท" value={<span className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-50 text-violet-700 rounded-md text-xs font-medium">{TYPE_LABELS[selectedType]}</span>} />
+          <ConfirmRow label="จำนวนแถว" value={<span className="font-bold text-slate-900">{confirmCount.toLocaleString()} {selectedType === 'bkn_summary' || selectedType === 'report_114' ? 'record' : 'row'}</span>} />
+          <ConfirmRow label="ตารางเป้าหมาย" value={selectedType} mono />
+        </dl>
+      </Modal>
+
+      {/* ════════════ RESULT MODAL (manual — success / error / partial) ════════════ */}
+      <UploadResultModal
+        open={uploadMode === 'manual' && phase === 'done' && !!uploadResult}
+        result={uploadResult}
+        fileName={file?.name}
+        type={selectedType}
+        onClose={handleReset}
+        onDashboard={async () => { await reload(); navigate('/') }}
+      />
     </div>
+  )
+}
+
+// แถวรายละเอียดใน confirm modal
+function ConfirmRow({ label, value, mono }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <dt className="text-slate-500 flex-shrink-0">{label}</dt>
+      <dd className={`text-right text-slate-800 break-all ${mono ? 'font-mono text-xs' : ''}`}>{value ?? '—'}</dd>
+    </div>
+  )
+}
+
+// Result modal — success / error / partial (variant ตาม failed/ok)
+function UploadResultModal({ open, result, fileName, type, onClose, onDashboard, closeLabel, dashboardLabel }) {
+  const [copied, setCopied] = useState(false)
+  if (!result) return <Modal open={false} onClose={onClose} title="" />
+
+  const fail = result.failed || 0
+  const ok = (result.inserted || 0) + (result.updated || 0)
+  const variant = fail === 0 ? 'success' : ok === 0 ? 'error' : 'warning'
+  const title = fail === 0 ? 'อัปโหลดสำเร็จ ✓' : ok === 0 ? 'อัปโหลดไม่สำเร็จ' : 'อัปโหลดเสร็จสิ้น (บางส่วน)'
+  const icon = variant === 'success' ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />
+  const durationS = result.durationMs != null ? (result.durationMs / 1000).toFixed(1) : null
+  const rowErrors = Array.isArray(result.errors) ? result.errors : []
+
+  const copyLog = async () => {
+    const log = JSON.stringify({ file: fileName, type, ...result, errors: rowErrors }, null, 2)
+    try { await navigator.clipboard.writeText(log); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch { /* clipboard ไม่พร้อม */ }
+  }
+
+  const actions = variant === 'error' ? (
+    <>
+      <button onClick={copyLog}
+        className="px-5 py-2.5 border border-slate-300 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition flex items-center justify-center gap-2">
+        <Copy size={15} /> {copied ? 'คัดลอกแล้ว ✓' : 'คัดลอก error log'}
+      </button>
+      <button onClick={onClose}
+        className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-sm font-bold transition">
+        ปิด
+      </button>
+    </>
+  ) : (
+    <>
+      <button onClick={onClose}
+        className="px-5 py-2.5 border border-slate-300 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition flex items-center justify-center gap-2">
+        <RefreshCw size={15} /> {closeLabel || 'ปิด / อัปใหม่'}
+      </button>
+      <button onClick={onDashboard}
+        className="px-6 py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white rounded-xl text-sm font-bold transition shadow-md shadow-violet-500/30 flex items-center justify-center gap-2">
+        <LayoutDashboard size={15} /> {dashboardLabel || 'ดูข้อมูลในแดชบอร์ด →'}
+      </button>
+    </>
+  )
+
+  return (
+    <Modal open={open} onClose={onClose} title={title} variant={variant} icon={icon} actions={actions}>
+      <p className="text-xs text-slate-400 font-mono break-all mb-4">{fileName}</p>
+
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="bg-emerald-50 rounded-xl p-3 text-center">
+          <p className="text-2xl font-bold text-emerald-600">{(result.inserted || 0).toLocaleString()}</p>
+          <p className="text-xs text-slate-500 mt-0.5">เพิ่มใหม่</p>
+        </div>
+        <div className="bg-blue-50 rounded-xl p-3 text-center">
+          <p className="text-2xl font-bold text-blue-600">{(result.updated || 0).toLocaleString()}</p>
+          <p className="text-xs text-slate-500 mt-0.5">อัปเดต</p>
+        </div>
+        <div className={`rounded-xl p-3 text-center ${fail > 0 ? 'bg-rose-50' : 'bg-slate-50'}`}>
+          <p className={`text-2xl font-bold ${fail > 0 ? 'text-rose-600' : 'text-slate-300'}`}>{fail.toLocaleString()}</p>
+          <p className="text-xs text-slate-500 mt-0.5">ผิดพลาด</p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {result.skipped > 0 && (
+          <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 rounded-lg px-3 py-2">
+            <Circle size={13} className="flex-shrink-0 text-slate-400" /> ข้าม (ซ้ำ): {result.skipped.toLocaleString()} row
+          </div>
+        )}
+        {result.districtAssigned > 0 && (
+          <div className="flex items-center gap-2 text-sm text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2 border border-indigo-100">
+            <MapPin size={14} className="flex-shrink-0" /> 🗺️ Auto-assign เขต: {result.districtAssigned.toLocaleString()} row
+          </div>
+        )}
+        {durationS != null && (
+          <div className="flex items-center gap-2 text-sm text-slate-500 px-3 py-1">
+            ⏱️ ใช้เวลา: {durationS}s
+          </div>
+        )}
+        {result.error && (
+          <div className="flex items-start gap-2 text-sm text-rose-700 bg-rose-50 rounded-lg px-3 py-2 border border-rose-200">
+            <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" /> <span className="break-words">{result.error}</span>
+          </div>
+        )}
+        {rowErrors.length > 0 && (
+          <div className="bg-rose-50 rounded-lg px-3 py-2 border border-rose-200">
+            <p className="text-xs font-semibold text-rose-700 mb-1">ข้อผิดพลาดรายแถว:</p>
+            <ul className="space-y-0.5 text-xs text-rose-700">
+              {rowErrors.slice(0, 5).map((e, i) => (
+                <li key={i} className="break-words">• {typeof e === 'string' ? e : (e.message || JSON.stringify(e))}</li>
+              ))}
+              {rowErrors.length > 5 && <li className="text-rose-500">… และอีก {rowErrors.length - 5} row</li>}
+            </ul>
+          </div>
+        )}
+        {result.batchLogError && (
+          <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
+            <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" /> <span className="break-words">⚠️ บันทึก log ไม่สำเร็จ (ข้อมูลหลักบันทึกแล้ว): {result.batchLogError}</span>
+          </div>
+        )}
+      </div>
+
+      {/* link ไปหน้าที่กระทบ (success / partial) */}
+      {variant !== 'error' && <ImpactedPages type={type} />}
+    </Modal>
   )
 }
 
@@ -1020,260 +1133,233 @@ function FileDropzone({ onFile, busy, className }) {
   )
 }
 
-// 1 slot = 1 ตารางที่หน้านั้นต้องการ (state-aware: idle / busy / mismatch / done / error)
-function FileSlot({ table, slot, now, onFile, onConfirmMismatch, onReset }) {
-  const status = slot?.status || 'idle'
-
-  if (status === 'done') {
-    return (
-      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-lg bg-emerald-500 flex items-center justify-center shadow-md shadow-emerald-500/30 flex-shrink-0">
-            <Check className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="font-semibold text-slate-900">
-              {FILE_LABELS[table]}
-              <span className="ml-2 text-xs text-emerald-700 font-normal">✓ อัปแล้ว</span>
-            </div>
-            <div className="text-xs text-slate-600 mt-0.5">
-              {slot.total.toLocaleString()} row · {timeAgo(slot.uploadedAt, now)}
-            </div>
-          </div>
-          <button onClick={onReset} title="อัปไฟล์นี้ใหม่"
-            className="text-slate-400 hover:text-slate-600 transition flex-shrink-0 p-1">
-            <RefreshCw size={15} />
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  if (status === 'mismatch') {
-    const p = slot.pending
-    return (
-      <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-5">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
-            <AlertTriangle className="w-5 h-5 text-amber-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="font-semibold text-slate-900">{FILE_LABELS[table]}</div>
-            <p className="text-xs text-amber-800 mt-1">
-              ไฟล์นี้ถูก detect เป็น <strong>{TYPE_LABELS[p.detected] ?? p.detected}</strong> ไม่ใช่ <strong>{FILE_LABELS[table]}</strong>
-            </p>
-            <div className="flex gap-2 mt-3">
-              <button onClick={() => onConfirmMismatch(table)}
-                className="px-3 py-1.5 text-xs font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition shadow-sm shadow-amber-500/30">
-                ใช้ไฟล์นี้แทน
-              </button>
-              <button onClick={onReset}
-                className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition">
-                เปลี่ยนไฟล์
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // idle / busy / error
+// แบนเนอร์สรุปสถานะ DB รวม
+function StatsBanner({ dbStats, lastUpload }) {
+  const tables = Object.values(dbStats)
+  const total = tables.reduce((s, v) => s + (v?.count || 0), 0)
+  const days = daysSince(lastUpload)
   return (
-    <div className="bg-white border-2 border-dashed border-slate-300 rounded-xl p-5 hover:border-blue-400 transition">
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-lg border-2 border-slate-200 flex items-center justify-center flex-shrink-0">
-          <Upload className="w-5 h-5 text-slate-400" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold text-slate-900">{FILE_LABELS[table]}</div>
-          <div className="text-xs text-slate-500 font-mono mt-0.5">ตาราง: {table}</div>
-          {status === 'error' && (
-            <div className="text-xs text-rose-600 mt-1.5 flex items-start gap-1">
-              <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" /> {slot.error}
-            </div>
-          )}
-          <FileDropzone onFile={f => onFile(table, f)} busy={status === 'busy'} className="mt-3" />
-        </div>
-      </div>
+    <div className="flex items-center gap-3 flex-wrap bg-white ring-1 ring-slate-200 rounded-2xl px-5 py-3.5 text-sm">
+      <span className="inline-flex items-center gap-1.5 text-slate-700"><BarChart3 size={15} className="text-violet-600" /> <strong>{TABLES.length}</strong> ตาราง</span>
+      <span className="text-slate-300">·</span>
+      <span className="text-slate-700"><strong className="tabular-nums">{total.toLocaleString()}</strong> row รวม</span>
+      {days != null && <><span className="text-slate-300">·</span><span className="text-slate-500">อัปล่าสุด {dayLabel(days)}</span></>}
     </div>
   )
 }
 
-// modal เตือนเมื่ออัปไม่ครบ
-function PartialWarningModal({ page, missing, uploaded, total, onClose, onConfirm }) {
+// รายการอัปล่าสุด (จาก upload_batches)
+function RecentUploads({ rows }) {
+  if (!rows?.length) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-            <AlertTriangle className="w-6 h-6 text-amber-600" />
-          </div>
-          <div>
-            <div className="font-bold text-slate-900">ข้อมูลยังไม่ครบ</div>
-            <div className="text-sm text-slate-500">อัปแล้ว {uploaded}/{total} ไฟล์</div>
-          </div>
-        </div>
-
-        <p className="text-sm text-slate-700 mb-3">
-          เพื่อให้ <strong>{page.name}</strong> แสดงข้อมูลสมบูรณ์ ควรอัปไฟล์อีก {missing.length} ไฟล์:
-        </p>
-
-        <ul className="space-y-1.5 mb-4">
-          {missing.map(table => (
-            <li key={table} className="flex items-center gap-2 text-sm text-slate-700">
-              <Circle className="w-3 h-3 text-slate-400 flex-shrink-0" />
-              {FILE_LABELS[table]}
-            </li>
-          ))}
-        </ul>
-
-        <div className="flex gap-2 justify-end">
-          <button onClick={onClose}
-            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">
-            อัปต่อ
-          </button>
-          <button onClick={onConfirm}
-            className="px-4 py-2 text-sm bg-amber-500 text-white hover:bg-amber-600 rounded-lg shadow-md shadow-amber-500/30 transition">
-            ข้ามและไป {page.name}
-          </button>
-        </div>
+    <div className="bg-white ring-1 ring-slate-200 rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Clock size={15} className="text-slate-400" />
+        <h3 className="text-sm font-semibold text-slate-700">อัปล่าสุด</h3>
       </div>
+      <ul className="divide-y divide-slate-100">
+        {rows.map((r) => {
+          const days = daysSince(r.uploaded_at)
+          const t = TABLES.find(x => x.id === r.target_table)
+          return (
+            <li key={r.id} className="flex items-center gap-3 py-2.5 text-sm">
+              <span className="text-lg flex-shrink-0">{t?.emoji || '📄'}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-slate-800 truncate">{r.file_name}</div>
+                <div className="text-xs text-slate-400 font-mono">{r.target_table}</div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className="tabular-nums font-medium text-slate-700">{(r.row_count ?? 0).toLocaleString()} row</div>
+                {days != null && <div className="text-xs text-slate-400">{dayLabel(days)}</div>}
+              </div>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
 
 function GuidedUpload({ navigate, reload }) {
-  const [selectedPage, setSelectedPage] = useState(null)
-  const [slots, setSlots] = useState({})   // table -> { status, total, uploadedAt, error, pending }
-  const [warnOpen, setWarnOpen] = useState(false)
-  const [now, setNow] = useState(Date.now())
+  const [dbStats, setDbStats] = useState({})                 // table -> { count, lastUpload }
+  const [recent, setRecent] = useState([])                   // upload_batches ล่าสุด
+  const [busy, setBusy] = useState(false)
+  const [loadError, setLoadError] = useState(null)
+  // pending = ไฟล์ที่ parse แล้วรอ confirm: { raw, wb, fileName, rowCount, detection, type }
+  const [pending, setPending] = useState(null)
+  const [result, setResult] = useState(null)
 
-  // tick ทุก 10 วิ ให้ "X วินาทีที่แล้ว" อัปเดต
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 10000)
-    return () => clearInterval(id)
-  }, [])
+  // โหลดสถานะ DB ทุกตาราง + รายการอัปล่าสุด
+  const loadMeta = () => {
+    Promise.all(TABLES.map(async (t) => [t.id, await fetchTableStat(t.id)]))
+      .then(pairs => setDbStats(Object.fromEntries(pairs))).catch(() => {})
+    supabase.from('upload_batches').select('id, target_table, file_name, row_count, uploaded_at')
+      .order('uploaded_at', { ascending: false }).limit(5)
+      .then(({ data }) => setRecent(data || [])).catch(() => {})
+  }
+  useEffect(() => { loadMeta() }, [])
 
-  const page = PAGES.find(p => p.id === selectedPage) || null
-  const setSlot = (table, patch) => setSlots(s => ({ ...s, [table]: { ...s[table], ...patch } }))
+  const lastUpload = recent[0]?.uploaded_at || null
 
-  const doUpload = async (table, raw, wb, fileName) => {
-    setSlot(table, { status: 'busy', error: null, pending: null })
+  // drop ไฟล์ → parse + detect (scored) → เปิด detection modal
+  const handleFile = async (file) => {
+    setLoadError(null)
+    setBusy(true)
     try {
-      const { total } = await uploadParsedFor(table, raw, wb, fileName)
-      setSlot(table, { status: 'done', total, uploadedAt: Date.now(), pending: null })
+      const { raw, wb, detection, rowCount } = await detectFileType(file)
+      // unknown → ใช้ top candidate เป็น default (ถ้ามี) แทนการบังคับว่าง
+      const type = detection.type !== 'unknown' ? detection.type : (detection.candidates?.[0]?.type || '')
+      setPending({ raw, wb, fileName: file.name, rowCount, detection, type })
     } catch (err) {
-      setSlot(table, { status: 'error', error: err.message })
+      setLoadError(err.message)
+    } finally {
+      setBusy(false)
     }
   }
 
-  const handleFile = async (table, file) => {
-    setSlot(table, { status: 'busy', error: null, pending: null })
+  const doUpload = async () => {
+    if (!pending || !pending.type) return
+    const { raw, wb, fileName, type } = pending
+    const startedAt = nowMs()
+    setBusy(true)
+    let res
     try {
-      const { raw, wb, detected } = await detectFileType(file)
-      if (detected !== 'unknown' && detected !== table) {
-        setSlot(table, { status: 'mismatch', pending: { raw, wb, fileName: file.name, detected } })
-        return
-      }
-      await doUpload(table, raw, wb, file.name)
+      const out = await uploadParsedFor(type, raw, wb, fileName)
+      res = { ...out.result, districtAssigned: out.districtAssigned || 0 }
     } catch (err) {
-      setSlot(table, { status: 'error', error: err.message })
+      res = { inserted: 0, updated: 0, failed: previewCount(type, raw, wb) || 0, error: err?.message || String(err) }
     }
+    res = { ...res, durationMs: nowMs() - startedAt, _type: type, _fileName: fileName }
+    setBusy(false)
+    setPending(null)
+    setResult(res)
   }
 
-  const confirmMismatch = (table) => {
-    const p = slots[table]?.pending
-    if (p) doUpload(table, p.raw, p.wb, p.fileName)
-  }
+  // success: "อัปไฟล์อื่น" → ปิด + refresh meta ; "เสร็จสิ้น" → ไปหน้าหลัก
+  const onUploadMore = async () => { await reload(); setResult(null); loadMeta() }
+  const onFinish = async () => { await reload(); navigate('/') }
 
-  const resetSlot = (table) => setSlot(table, { status: 'idle', error: null, pending: null })
+  const det = pending?.detection
+  const detTbl = pending && pending.type ? TABLES.find(t => t.id === pending.type) : null
+  const confColor = !det ? '' : det.confidence >= 80 ? 'text-emerald-600' : det.confidence >= 50 ? 'text-amber-600' : 'text-rose-600'
+  const isUnknown = det && det.type === 'unknown'
 
-  const required = page?.requiredFiles || []
-  const uploadedCount = required.filter(t => slots[t]?.status === 'done').length
-  const missing = required.filter(t => slots[t]?.status !== 'done')
-  const allDone = required.length > 0 && missing.length === 0
-
-  const goToPage = async () => { await reload(); navigate(page.route) }
-  const handleFinish = () => { if (allDone) goToPage(); else setWarnOpen(true) }
-
-  const backToPages = () => { setSelectedPage(null); setSlots({}); setWarnOpen(false) }
-
-  // ── STEP 1: เลือกหน้า ──
-  if (!page) {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {PAGES.map(p => (
-          <button key={p.id} onClick={() => setSelectedPage(p.id)}
-            className="group p-6 rounded-2xl bg-white border border-slate-200 hover:border-blue-300 hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300 text-left">
-            <div className="flex items-start justify-between mb-3">
-              <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br shadow-md', p.gradient, p.shadow)}>
-                <p.icon className="w-6 h-6 text-white" />
-              </div>
-              <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition" />
-            </div>
-            <div className="font-bold text-slate-900 text-lg mb-1">{p.name}</div>
-            <div className="text-xs text-slate-500 font-mono mb-3">{p.route}</div>
-            <div className="flex items-center gap-1 text-xs text-slate-600">
-              <FileText className="w-3 h-3" /> ต้องอัป {p.requiredFiles.length} ไฟล์
-            </div>
-          </button>
-        ))}
-      </div>
-    )
-  }
-
-  // ── STEP 2: รายการไฟล์ที่ต้องอัป ──
   return (
     <div className="space-y-4">
-      <button onClick={backToPages}
-        className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition">
-        <ArrowLeft size={15} /> เลือกหน้าอื่น
-      </button>
-
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-md p-6 space-y-5">
-        <div className="flex items-center gap-3">
-          <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br shadow-md', page.gradient, page.shadow)}>
-            <page.icon className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">อัปข้อมูล: {page.name}</h2>
-            <p className="text-sm text-slate-500">
-              ต้องอัป {required.length} ไฟล์ — อัปเดตข้อมูลให้ครบเพื่อความสมบูรณ์
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          {required.map(table => (
-            <FileSlot key={table} table={table} slot={slots[table]} now={now}
-              onFile={handleFile} onConfirmMismatch={confirmMismatch} onReset={() => resetSlot(table)} />
-          ))}
-        </div>
-
-        <div className="flex items-center justify-between pt-1">
-          <button onClick={backToPages}
-            className="px-5 py-2.5 border border-slate-300 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition">
-            กลับ
-          </button>
-          <button onClick={handleFinish}
-            className={cn(
-              'px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow flex items-center gap-2',
-              allDone
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/30'
-                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/30',
-            )}>
-            {allDone ? <Check size={16} /> : <CheckCircle2 size={16} />}
-            เสร็จสิ้น ({uploadedCount}/{required.length})
-          </button>
-        </div>
+      <div>
+        <h2 className="text-xl font-bold text-slate-900">📤 อัปโหลดข้อมูล</h2>
+        <p className="text-sm text-slate-500 mt-0.5">ลากไฟล์มาวาง — ระบบจะตรวจประเภทอัตโนมัติ</p>
       </div>
 
-      {warnOpen && (
-        <PartialWarningModal
-          page={page} missing={missing} uploaded={uploadedCount} total={required.length}
-          onClose={() => setWarnOpen(false)} onConfirm={goToPage} />
-      )}
+      <StatsBanner dbStats={dbStats} lastUpload={lastUpload} />
+
+      <div className="bg-white rounded-2xl ring-1 ring-slate-200 shadow-md p-6">
+        <FileDropzone onFile={handleFile} busy={busy} className="py-16" />
+        {loadError && (
+          <div className="mt-4 flex items-start gap-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3">
+            <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" /> {loadError}
+          </div>
+        )}
+        <p className="text-xs text-slate-400 mt-4 text-center">
+          💡 รองรับ: เหตุการณ์ยาเสพติด · เรื่องร้องเรียน 1386 · ผู้เสพ · สรุป บก.น. · รายงาน 114
+        </p>
+      </div>
+
+      <RecentUploads rows={recent} />
+
+      {/* Detection Result modal */}
+      <Modal
+        open={!!pending}
+        onClose={() => setPending(null)}
+        title="ตรวจไฟล์เสร็จ"
+        icon={<Sparkles size={20} />}
+        variant={isUnknown ? 'warning' : 'default'}
+        actions={
+          <>
+            <button onClick={() => setPending(null)}
+              className="px-5 py-2.5 border border-slate-300 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition">
+              ยกเลิก
+            </button>
+            <button onClick={doUpload} disabled={busy || !pending?.type}
+              className="px-6 py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white rounded-xl text-sm font-bold transition shadow-md shadow-violet-500/30 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+              <Upload size={15} /> ยืนยันอัปโหลด
+            </button>
+          </>
+        }
+      >
+        {pending && (
+          <div className="space-y-4">
+            <dl className="space-y-1.5 text-sm">
+              <div className="flex items-start justify-between gap-4">
+                <dt className="text-slate-500">📄 ชื่อไฟล์</dt>
+                <dd className="text-right font-mono text-xs text-slate-800 break-all">{pending.fileName}</dd>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <dt className="text-slate-500">📊 จำนวนแถว</dt>
+                <dd className="text-right font-bold text-slate-900">{(pending.rowCount ?? 0).toLocaleString()} {recordWord(pending.type || det.type)}</dd>
+              </div>
+            </dl>
+
+            {/* ผลการเดา */}
+            <div className={`rounded-xl p-4 ${isUnknown ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-violet-50 ring-1 ring-violet-100'}`}>
+              {isUnknown ? (
+                <div className="text-sm text-amber-800">
+                  <div className="font-medium">🤔 ระบบไม่มั่นใจประเภทไฟล์ — เลือกตามแนะนำหรือเลือกเอง</div>
+                  {det.candidates?.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <div className="text-xs text-amber-700">น่าจะเป็น (เรียงตามคะแนน):</div>
+                      {det.candidates.map((c, i) => {
+                        const ct = TABLES.find(x => x.id === c.type)
+                        return (
+                          <button key={c.type} onClick={() => setPending(p => ({ ...p, type: c.type }))}
+                            className={`w-full flex items-center justify-between gap-2 text-xs px-2.5 py-1.5 rounded-lg transition ${pending.type === c.type ? 'bg-amber-200/70 ring-1 ring-amber-300' : 'bg-white/60 hover:bg-amber-100'}`}>
+                            <span className="text-slate-700">{i + 1}. {ct?.emoji} {ct?.name || c.type} <span className="font-mono text-slate-400">({c.type})</span></span>
+                            <span className={`font-semibold ${c.score >= 30 ? 'text-amber-700' : 'text-slate-400'}`}>score {c.score}{c.score < 30 ? ' · ต่ำกว่าเกณฑ์ 30' : ''}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="text-sm text-slate-600">🎯 ระบบเดาว่าเป็น</div>
+                  <div className="text-base font-bold text-slate-900 mt-0.5">{detTbl?.emoji} {detTbl?.name} <span className="text-xs font-normal text-slate-400 font-mono">({pending.type})</span></div>
+                  <div className={`text-sm font-semibold mt-1 ${confColor}`}>
+                    Confidence {det.confidence}% {det.confidence >= 80 ? '✓' : ''}
+                    <span className="text-xs font-normal text-slate-500 ml-1">({det.reasons.join(' · ')})</span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* override dropdown */}
+            <div className="flex items-center justify-between gap-3 border border-slate-200 rounded-xl px-4 py-3">
+              <span className="text-sm text-slate-600">❓ {isUnknown ? 'เลือกประเภท' : 'ไม่ถูก? เลือกเอง'}</span>
+              <select value={pending.type} onChange={e => setPending(p => ({ ...p, type: e.target.value }))}
+                className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white text-slate-700 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 outline-none">
+                <option value="">— เลือกประเภท —</option>
+                {Object.entries(TYPE_LABELS).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+              </select>
+            </div>
+
+            {/* impacted pages */}
+            {pending.type && <ImpactedPages type={pending.type} />}
+          </div>
+        )}
+      </Modal>
+
+      {/* Success modal — reuse UploadResultModal + ImpactedPages */}
+      <UploadResultModal
+        open={!!result}
+        result={result}
+        fileName={result?._fileName}
+        type={result?._type}
+        onClose={onUploadMore}
+        onDashboard={onFinish}
+        closeLabel="อัปไฟล์อื่น"
+        dashboardLabel="เสร็จสิ้น"
+      />
     </div>
   )
 }

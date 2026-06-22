@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { getDistrictFromLatLng } from '../lib/districtMatcher'
 
 // ─── Mapping ชื่อ header ภาษาไทย → ชื่อคอลัมน์ DB ───────────────────────────
 
@@ -59,12 +60,6 @@ const COMPLAINTS_COLUMNS = new Set([
   'area_type',
 ])
 
-// substance_users — flat DB columns (jsonb ประกอบจาก flatten ไม่ผ่าน identity passthrough)
-const SUBSTANCE_USERS_COLUMNS = new Set([
-  'record_no', 'district', 'subdistrict', 'occupation', 'income_range',
-  'arrest_count', 'rehab_count', 'first_use_age', 'first_drug', 'first_reason',
-  'surveyed_at',
-])
 // header ไทย (จาก Google Form export) → DB column หรือ __helper (สำหรับประกอบ jsonb)
 // ⚠️ key ต้องตรงเป๊ะกับ header ในไฟล์ (รวมช่องว่าง/วงเล็บ) — flatten ใช้ exact match ไม่ trim
 // column นอก map (~121 ตัว รวม PII) ถูก drop เงียบๆ (flatten อ่านเฉพาะ key ใน map)
@@ -153,7 +148,7 @@ function parseDate(value) {
   const str = String(value).trim()
 
   // รูปแบบ DD/MM/YYYY หรือ DD-MM-YYYY (ปี ค.ศ. หรือ พ.ศ.)
-  const dmyMatch = str.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/)
+  const dmyMatch = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/)
   if (dmyMatch) {
     let [, d, m, y] = dmyMatch
     // ถ้าปีเกิน 2500 สันนิษฐานว่าเป็น พ.ศ.
@@ -387,6 +382,80 @@ export function detectType(rows) {
   return 'unknown'
 }
 
+// ─── 2b. detectTypeScored — เดาประเภทแบบ scoring (filename + headers) + confidence ──
+
+// header เฉพาะตัวของแต่ละตาราง (ไม่ทับกัน — กันสับสน complaints↔drug ที่แชร์ วันที่/เขต/แขวง)
+const DETECT_RULES = {
+  drug_incidents: {
+    fileKw:  ['drug', 'incident', 'เหตุการณ์', 'ยาเสพติด', 'จับ'],
+    headers: ['lat', 'lng', 'พิกัด', 'พฤติการณ์', 'behaviors', 'ยาหลัก', 'primary_drug', 'สน.', 'police_station'],
+  },
+  complaints: {
+    fileKw:  ['complaint', '1386', 'ร้องเรียน', 'สายด่วน', 'กลุ่ม', 'ปีงบ', 'งานร้องเรียน', 'รายงานร้องเรียน', 'สำนัก'],
+    headers: ['แหล่งข่าว', 'channel', 'กลุ่มเรื่อง', 'group_no', 'ยาเสพติด', 'drug', 'ประเภทบุคคล', 'person_type', 'วันที่รับผล', 'completed_date'],
+  },
+  substance_users: {
+    fileKw:  ['substance', 'user', 'ผู้เสพ', 'แบบเก็บ'],
+    headers: ['ประทับเวลา', 'อายุ (ปี)', 'first_use_age', 'dealer_1_lat', 'record_no', 'ยาเสพติดหลักที่ใช้เป็นประจำ'],
+  },
+}
+// ตารางแบบ matrix/title — ตรวจจาก detectType (เนื้อหา) แล้วบวก filename
+const CONTENT_RULES = {
+  bkn_summary: { fileKw: ['bkn', 'บก.น', 'rpt_115', '115_b', 'สรุป'] },
+  report_114:  { fileKw: ['114', 'rpt_114', 'รายงาน'] },
+}
+
+const DETECT_THRESHOLD = 30   // best < 30 → unknown (ลดจาก 40 เพื่อรับไฟล์ complaints/drug schema กว้าง)
+
+/**
+ * เดาประเภทไฟล์แบบ scoring — filename keyword (+30) + header ตรง (+10/อัน, ไฟล์ไทยล้วน +15)
+ *   + content bonus (+20 ถ้า detectType ยืนยัน) ; bkn/114 = content (+80) + filename (+20)
+ * คืน { type, confidence, score, reasons[], candidates[] } ; best < 30 → type 'unknown'
+ *   candidates = top 3 เรียง score (โชว์ใน unknown modal ให้ user เลือกตามแนะนำ)
+ */
+export function detectTypeScored(rows, fileName = '') {
+  if (!rows || rows.length === 0) return { type: 'unknown', confidence: 0, score: 0, reasons: [], candidates: [] }
+  const fname = String(fileName).toLowerCase()
+  const baseName = fname.replace(/\.[^.]+$/, '')   // ตัดนามสกุล (.xlsx มีตัวอักษรอังกฤษ)
+  const thaiOnlyName = !/[a-z]/i.test(baseName)   // ชื่อไฟล์ไทยล้วน → boost น้ำหนัก header (filename keyword อังกฤษ match ยาก)
+  const headerWeight = thaiOnlyName ? 15 : 10
+  const headerSet = new Set(Object.keys(rows[0]).map(h => h.trim().toLowerCase()))
+  const contentType = detectType(rows)
+  const scores = {}   // type -> { score, reasons }
+
+  // header-list tables
+  for (const [type, rule] of Object.entries(DETECT_RULES)) {
+    let score = 0; const reasons = []
+    const fileHit = rule.fileKw.find(k => fname.includes(k.toLowerCase()))
+    if (fileHit) { score += 30; reasons.push(`ชื่อไฟล์มีคำว่า "${fileHit}"`) }
+    const matched = rule.headers.filter(h => headerSet.has(h.toLowerCase()))
+    if (matched.length) { score += Math.min(70, matched.length * headerWeight); reasons.push(`header ตรง ${matched.length} คอลัมน์`) }
+    if (contentType === type) { score += 20; reasons.push('โครงสร้างไฟล์ตรงรูปแบบ') }
+    scores[type] = { score, reasons }
+  }
+  // content-based tables (bkn/114)
+  for (const [type, rule] of Object.entries(CONTENT_RULES)) {
+    let score = 0; const reasons = []
+    if (contentType === type) { score += 80; reasons.push('โครงสร้างไฟล์ตรงรูปแบบรายงาน') }
+    const fileHit = rule.fileKw.find(k => fname.includes(k.toLowerCase()))
+    if (fileHit) { score += 20; reasons.push(`ชื่อไฟล์มีคำว่า "${fileHit}"`) }
+    scores[type] = { score, reasons }
+  }
+
+  const ranked = Object.entries(scores)
+    .map(([type, s]) => ({ type, score: s.score, confidence: Math.min(100, s.score), reasons: s.reasons }))
+    .filter(c => c.score > 0)
+    .sort((a, b) => b.score - a.score)
+  const candidates = ranked.slice(0, 3)
+  const top = ranked[0]
+
+  if (!top || top.score < DETECT_THRESHOLD) {
+    return { type: 'unknown', confidence: top?.score ?? 0, score: top?.score ?? 0,
+      reasons: ['ไม่พบรูปแบบที่ตรงกับตารางใด — เลือกตามแนะนำหรือเลือกเอง'], candidates }
+  }
+  return { type: top.type, confidence: top.confidence, score: top.score, reasons: top.reasons, candidates }
+}
+
 // ─── 3. mapColumns ────────────────────────────────────────────────────────────
 
 const DATE_COLUMNS = new Set(['received_date', 'completed_date'])
@@ -433,6 +502,41 @@ export function mapColumns(rows, type) {
     }
     return mapped
   })
+}
+
+// ─── 3a. assignDrugIncidentDistricts ──────────────────────────────────────────
+
+/**
+ * เติม district ให้แถว drug_incidents ที่ district ว่าง/null แต่มี lat/lng valid
+ * โดยใช้ point-in-polygon กับ geojson เขต กทม. (ป้องกัน district = NULL ตอน upload)
+ *   - เคารพค่าเดิม: ถ้า row.district มีค่าอยู่แล้ว → ไม่ override
+ *   - ไม่มี/พัง lat-lng → ข้าม (ปล่อย null ตามเดิม)
+ *   - มี lat/lng แต่จุดอยู่นอก กทม. → เก็บไว้ใน unmatched (ไม่ assign)
+ * mutate row.district ตรงๆ (rows เป็นชุดเดียวกับที่จะ upsert) แล้วคืนสรุป
+ * @returns {Promise<{rows, districtAssigned:number, unmatched:Array}>}
+ */
+export async function assignDrugIncidentDistricts(rows) {
+  let districtAssigned = 0
+  const unmatched = []
+
+  for (const row of rows) {
+    const has = row.district != null && String(row.district).trim() !== ''
+    if (has) continue
+
+    const lat = typeof row.lat === 'number' ? row.lat : parseFloat(row.lat)
+    const lng = typeof row.lng === 'number' ? row.lng : parseFloat(row.lng)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue
+
+    const district = await getDistrictFromLatLng(lat, lng)
+    if (district) {
+      row.district = district
+      districtAssigned++
+    } else {
+      unmatched.push(row.row_index ?? row.record_uid ?? null)
+    }
+  }
+
+  return { rows, districtAssigned, unmatched }
 }
 
 // ─── 3b. flattenSubstanceUserRow ──────────────────────────────────────────────
