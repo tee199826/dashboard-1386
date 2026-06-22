@@ -147,6 +147,8 @@ export default function AllDistricts() {
   const [selectedGroup, setSelectedGroup] = useState(null)        // cross-filter จาก donut
   const [compareYoY, setCompareYoY] = useState(false)
   const [autoOff, setAutoOff] = useState(false)                   // notice "ปิดเทียบปีอัตโนมัติ" เมื่อเปลี่ยน pill ออกจากเหตุการณ์
+  const [yearA, setYearA] = useState(null)                        // hero chart: ปีเทียบ A (null = default current FY)
+  const [yearB, setYearB] = useState(null)                        // hero chart: ปีเทียบ B (null = default nearest prev)
   const [mapCompareMode, setMapCompareMode] = useState('absolute')
   const [tableOpen, setTableOpen] = useState(false)               // ตาราง drill-down default closed
   const [incidents, setIncidents] = useState([])
@@ -254,29 +256,6 @@ export default function AllDistricts() {
   // sparkline KPI (period ปัจจุบัน adaptive)
   const sparkTrend = useMemo(() => buildTrend(fIncidents, rFrom, rTo, state.mode).map(t => t.count), [fIncidents, rFrom, rTo, state.mode])
 
-  // ── HERO trend: ปีนี้ vs ปีก่อน (YTD) อิงเดือนปีงบ ต.ค.→ก.ย. ──
-  const heroTrend = useMemo(() => {
-    const inGroup = (r) => !selectedGroup || DNAME_TO_GROUP[r.district] === selectedGroup
-    if (!comparison) {
-      const t = buildTrend(fIncidents.filter(inGroup), rFrom, rTo, state.mode)
-      return { points: t.map(p => ({ label: p.label, fullLabel: p.fullLabel, cur: p.count, prev: null })), hasPrev: false }
-    }
-    const curArr = Array(12).fill(0), prevArr = Array(12).fill(0)
-    const { curFrom, cutoff, prevFrom, prevTo } = comparison
-    for (const r of incidents) {
-      if (!inGroup(r)) continue
-      const d = (r.received_date || '').slice(0, 10); if (!d) continue
-      const dt = new Date(r.received_date); if (isNaN(dt)) continue
-      const idx = fyMonthIndex(dt)
-      if (d >= curFrom && d <= cutoff) curArr[idx]++
-      else if (d >= prevFrom && d <= prevTo) prevArr[idx]++
-    }
-    let lastIdx = 0
-    for (let i = 0; i < 12; i++) if (curArr[i] || prevArr[i]) lastIdx = i
-    const points = TH_MON_FY.slice(0, lastIdx + 1).map((label, i) => ({ label, fullLabel: label, cur: curArr[i], prev: prevArr[i] }))
-    return { points, hasPrev: true }
-  }, [incidents, fIncidents, comparison, selectedGroup, rFrom, rTo, state.mode])
-
   // chart #Top10 (group-filtered) + YoY mini
   const top10 = useMemo(() => gDistrictCounts.slice(0, 10).map((d) => {
     const prev = prevByD[d.district] || 0, cur = curByD[d.district] || 0
@@ -322,6 +301,33 @@ export default function AllDistricts() {
     return Object.entries(m).map(([fy, count]) => ({ fy: Number(fy), count })).filter(d => d.count >= MIN_BASE_ROWS).sort((a, b) => a.fy - b.fy)
   }, [incidents])
 
+  // ── HERO chart: เทียบ 2 ปีงบ (เลือกเอง) อิงเดือนปีงบ ต.ค.→ก.ย. ──
+  const currentFY = dateToFiscalYear(TODAY_ISO)
+  const yearsAvail = useMemo(() => yearCompare.map(d => d.fy).sort((a, b) => b - a), [yearCompare])   // ปีที่มี data >100, ใหม่→เก่า
+  // default A = ปีงบปัจจุบัน (ถ้ามี data) ไม่งั้นปีล่าสุด ; default B = ปีที่ใกล้ A ที่สุด
+  const effA = (yearA != null && yearsAvail.includes(yearA)) ? yearA
+    : (yearsAvail.includes(currentFY) ? currentFY : yearsAvail[0])
+  const effB = (yearB != null && yearsAvail.includes(yearB) && yearB !== effA) ? yearB
+    : yearsAvail.filter(y => y !== effA).sort((a, b) => Math.abs(a - effA) - Math.abs(b - effA))[0]
+
+  const heroCompare = useMemo(() => {
+    const inGroup = (r) => !selectedGroup || DNAME_TO_GROUP[r.district] === selectedGroup
+    const aArr = Array(12).fill(0), bArr = Array(12).fill(0)
+    for (const r of incidents) {
+      if (!inGroup(r)) continue
+      const fy = dateToFiscalYear(r.received_date); if (!fy) continue
+      const dt = new Date(r.received_date); if (isNaN(dt)) continue
+      const idx = fyMonthIndex(dt)
+      if (fy === effA) aArr[idx]++
+      else if (fy === effB) bArr[idx]++
+    }
+    // YTD-align: ตัดถึงเดือนสุดท้ายที่มี data (ปีที่ยังไม่จบ → ทั้ง A,B ตัดเท่ากัน)
+    let lastIdx = 0
+    for (let i = 0; i < 12; i++) if (aArr[i] || bArr[i]) lastIdx = i
+    const points = TH_MON_FY.slice(0, lastIdx + 1).map((label, i) => ({ label, fullLabel: label, cur: aArr[i], prev: bArr[i] }))
+    return { points, labelA: `ปีงบ ${effA} (YTD)`, labelB: effB ? `ปีงบ ${effB} (YTD)` : null }
+  }, [incidents, effA, effB, selectedGroup])
+
   // ── map/table (complaints+incidents+dealers aggregate) ──
   const metrics = useMemo(() => getDistrictMetrics(fRecords, fIncidents, fDealers), [fRecords, fIncidents, fDealers])
   const byName = useMemo(() => Object.fromEntries(metrics.map(m => [m.district, m])), [metrics])
@@ -334,9 +340,13 @@ export default function AllDistricts() {
     return mx
   }, [comparing, curByD, prevByD])
 
+  // เขตที่ valid = อยู่ใน DNAME_TO_GROUP (50 เขต กทม.) — กัน typo/null/อำเภอนอกเขตหลุดเข้าตาราง
+  const validMetrics = useMemo(() => metrics.filter(m => DNAME_TO_GROUP[m.district]), [metrics])
+  const excludedCount = metrics.length - validMetrics.length
+
   const table = useMemo(() => {
     const q = search.trim()
-    const t = metrics.filter(m => !q || m.district.includes(q))
+    const t = validMetrics.filter(m => !q || m.district.includes(q))
     const yoyKey = sortKey === 'curYTD' || sortKey === 'prevYTD' || sortKey === 'deltaAbs' || sortKey === 'pctYoY'
     if (comparing && yoyKey) {
       const valOf = (m) => {
@@ -351,7 +361,7 @@ export default function AllDistricts() {
     }
     const key = yoyKey ? 'incidents' : sortKey
     return [...t].sort((a, b) => (b[key] || 0) - (a[key] || 0))
-  }, [metrics, search, sortKey, comparing, curByD, prevByD])
+  }, [validMetrics, search, sortKey, comparing, curByD, prevByD])
 
   const activeMetric = METRICS.find(m => m.id === metric) || METRICS[0]
   const activeColor = activeMetric.color
@@ -494,11 +504,18 @@ export default function AllDistricts() {
           )}
         </div>
 
-        {/* ── SECTION 2: HERO chart ── */}
-        <Card innerRef={heroChartRef} scrollMt title={`แนวโน้มเหตุการณ์${heroTrend.hasPrev ? ' · ปีนี้ vs ปีก่อน (YTD)' : ''}`}
-          sub={selectedGroup ? `กรอง: ${selectedGroup}` : (state.mode === 'month' ? 'รายวัน' : 'รายเดือน (ปีงบ ต.ค.→ก.ย.)')}
-          icon={<TrendingUp />} loading={!incReady} empty={chartsEmpty}>
-          <HeroTrendChart data={heroTrend} />
+        {/* ── SECTION 2: HERO chart — เทียบปี (เลือกเอง) ── */}
+        <Card innerRef={heroChartRef} scrollMt title="แนวโน้มเหตุการณ์ — เทียบปี"
+          sub={selectedGroup ? `กรอง: ${selectedGroup} · รายเดือน (ปีงบ ต.ค.→ก.ย.)` : 'รายเดือน (ปีงบ ต.ค.→ก.ย.)'}
+          icon={<TrendingUp />} loading={!incReady} empty={incReady && yearsAvail.length === 0}
+          right={
+            <div className="flex items-center gap-2 text-sm">
+              <YearSelect value={effA} options={yearsAvail} exclude={effB} onChange={setYearA} color="text-violet-700" />
+              <span className="text-slate-400 text-xs">vs</span>
+              <YearSelect value={effB} options={yearsAvail} exclude={effA} onChange={setYearB} color="text-amber-600" />
+            </div>
+          }>
+          <HeroTrendChart data={heroCompare} />
         </Card>
 
         {/* cross-filter chip */}
@@ -734,6 +751,11 @@ export default function AllDistricts() {
                   </tbody>
                 </table>
               </div>
+              {excludedCount > 0 && (
+                <div className="px-6 py-2.5 text-xs text-slate-400 border-t border-slate-100">
+                  ซ่อน {excludedCount.toLocaleString()} row ที่ district ไม่ตรงกับ 50 เขต กทม. (typo / นอกพื้นที่)
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1007,25 +1029,34 @@ function YoyLabel({ x, y, width, height, value }) {
   )
 }
 
-// hero dual-area tooltip — มี diff %
-function HeroTooltip({ active, payload, label }) {
+// dropdown เลือกปีงบเทียบ (กันเลือกซ้ำกับอีกฝั่ง)
+function YearSelect({ value, options, exclude, onChange, color }) {
+  return (
+    <select value={value ?? ''} onChange={e => onChange(Number(e.target.value))}
+      className={`border border-slate-300 rounded-lg px-2 py-1 text-xs bg-white font-semibold ${color} focus:border-violet-400 focus:ring-2 focus:ring-violet-100 outline-none`}>
+      {options.map(y => <option key={y} value={y} disabled={y === exclude}>ปีงบ {y}</option>)}
+    </select>
+  )
+}
+
+// hero dual-area tooltip — มี diff % (label จาก series name)
+function HeroTooltip({ active, payload, label, labelA, labelB }) {
   if (!active || !payload?.length) return null
   const cur = payload.find(p => p.dataKey === 'cur')?.value ?? 0
-  const prevP = payload.find(p => p.dataKey === 'prev')
-  const prev = prevP?.value
+  const prev = payload.find(p => p.dataKey === 'prev')?.value
   const diff = (prev != null && prev > 0) ? (cur - prev) / prev * 100 : null
   return (
     <div className="bg-white rounded-lg ring-1 ring-slate-200 shadow-lg px-3 py-2 text-xs">
       <div className="font-semibold text-slate-800 mb-1">{label}</div>
-      <div className="flex items-center justify-between gap-4"><span className="text-violet-600">ปีนี้ (YTD)</span><span className="font-bold tabular-nums">{cur.toLocaleString()}</span></div>
-      {prev != null && <div className="flex items-center justify-between gap-4"><span className="text-slate-400">ปีก่อน (YTD)</span><span className="font-bold tabular-nums text-slate-500">{prev.toLocaleString()}</span></div>}
-      {diff != null && <div className={`mt-1 pt-1 border-t border-slate-100 text-right font-bold ${diff >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{diff >= 0 ? '▲' : '▼'} {Math.abs(diff).toFixed(1)}% YoY</div>}
+      <div className="flex items-center justify-between gap-4"><span className="text-violet-600">{labelA}</span><span className="font-bold tabular-nums">{cur.toLocaleString()}</span></div>
+      {prev != null && labelB && <div className="flex items-center justify-between gap-4"><span className="text-amber-600">{labelB}</span><span className="font-bold tabular-nums text-slate-500">{prev.toLocaleString()}</span></div>}
+      {diff != null && <div className={`mt-1 pt-1 border-t border-slate-100 text-right font-bold ${diff >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{diff >= 0 ? '▲' : '▼'} {Math.abs(diff).toFixed(1)}%</div>}
     </div>
   )
 }
 
 function HeroTrendChart({ data }) {
-  const { points, hasPrev } = data
+  const { points, labelA, labelB } = data
   if (!points.length) return <EmptyState />
   const peak = points.reduce((mx, p, i) => p.cur > points[mx].cur ? i : mx, 0)
   return (
@@ -1040,10 +1071,10 @@ function HeroTrendChart({ data }) {
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#64748b' }} interval="preserveStartEnd" minTickGap={10} />
         <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
-        <Tooltip content={<HeroTooltip />} />
+        <Tooltip content={<HeroTooltip labelA={labelA} labelB={labelB} />} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        {hasPrev && <Area type="monotone" dataKey="prev" name="ปีก่อน (YTD)" stroke="#cbd5e1" strokeWidth={2} strokeDasharray="5 3" fill="none" dot={false} isAnimationActive />}
-        <Area type="monotone" dataKey="cur" name="ปีนี้ (YTD)" stroke={C.violet} strokeWidth={3} fill="url(#heroFill)" dot={false} activeDot={{ r: 5 }} isAnimationActive />
+        {labelB && <Area type="monotone" dataKey="prev" name={labelB} stroke={C.amber} strokeWidth={2.5} strokeDasharray="6 3" fill="none" dot={false} isAnimationActive />}
+        <Area type="monotone" dataKey="cur" name={labelA} stroke={C.violet} strokeWidth={3} fill="url(#heroFill)" dot={false} activeDot={{ r: 5 }} isAnimationActive />
         {points[peak]?.cur > 0 && <ReferenceDot x={points[peak].label} y={points[peak].cur} r={5} fill={C.violet} stroke="#fff" strokeWidth={2} />}
       </AreaChart>
     </ResponsiveContainer>

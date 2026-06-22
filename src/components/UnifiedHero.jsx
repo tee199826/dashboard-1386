@@ -8,6 +8,7 @@ const GRADIENT_MAP = {
   slate:  'from-slate-800 via-blue-900 to-slate-800',
   cyan:   'from-cyan-700 via-teal-800 to-cyan-700',
   amber:  'from-amber-700 via-orange-800 to-amber-700',
+  violet: 'from-violet-700 via-purple-700 to-violet-800',
 }
 
 const CHIP = 'inline-flex items-center gap-1.5 text-xs text-white/90 bg-white/10 border border-white/20 rounded-full px-3 py-1'

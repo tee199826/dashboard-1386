@@ -1,9 +1,24 @@
 @import "tailwindcss";
 
-/* Tailwind v4 — กำหนดฟอนต์หลักทั้งระบบ (แทน tailwind.config.js ที่ไม่มีในโปรเจค v4) */
+/* Premium type — Inter (Latin/ตัวเลข) + Noto Sans Thai (ไทย) ; bundled ผ่าน @fontsource */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/inter/800.css";
+@import "@fontsource/inter/900.css";
+@import "@fontsource/noto-sans-thai/400.css";
+@import "@fontsource/noto-sans-thai/500.css";
+@import "@fontsource/noto-sans-thai/600.css";
+@import "@fontsource/noto-sans-thai/700.css";
+
+/* Tailwind v4 — Inter ก่อน (เลข) แล้ว Noto Sans Thai (ไทย) fallback ต่อ glyph */
 @theme {
-  --font-sans: 'Sarabun', system-ui, sans-serif;
+  --font-sans: 'Inter', 'Noto Sans Thai', 'Sarabun', system-ui, sans-serif;
 }
+
+/* tabular figures ทั้งระบบ — ตัวเลขชิดคอลัมน์ */
+body { font-feature-settings: 'tnum' 1, 'cv01' 1; }
 
 @layer components {
   .form-input {
@@ -37,3 +52,43 @@
   box-shadow: 0 4px 12px rgba(0,0,0,0.12) !important;
 }
 .su-district-tooltip::before { border-top-color: #fff !important; }
+
+/* Modal animations — backdrop fade + panel pop-in */
+@keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalPopIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.modal-backdrop { animation: modalFadeIn 0.15s ease-out; }
+.modal-panel { animation: modalPopIn 0.18s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* Dashboard entrance — fade-in + rise (ใช้ inline animation-delay เพื่อ stagger) */
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-rise { animation: riseIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+/* subtle dot pattern สำหรับ section header */
+.dot-pattern {
+  background-image: radial-gradient(currentColor 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+/* shimmer skeleton — gradient เลื่อน */
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+.skeleton-shimmer {
+  background: linear-gradient(100deg, #f1f5f9 30%, #e2e8f0 50%, #f1f5f9 70%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* mesh orb ลอย (hero) — เคลื่อนช้าๆ */
+@keyframes floatOrb {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(12px, -16px) scale(1.08); }
+}
+.orb { animation: floatOrb 9s ease-in-out infinite; }
+/* SVG noise overlay (data-uri) */
+.noise-overlay {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
