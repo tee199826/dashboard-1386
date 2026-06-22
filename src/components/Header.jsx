@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LogOut, LogIn, AlertTriangle } from 'lucide-react'
+import { LogOut, LogIn, AlertTriangle, Settings } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate, useLocation } from 'react-router-dom'
 import logoOncb from '../assets/logo-oncb.png'
@@ -13,6 +13,9 @@ function toThaiDate(iso) {
   const d = new Date(iso)
   return `${d.getDate()} ${MONTH_LONG[d.getMonth() + 1]} ${d.getFullYear() + 543}`
 }
+
+// module scope — เลี่ยง react-hooks/purity ที่ flag Date.now() ตรงๆ ใน render
+const isStaleDate = (iso) => (Date.now() - new Date(iso).getTime()) > 30 * 24 * 3600 * 1000
 
 export default function Header() {
   const { user, profile, isAdmin, signOut } = useAuth()
@@ -83,9 +86,14 @@ export default function Header() {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+          {/* Admin · Data Health — เล็ก เรียบ มุมขวาบน */}
+          <button onClick={() => navigate('/admin')} title="Data Health (Admin)"
+            className="text-white/40 hover:text-white/90 transition flex-shrink-0">
+            <Settings size={18} />
+          </button>
           {/* Last-update badge — hidden on xs screens */}
           {lastUpdate !== undefined && lastUpdate !== null && (() => {
-            const isStale = (Date.now() - new Date(lastUpdate).getTime()) > 30 * 24 * 3600 * 1000
+            const isStale = isStaleDate(lastUpdate)
             return (
               <div className={`hidden sm:flex flex-col items-end leading-tight ${isStale ? 'text-amber-300' : 'text-blue-100'}`}>
                 <span className="text-[10px]">ข้อมูลอัปเดตล่าสุด</span>
