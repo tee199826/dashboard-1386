@@ -37,6 +37,18 @@ function FlyController({ target }) {
   return null
 }
 
+// fitBounds ไปเขตที่เลือก ; null → reset กลับมุมมองเริ่มต้น
+function DistrictFocus({ districts, dname }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!districts) return
+    if (!dname) { map.flyTo([13.7563, 100.5018], 11, { duration: 1.0 }); return }
+    const f = districts.features.find(ft => ft.properties?.dname === dname)
+    if (f) map.flyToBounds(L.geoJSON(f).getBounds(), { padding: [40, 40], maxZoom: 14, duration: 1.0 })
+  }, [dname, districts, map])
+  return null
+}
+
 function ZoomTracker({ onZoom }) {
   const map = useMap()
   useEffect(() => {
@@ -92,7 +104,7 @@ function fallback(text) {
     el.select()
     document.execCommand('copy')
     document.body.removeChild(el)
-  } catch {}
+  } catch { /* clipboard fallback ล้มเหลว — เงียบ */ }
 }
 
 function DefaultSearchPopup({ popup }) {
@@ -141,8 +153,11 @@ export default function IncidentMap({
   districtLayerKey = '',
   districtLayerStyle = null,
   districtLayerOnEachFeature = null,
+  onDistrictClick = null,
+  highlightDistrict = null,
   onZoomChange = () => {},
   scrollWheelZoom = true,
+  mini = false,            // mini-map: ปิด interaction (compare modal)
   className = 'w-full h-full',
 }) {
   const [districts, setDistricts] = useState(null)
@@ -169,7 +184,11 @@ export default function IncidentMap({
       maxZoom={18}
       maxBounds={[[13.49, 100.32], [13.96, 100.94]]}
       maxBoundsViscosity={1.0}
-      scrollWheelZoom={scrollWheelZoom}
+      scrollWheelZoom={mini ? false : scrollWheelZoom}
+      dragging={!mini}
+      zoomControl={!mini}
+      doubleClickZoom={!mini}
+      attributionControl={!mini}
       className={className}
     >
       <TileLayer
@@ -178,6 +197,7 @@ export default function IncidentMap({
       />
       <ZoomTracker onZoom={handleZoom} />
       <FlyController target={flyTarget} />
+      <DistrictFocus districts={districts} dname={highlightDistrict} />
       <Pane name="districts-pane" style={{ zIndex: 350 }} />
       <Pane name="markers-pane" style={{ zIndex: 600 }} />
 
@@ -195,6 +215,7 @@ export default function IncidentMap({
             layer.on({
               mouseover: e => e.target.setStyle({ fillOpacity: 0.20, weight: 3, color: '#1d4ed8' }),
               mouseout: e => e.target.setStyle({ fillOpacity: 0.05, weight: 1.8, color: '#1e3a8a' }),
+              ...(onDistrictClick ? { click: () => onDistrictClick(name) } : {}),
             })
           }}
         />
@@ -209,6 +230,15 @@ export default function IncidentMap({
           onEachFeature={districtLayerOnEachFeature || undefined}
         />
       )}
+
+      {/* highlight เขตที่เลือก (violet) — Phase 2 */}
+      {highlightDistrict && districts && (() => {
+        const f = districts.features.find(ft => ft.properties?.dname === highlightDistrict)
+        return f ? (
+          <GeoJSON key={`hl-${highlightDistrict}`} data={f} pane="districts-pane" interactive={false}
+            style={{ color: '#7c3aed', weight: 3, fillColor: '#a78bfa', fillOpacity: 0.25, opacity: 1 }} />
+        ) : null
+      })()}
 
       {searchPopup && (
         <Marker position={[searchPopup.lat, searchPopup.lng]} eventHandlers={{ add: e => e.target.openPopup() }}>

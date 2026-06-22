@@ -92,3 +92,15 @@ body { font-feature-settings: 'tnum' 1, 'cv01' 1; }
 .noise-overlay {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
 }
+
+/* Export PDF (window.print) — โชว์เฉพาะ .print-area, ซ่อนที่เหลือ */
+@media print {
+  body * { visibility: hidden !important; }
+  .print-area, .print-area * { visibility: visible !important; }
+  .print-area {
+    position: absolute !important; inset: 0 !important; margin: 0 !important;
+    max-width: none !important; max-height: none !important; box-shadow: none !important;
+    overflow: visible !important;
+  }
+  .print-hide { display: none !important; }
+}

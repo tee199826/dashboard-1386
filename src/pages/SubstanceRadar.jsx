@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { MapPin, ArrowLeft, Search, Menu, AlertTriangle, Plus, X, SlidersHorizontal, Lightbulb, Info } from 'lucide-react'
+import { MapPin, ArrowLeft, Search, Menu, AlertTriangle, Plus, X, SlidersHorizontal, Lightbulb, Info, BarChart3, Printer } from 'lucide-react'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, Legend } from 'recharts'
 import { THAI_MONTHS, DNAME_TO_GROUP } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
 import { thaiDateRange } from '../utils/formatDate'
@@ -47,6 +48,10 @@ const DRUG_COLORS = {
   'สี่คูณร้อย': '#A16207', 'เฮโรอีน': '#7C2D12', 'มอร์ฟีน': '#9F1239',
   'ฝิ่น': '#B91C1C', 'สารระเหย': '#0EA5E9', 'วัตถุออกฤทธิ์': '#6366F1',
 }
+
+// เดือนเรียงตามปีงบ ต.ค.→ก.ย. (สำหรับ trend chart เปรียบเทียบเขต)
+const FY_MONTHS = ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.']
+const fyMonthIdx = (monthNum) => (monthNum + 2) % 12   // ต.ค.(10)→0 ... ก.ย.(9)→11
 
 const DISTRICT_GROUPS = {
   'กรุงเทพเหนือ':     { border: '#a16207', fill: '#fde047', emoji: '🟡', count: 7 },
@@ -144,6 +149,12 @@ export default function SubstanceRadar() {
   const [drugExpanded, setDrugExpanded] = useState(false)
   const [year, setYear] = useState('all')
   const [month, setMonth] = useState('all')
+  const [selectedDistrict, setSelectedDistrict] = useState('all')   // Feature 1
+  const [selectedKhwaeng, setSelectedKhwaeng] = useState('all')     // Feature 2 (cascade)
+  const [districtPanel, setDistrictPanel] = useState(null)          // Bug 2: floating detail panel (dname)
+  const [compareOpen, setCompareOpen] = useState(false)             // Phase 3: compare modal
+  const [compareA, setCompareA] = useState(null)
+  const [compareB, setCompareB] = useState(null)
   const [viewMode, setViewMode] = useState('point')
   const [groupFilter, setGroupFilter] = useState('all')
   const [groupOverlay, setGroupOverlay] = useState('point')
@@ -160,9 +171,10 @@ export default function SubstanceRadar() {
   const [insightOpen, setInsightOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 768 : true)
   const [fsDrugDetail, setFsDrugDetail] = useState(false)
 
-  useEffect(() => {
-    if (groupFilter === 'all') setGroupDisplayMode('all')
-  }, [groupFilter])
+  // เลือกกลุ่มเขต → ถ้า 'all' reset displayMode (แทน effect เพื่อเลี่ยง set-state-in-effect)
+  const pickGroup = (v) => { setGroupFilter(v); if (v === 'all') setGroupDisplayMode('all') }
+  // เลือกเขต → reset แขวง (cascade) + ปิด floating panel
+  const pickDistrict = (d) => { setSelectedDistrict(d); setSelectedKhwaeng('all'); setDistrictPanel(null) }
 
   useEffect(() => {
     const load = async () => {
@@ -193,22 +205,79 @@ export default function SubstanceRadar() {
     return Array.from(s).sort()
   }, [incidents])
 
-  const points = useMemo(() => {
-    return incidents.filter(r => {
-      if (!r.lat || !r.lng) return false
-      if (!r.primary_drug) return false
-      if (!targetDrugs.includes(r.primary_drug)) return false
-      if (year !== 'all' && r.received_date) {
-        const y = parseInt(r.received_date.slice(0, 4)) + 543
-        if (y !== parseInt(year)) return false
+  // Phase 2: รายการเขต (50 เขต) + แขวง (cascade ตามเขตที่เลือก, จาก subdistrict)
+  const districtOptions = useMemo(() => Object.keys(DNAME_TO_GROUP).sort((a, b) => a.localeCompare(b, 'th')), [])
+  const khwaengOptions = useMemo(() => {
+    if (selectedDistrict === 'all') return []
+    const s = new Set()
+    for (const r of incidents) {
+      if (r.district === selectedDistrict && r.subdistrict && r.subdistrict.trim()) s.add(r.subdistrict.trim())
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, 'th'))
+  }, [incidents, selectedDistrict])
+
+  // เปิด compare modal — pre-fill A (จาก floating panel หรือเขตที่เลือก), B = เขตอื่น
+  const openCompare = (presetA) => {
+    const a = (presetA && presetA !== 'all') ? presetA : (selectedDistrict !== 'all' ? selectedDistrict : districtOptions[0])
+    const b = districtOptions.find(d => d !== a) || districtOptions[1]
+    setCompareA(a); setCompareB(b); setCompareOpen(true); setDistrictPanel(null)
+  }
+
+  // ── ชั้น filter เดียว (Bug 1 fix) — ทุก count/legend/popup derive จากตรงนี้ ──
+  // ymFiltered = year+month (base) ; filteredIncidents = + district + khwaeng
+  const ymFiltered = useMemo(() => incidents.filter(r => {
+    if (year !== 'all' && r.received_date) {
+      if (parseInt(r.received_date.slice(0, 4)) + 543 !== parseInt(year)) return false
+    }
+    if (month !== 'all' && r.received_date) {
+      if (parseInt(r.received_date.slice(5, 7)) !== parseInt(month)) return false
+    }
+    return true
+  }), [incidents, year, month])
+
+  const filteredIncidents = useMemo(() => ymFiltered.filter(r => {
+    if (selectedDistrict !== 'all' && r.district !== selectedDistrict) return false
+    if (selectedKhwaeng !== 'all' && r.subdistrict !== selectedKhwaeng) return false
+    return true
+  }), [ymFiltered, selectedDistrict, selectedKhwaeng])
+
+  const points = useMemo(() => filteredIncidents.filter(r => {
+    if (!r.lat || !r.lng) return false
+    if (!r.primary_drug) return false
+    return targetDrugs.includes(r.primary_drug)
+  }), [filteredIncidents, targetDrugs])
+
+  // ── Phase 3: stats + trend เปรียบเทียบ 2 เขต ──
+  //   stats ใช้ year+month (ymFiltered) · trend ใช้ year-only (โชว์ 12 เดือน)
+  const compareData = useMemo(() => {
+    if (!compareOpen || !compareA || !compareB) return null
+    const statsFor = (dname) => {
+      const drugs = {}, khwaengs = new Set()
+      let total = 0
+      for (const r of ymFiltered) {
+        if (r.district !== dname || !r.primary_drug) continue
+        total++
+        drugs[r.primary_drug] = (drugs[r.primary_drug] || 0) + 1
+        if (r.subdistrict?.trim()) khwaengs.add(r.subdistrict.trim())
       }
-      if (month !== 'all' && r.received_date) {
-        const m = parseInt(r.received_date.slice(5, 7))
-        if (m !== parseInt(month)) return false
+      return { total, drugs, khwaengCount: khwaengs.size, perKhwaeng: khwaengs.size ? total / khwaengs.size : 0 }
+    }
+    const trendFor = (dname) => {
+      const arr = Array(12).fill(0)
+      for (const r of incidents) {
+        if (r.district !== dname || !r.received_date) continue
+        if (year !== 'all' && parseInt(r.received_date.slice(0, 4)) + 543 !== parseInt(year)) continue
+        arr[fyMonthIdx(parseInt(r.received_date.slice(5, 7)))]++
       }
-      return true
-    })
-  }, [incidents, targetDrugs, year, month])
+      return arr
+    }
+    const a = statsFor(compareA), b = statsFor(compareB)
+    const drugKeys = [...new Set([...Object.keys(a.drugs), ...Object.keys(b.drugs)])]
+      .sort((x, y) => (b.drugs[y] || 0) + (a.drugs[y] || 0) - (b.drugs[x] || 0) - (a.drugs[x] || 0))
+    const ta = trendFor(compareA), tb = trendFor(compareB)
+    const trend = FY_MONTHS.map((label, i) => ({ label, A: ta[i], B: tb[i] }))
+    return { a, b, drugKeys, trend }
+  }, [compareOpen, compareA, compareB, ymFiltered, incidents, year])
 
   const drugCounts = useMemo(() => {
     const m = {}
@@ -238,9 +307,10 @@ export default function SubstanceRadar() {
     }
   }, [points])
 
+  // ตามปี/เดือน (ไม่กรอง district) — ใช้กับ popup คลิกเขต (Bug 1: เดิมใช้ raw → ไม่ react)
   const districtStats = useMemo(() => {
     const stats = {}
-    incidents.forEach(r => {
+    ymFiltered.forEach(r => {
       if (!r.district || !r.primary_drug) return
       const key = r.district
       if (!stats[key]) stats[key] = { total: 0, drugs: {} }
@@ -248,7 +318,7 @@ export default function SubstanceRadar() {
       stats[key].drugs[r.primary_drug] = (stats[key].drugs[r.primary_drug] || 0) + 1
     })
     return stats
-  }, [incidents])
+  }, [ymFiltered])
 
   const pointsPeriod = useMemo(
     () => thaiDateRange(points, 'received_date', { unfiltered: year === 'all' && month === 'all' }),
@@ -258,7 +328,7 @@ export default function SubstanceRadar() {
     if (!searchQuery || searchQuery.trim().length < 2) return []
     const q = searchQuery.trim().toLowerCase()
     const groups = {}
-    for (const r of incidents) {
+    for (const r of filteredIncidents) {   // Bug 1: scope ตาม filter (รวม district/khwaeng/ปี/เดือน)
       if (!r.lat || !r.lng) continue
       const community = r.community || ''
       const subdistrict = r.subdistrict || ''
@@ -274,7 +344,7 @@ export default function SubstanceRadar() {
       if (r.primary_drug) g.drugs[r.primary_drug] = (g.drugs[r.primary_drug] || 0) + 1
     }
     return Object.values(groups).sort((a, b) => b.count - a.count).slice(0, 8)
-  }, [searchQuery, incidents])
+  }, [searchQuery, filteredIncidents])
 
   // District group layer props for IncidentMap
   const districtLayerKey = `dg-${viewMode}-${groupFilter}-${groupDisplayMode}`
@@ -428,6 +498,36 @@ export default function SubstanceRadar() {
         </div>
 
         <div className="p-4 border-b border-slate-200 flex-shrink-0">
+          {/* Phase 3: trigger compare modal */}
+          <button onClick={() => openCompare(null)}
+            className="w-full mb-3 inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white rounded-lg text-sm font-semibold shadow-sm shadow-violet-500/30 transition">
+            <BarChart3 size={16} /> เปรียบเทียบเขต
+          </button>
+          {/* Phase 2: dropdown เขต + แขวง (cascade) */}
+          <div className="space-y-3 mb-3">
+            <div>
+              <label className="text-xs text-slate-500 font-semibold flex items-center gap-1 mb-1">📍 เลือกเขต</label>
+              <select value={selectedDistrict} onChange={e => pickDistrict(e.target.value)}
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 outline-none">
+                <option value="all">ทุกเขต (50 เขต)</option>
+                {districtOptions.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 font-semibold flex items-center gap-1 mb-1">🏘️ เลือกแขวง</label>
+              <select value={selectedKhwaeng} onChange={e => setSelectedKhwaeng(e.target.value)}
+                disabled={selectedDistrict === 'all'}
+                title={selectedDistrict === 'all' ? 'เลือกเขตก่อน' : undefined}
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed">
+                {selectedDistrict === 'all'
+                  ? <option value="all">เลือกเขตก่อน</option>
+                  : <>
+                      <option value="all">ทุกแขวง ({khwaengOptions.length})</option>
+                      {khwaengOptions.map(k => <option key={k} value={k}>{k}</option>)}
+                    </>}
+              </select>
+            </div>
+          </div>
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
@@ -629,7 +729,7 @@ export default function SubstanceRadar() {
                 </select>
               </div>
               <div className="text-xs text-slate-500 uppercase font-bold mb-2">กรองกลุ่มเขต</div>
-              <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)}
+              <select value={groupFilter} onChange={e => pickGroup(e.target.value)}
                 className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs mb-4">
                 <option value="all">ทุกกลุ่ม (50 เขต)</option>
                 {Object.entries(DISTRICT_GROUPS).map(([name, g]) => (
@@ -665,7 +765,7 @@ export default function SubstanceRadar() {
               <div className="text-xs text-slate-500 uppercase font-bold mb-2">กลุ่มเขต</div>
               <div className="space-y-1.5">
                 {Object.entries(DISTRICT_GROUPS).map(([name, g]) => (
-                  <div key={name} onClick={() => setGroupFilter(groupFilter === name ? 'all' : name)}
+                  <div key={name} onClick={() => pickGroup(groupFilter === name ? 'all' : name)}
                     className={`flex items-center justify-between p-2.5 rounded-lg cursor-pointer transition ${
                       groupFilter === name ? 'ring-2 ring-offset-1' : ''
                     } ${groupFilter !== 'all' && groupFilter !== name ? 'opacity-40' : 'opacity-100'}`}
@@ -730,8 +830,60 @@ export default function SubstanceRadar() {
           districtLayerKey={districtLayerKey}
           districtLayerStyle={districtLayerStyle}
           districtLayerOnEachFeature={districtLayerOnEachFeature}
+          onDistrictClick={setDistrictPanel}
+          highlightDistrict={selectedDistrict === 'all' ? null : selectedDistrict}
           onZoomChange={setZoom}
         />
+
+        {/* Bug 2: floating detail panel — คลิกเขตบนแผนที่ */}
+        {districtPanel && (() => {
+          const stat = districtStats[districtPanel] || { total: 0, drugs: {} }
+          const group = DNAME_TO_GROUP[districtPanel] || '—'
+          const drugList = Object.entries(stat.drugs).sort((a, b) => b[1] - a[1]).slice(0, 8)
+          return (
+            <div className="absolute top-4 right-4 z-[1200] w-72 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl ring-1 ring-slate-200 overflow-hidden animate-rise">
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-4 py-3 flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-white font-bold text-base flex items-center gap-1.5"><MapPin size={15} /> {districtPanel}</div>
+                  <div className="text-xs text-blue-300">{group}</div>
+                </div>
+                <button onClick={() => setDistrictPanel(null)} className="text-white/60 hover:text-white p-0.5"><X size={16} /></button>
+              </div>
+              <div className="p-4">
+                <div className="flex items-center justify-between text-sm mb-3">
+                  <span className="text-slate-500">จำนวนรวม</span>
+                  <span className="font-bold text-rose-600 tabular-nums">{stat.total.toLocaleString()} เหตุ</span>
+                </div>
+                {drugList.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">จำแนกตามชนิดยา</div>
+                    {drugList.map(([drug, count]) => (
+                      <div key={drug} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: DRUG_COLORS[drug] || '#94A3B8' }} />
+                          <span className="text-sm text-slate-700">{drug}</span>
+                        </div>
+                        <span className="font-bold text-sm tabular-nums">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-slate-400 text-center py-3">ไม่พบข้อมูลในช่วงที่เลือก</div>
+                )}
+                <div className="mt-4 grid grid-cols-1 gap-2">
+                  <button onClick={() => { pickDistrict(districtPanel); setDistrictPanel(null) }}
+                    className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition">
+                    <Search size={14} /> filter เฉพาะเขตนี้
+                  </button>
+                  <button onClick={() => openCompare(districtPanel)}
+                    className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-xl text-sm font-semibold transition">
+                    <BarChart3 size={14} /> เปรียบเทียบกับเขตอื่น
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
         {showHeatmap && zoom < 14 && (
           <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 text-white text-xs px-4 py-2 rounded-full shadow-lg backdrop-blur flex items-center gap-2">
@@ -875,6 +1027,136 @@ export default function SubstanceRadar() {
       </div>
     </div>
     </PresentationSlides>
+
+    {compareOpen && compareData && (
+      <CompareModal
+        a={compareA} b={compareB} setA={setCompareA} setB={setCompareB}
+        options={districtOptions} data={compareData} ymFiltered={ymFiltered}
+        periodLabel={`${year === 'all' ? 'ทุกปี' : 'พ.ศ. ' + year} · ${month === 'all' ? 'ทุกเดือน' : THAI_MONTHS.find(m => m.v === month)?.l || month}`}
+        onClose={() => setCompareOpen(false)}
+      />
+    )}
     </>
   )
+}
+
+// ── Phase 3: Compare modal (side-by-side 2 เขต) ──
+function Delta({ a, b, decimal }) {
+  const d = a - b
+  if (Math.abs(d) < (decimal ? 0.05 : 0.5)) return <span className="text-slate-400">= 0</span>
+  const v = decimal ? Math.abs(d).toFixed(1) : Math.abs(d).toLocaleString()
+  return <span className={`font-semibold ${d > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{d > 0 ? '▲ +' : '▼ -'}{v}</span>
+}
+
+function CompareModal({ a, b, setA, setB, options, data, ymFiltered, periodLabel, onClose }) {
+  const ptsA = useMemo(() => ymFiltered.filter(r => r.district === a && r.lat && r.lng), [ymFiltered, a])
+  const ptsB = useMemo(() => ymFiltered.filter(r => r.district === b && r.lat && r.lng), [ymFiltered, b])
+  const getColor = p => DRUG_COLORS[p.primary_drug] || '#94A3B8'
+  const aName = a.replace(/^เขต/, ''), bName = b.replace(/^เขต/, '')
+
+  return createPortal(
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-3 sm:p-6 bg-slate-900/50 backdrop-blur-sm print-hide" onClick={onClose}>
+      <div className="print-area bg-white rounded-2xl shadow-2xl w-full max-w-7xl max-h-[92vh] flex flex-col overflow-hidden animate-rise" onClick={e => e.stopPropagation()}>
+        {/* header */}
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-slate-100 flex-shrink-0">
+          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2"><BarChart3 size={20} className="text-violet-600" /> เปรียบเทียบเขต</h2>
+          <div className="flex items-center gap-2 print-hide">
+            <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition"><Printer size={15} /> Export PDF</button>
+            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg"><X size={18} /></button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto p-6 space-y-5">
+          {/* dropdowns */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <select value={a} onChange={e => setA(e.target.value)} className="px-3 py-2 bg-violet-50 border border-violet-200 rounded-lg text-sm font-semibold text-violet-700 outline-none">
+              {options.map(d => <option key={d} value={d} disabled={d === b}>{d}</option>)}
+            </select>
+            <span className="text-slate-400 text-sm font-medium">vs</span>
+            <select value={b} onChange={e => setB(e.target.value)} className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm font-semibold text-amber-700 outline-none">
+              {options.map(d => <option key={d} value={d} disabled={d === a}>{d}</option>)}
+            </select>
+            <span className="text-xs text-slate-400 ml-auto">ช่วง: {periodLabel}</span>
+          </div>
+
+          {/* mini maps */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {[{ n: aName, full: a, pts: ptsA, c: 'violet' }, { n: bName, full: b, pts: ptsB, c: 'amber' }].map((m) => (
+              <div key={m.full} className={`rounded-xl overflow-hidden ring-1 ${m.c === 'violet' ? 'ring-violet-200' : 'ring-amber-200'}`}>
+                <div className={`px-3 py-1.5 text-sm font-semibold ${m.c === 'violet' ? 'bg-violet-50 text-violet-700' : 'bg-amber-50 text-amber-700'}`}>🗺️ {m.full} · {m.pts.length} จุด</div>
+                <div className="h-[240px]">
+                  <IncidentMap mini points={m.pts} getColor={getColor} highlightDistrict={m.full} viewMode="point" className="w-full h-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* stats table */}
+          <div className="rounded-xl ring-1 ring-slate-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr className="text-xs text-slate-500 border-b border-slate-200">
+                  <th className="text-left px-4 py-2.5 font-semibold">ตัวชี้วัด</th>
+                  <th className="text-right px-4 py-2.5 font-semibold text-violet-700">A: {aName}</th>
+                  <th className="text-right px-4 py-2.5 font-semibold text-amber-700">B: {bName}</th>
+                  <th className="text-right px-4 py-2.5 font-semibold">Δ</th>
+                </tr>
+              </thead>
+              <tbody>
+                <Row label="จำนวนรวม" a={data.a.total} b={data.b.total} bold />
+                <SectionRow label="ชนิดยา" />
+                {data.drugKeys.map(d => (
+                  <Row key={d} label={d} dot={DRUG_COLORS[d]} a={data.a.drugs[d] || 0} b={data.b.drugs[d] || 0} />
+                ))}
+                <SectionRow label="พื้นที่" />
+                <Row label="จำนวนแขวง" a={data.a.khwaengCount} b={data.b.khwaengCount} />
+                <Row label="จุดต่อแขวง" a={data.a.perKhwaeng} b={data.b.perKhwaeng} decimal />
+              </tbody>
+            </table>
+          </div>
+
+          {/* trend chart */}
+          <div className="rounded-xl ring-1 ring-slate-200 p-4">
+            <div className="text-sm font-semibold text-slate-700 mb-2">📉 แนวโน้มรายเดือน (ปีงบ ต.ค.→ก.ย.)</div>
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={data.trend} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
+                <RTooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="A" name={aName} stroke="#7c3aed" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="B" name={bName} stroke="#f59e0b" strokeWidth={2.5} strokeDasharray="6 3" dot={false} activeDot={{ r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 px-6 py-3 border-t border-slate-100 flex-shrink-0 print-hide">
+          <button onClick={onClose} className="px-5 py-2 border border-slate-300 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 transition">ปิด</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+function Row({ label, a, b, dot, bold, decimal }) {
+  const fmt = (v) => decimal ? v.toFixed(1) : v.toLocaleString()
+  return (
+    <tr className={`border-b border-slate-100 last:border-0 ${bold ? 'bg-slate-50/60' : ''}`}>
+      <td className="px-4 py-2 text-slate-700">
+        <span className="inline-flex items-center gap-2">
+          {dot && <span className="w-2.5 h-2.5 rounded-full" style={{ background: dot }} />}
+          <span className={bold ? 'font-bold' : ''}>{label}</span>
+        </span>
+      </td>
+      <td className={`px-4 py-2 text-right tabular-nums ${bold ? 'font-bold' : ''} text-slate-800`}>{fmt(a)}</td>
+      <td className={`px-4 py-2 text-right tabular-nums ${bold ? 'font-bold' : ''} text-slate-800`}>{fmt(b)}</td>
+      <td className="px-4 py-2 text-right tabular-nums"><Delta a={a} b={b} decimal={decimal} /></td>
+    </tr>
+  )
+}
+function SectionRow({ label }) {
+  return <tr className="bg-slate-100/70"><td colSpan={4} className="px-4 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wide">── {label} ──</td></tr>
 }
