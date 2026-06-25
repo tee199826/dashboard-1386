@@ -7,8 +7,8 @@ import {
   Circle, Copy, Clock,
 } from 'lucide-react'
 import Modal from '../components/Modal'
-import { parseFile, detectType, detectTypeScored, mapColumns, buildBatch, validateRows, parse115B, parse114, flattenSubstanceUserRow, assignDrugIncidentDistricts } from '../utils/importEngine'
-import { upsertRecords, upsertBknSummary, upsertRpt114, upsertSubstanceUsers } from '../utils/uploadService'
+import { parseFile, detectType, detectTypeScored, mapColumns, buildBatch, validateRows, parse115B, parse114, flattenSubstanceUserRow, assignDrugIncidentDistricts, parseDrugIncidents } from '../utils/importEngine'
+import { upsertRecords, upsertBknSummary, upsertRpt114, upsertSubstanceUsers, upsertDrugIncidents } from '../utils/uploadService'
 import { useData } from '../context/DataContext'
 import { supabase } from '../lib/supabase'
 import { getLastUploadDate } from '../utils/heroMeta'
@@ -66,7 +66,7 @@ const COL_LABELS = {
   record_uid: 'Record UID',
 }
 
-const HIDE_COLS = new Set(['batch_id', 'source_file', 'row_index', 'record_uid'])
+const HIDE_COLS = new Set(['batch_id', 'source_file', 'row_index', 'record_uid', 'content_hash'])
 
 // Guided mode ใหม่ — เลือก "ตาราง" ที่จะอัปตรงๆ (mental model: 1 ไฟล์ = 1 ตาราง)
 const TABLES = [
@@ -129,16 +129,16 @@ async function uploadParsedFor(table, raw, wb, fileName) {
     const result = await upsertSubstanceUsers(raw, { batchId, fileName })
     return { total: raw.length, result }
   }
-  const { batch } = computePreview(raw, table, fileName)
-  // drug_incidents: เติม district อัตโนมัติจาก lat/lng ก่อน upsert (กัน district = NULL)
-  let districtAssigned = 0
+  const { batch } = computePreview(raw, table, fileName, wb)
+  // drug_incidents: เติม district อัตโนมัติจาก lat/lng ก่อน upsert (กัน district = NULL) → upsert ด้วย content_hash
   if (table === 'drug_incidents') {
     const a = await assignDrugIncidentDistricts(batch.rows)
-    districtAssigned = a.districtAssigned
     if (a.unmatched.length) console.warn('[upload] drug_incidents มี lat/lng แต่ไม่ match polygon (row_index):', a.unmatched)
+    const result = await upsertDrugIncidents(batch.rows, { batchId: batch.batchId, fileName })
+    return { total: batch.rows.length, result, districtAssigned: a.districtAssigned }
   }
   const result = await upsertRecords(table, batch.rows, { batchId: batch.batchId, fileName })
-  return { total: batch.rows.length, result, districtAssigned }
+  return { total: batch.rows.length, result }
 }
 
 function genBatchId() {
@@ -153,12 +153,22 @@ function previewCount(table, raw, wb) {
   try {
     if (table === 'bkn_summary') return parse115B(wb).length
     if (table === 'report_114') return parse114(wb).length
+    if (table === 'drug_incidents') return parseDrugIncidents(wb).rows.length
   } catch { return null }
-  return raw.length   // complaints / drug_incidents / substance_users
+  return raw.length   // complaints / substance_users
 }
 const recordWord = (t) => (t === 'bkn_summary' || t === 'report_114') ? 'record' : 'แถว'
 
-function computePreview(raw, type, fileName) {
+function computePreview(raw, type, fileName, wb) {
+  // drug_incidents: wide one-hot — parse จาก workbook ตรงๆ (content_hash idempotent, ไม่มี PII)
+  if (type === 'drug_incidents') {
+    try {
+      const { rows } = parseDrugIncidents(wb)
+      return { mapped: rows, batch: { rows, batchId: genBatchId() }, validation: { validCount: rows.length, issues: [] } }
+    } catch (err) {
+      return { mapped: [], batch: { rows: [], batchId: genBatchId() }, validation: { validCount: 0, issues: [{ rowIndex: '-', field: 'ไฟล์', message: err.message }] } }
+    }
+  }
   const mapped = type === 'substance_users'
     ? raw.map((r, i) => flattenSubstanceUserRow(r, fileName, i + 1))
     : mapColumns(raw, type, fileName)
@@ -273,7 +283,7 @@ export default function UploadPage() {
         setBkn115Rows([])
         setBkn115Error(null)
       } else {
-        const { mapped, batch: b, validation: v } = computePreview(raw, effectiveType, f.name)
+        const { mapped, batch: b, validation: v } = computePreview(raw, effectiveType, f.name, wb)
         setMappedRows(mapped)
         setBatch(b)
         setValidation(v)
@@ -336,7 +346,7 @@ export default function UploadPage() {
       setBkn115Error(null)
     } else {
       if (rawRows.length) {
-        const { mapped, batch: b, validation: v } = computePreview(rawRows, newType, file.name)
+        const { mapped, batch: b, validation: v } = computePreview(rawRows, newType, file.name, storedWorkbook)
         setMappedRows(mapped)
         setBatch(b)
         setValidation(v)
@@ -415,18 +425,18 @@ export default function UploadPage() {
         })
       } else {
         if (!batch) { setPhase('preview'); return }
-        // drug_incidents: เติม district อัตโนมัติจาก lat/lng ก่อน upsert (กัน district = NULL)
-        let districtAssigned = 0
         if (selectedType === 'drug_incidents') {
+          // เติม district อัตโนมัติจาก lat/lng ก่อน upsert (กัน district = NULL) → upsert ด้วย content_hash
           const a = await assignDrugIncidentDistricts(batch.rows)
-          districtAssigned = a.districtAssigned
           if (a.unmatched.length) console.warn('[upload] drug_incidents มี lat/lng แต่ไม่ match polygon (row_index):', a.unmatched)
+          result = await upsertDrugIncidents(batch.rows, { batchId: batch.batchId, fileName: file.name })
+          if (a.districtAssigned) result = { ...result, districtAssigned: a.districtAssigned }
+        } else {
+          result = await upsertRecords(selectedType, batch.rows, {
+            batchId:  batch.batchId,
+            fileName: file.name,
+          })
         }
-        result = await upsertRecords(selectedType, batch.rows, {
-          batchId:  batch.batchId,
-          fileName: file.name,
-        })
-        if (districtAssigned) result = { ...result, districtAssigned }
       }
     } catch (err) {
       // เผื่อ service throw (ปกติ return error ใน result) — กัน spinner ค้าง

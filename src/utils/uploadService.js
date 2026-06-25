@@ -74,6 +74,67 @@ export async function upsertRecords(type, rows, batchInfo) {
 }
 
 /**
+ * Upsert เหตุการณ์ยาเสพติด (wide one-hot schema) เข้า drug_incidents
+ * rows = output จาก parseDrugIncidents (คอลัมน์ตรง schema + content_hash, ไม่มี PII)
+ * natural key = content_hash (idempotent: อัปไฟล์เดิมซ้ำ = UPDATE ทับ ไม่ append)
+ *   (ต้องมี unique constraint บน content_hash — มีใน migration 20260624_rebuild_drug_incidents)
+ */
+export async function upsertDrugIncidents(rows, batchInfo) {
+  if (!rows || rows.length === 0) return { inserted: 0, updated: 0, failed: 0, error: null }
+
+  // dedup ใน batch เดียวกันตาม content_hash (กัน ON CONFLICT ซ้ำในคำสั่งเดียว) — last-wins
+  const byHash = new Map()
+  const noHash = []
+  for (const r of rows) {
+    if (r.content_hash) byHash.set(r.content_hash, r)
+    else noHash.push(r)
+  }
+  const clean = [...byHash.values(), ...noHash]
+
+  let inserted = 0, updated = 0, failed = 0, lastError = null
+  for (let i = 0; i < clean.length; i += UPSERT_BATCH) {
+    const batch = clean.slice(i, i + UPSERT_BATCH)
+    try {
+      // ตรวจ content_hash ที่มีอยู่แล้วเพื่อแยกนับ insert vs update
+      const hashes = batch.map(r => r.content_hash).filter(Boolean)
+      const { data: existing } = await supabase
+        .from('drug_incidents')
+        .select('content_hash')
+        .in('content_hash', hashes)
+      const existingSet = new Set((existing || []).map(r => r.content_hash))
+
+      const { error } = await supabase
+        .from('drug_incidents')
+        .upsert(batch, { onConflict: 'content_hash', ignoreDuplicates: false })
+      if (error) throw error
+
+      inserted += batch.filter(r => !existingSet.has(r.content_hash)).length
+      updated  += batch.filter(r =>  existingSet.has(r.content_hash)).length
+    } catch (err) {
+      failed += batch.length
+      lastError = err.message
+    }
+  }
+
+  let batchLogError = null
+  try {
+    const { error: logErr } = await supabase.from('upload_batches').insert([{
+      batch_id:     batchInfo.batchId,
+      target_table: 'drug_incidents',
+      file_name:    batchInfo.fileName,
+      row_count:    clean.length,
+      status:       failed === 0 ? 'completed' : failed === clean.length ? 'failed' : 'partial',
+      uploaded_at:  new Date().toISOString(),
+    }])
+    if (logErr) batchLogError = logErr.message
+  } catch (err) {
+    batchLogError = err.message
+  }
+
+  return { inserted, updated, failed, error: lastError, batchLogError }
+}
+
+/**
  * Upsert รายงาน RPT_115_B เข้าตาราง bkn_summary
  * conflict key: report_id, period, bkn, group_no
  */

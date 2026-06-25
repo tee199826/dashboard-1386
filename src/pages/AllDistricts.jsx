@@ -10,6 +10,7 @@ import {
 } from 'recharts'
 import { useData } from '../context/DataContext'
 import { fetchAllPages } from '../utils/supabasePagination'
+import { deriveBehaviors } from '../utils/drugWide'
 import { getDistrictMetrics } from '../utils/statistics'
 import { DNAME_TO_GROUP } from '../utils/constants'
 import { supabase } from '../lib/supabase'
@@ -160,8 +161,8 @@ export default function AllDistricts() {
   const mapRef = useRef(null)
 
   useEffect(() => {
-    fetchAllPages('drug_incidents', 'district, received_date, created_at, behaviors')
-      .then(rows => { setIncidents(rows); setIncReady(true) })
+    fetchAllPages('drug_incidents', 'district, received_date, created_at, beh_use, beh_sell, beh_use_sell, beh_produce')
+      .then(rows => { setIncidents(rows.map(r => ({ ...r, behaviors: deriveBehaviors(r) }))); setIncReady(true) })
       .catch(err => { console.error('[/districts] fetch drug_incidents failed:', err); setIncReady(true); return [] })
     fetchAllPages('substance_users', 'dealer_locations, surveyed_at')
       .then(setDealerRows)

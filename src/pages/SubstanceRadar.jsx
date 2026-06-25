@@ -4,6 +4,7 @@ import { MapPin, ArrowLeft, Search, Menu, AlertTriangle, Plus, X, SlidersHorizon
 import { ComposedChart, Area, ReferenceDot, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, Legend } from 'recharts'
 import { THAI_MONTHS, DNAME_TO_GROUP } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
+import { enrichDrugRow } from '../utils/drugWide'
 import { thaiDateRange } from '../utils/formatDate'
 import PeriodBadge from '../components/PeriodBadge'
 import IncidentMap from '../components/IncidentMap'
@@ -36,6 +37,17 @@ const DRUG_CATEGORIES = {
 
 // รายชื่อยาทุกชนิด (รวมทุกหมวด) — ใช้กับมุมมอง "ดูทั้งหมด"
 const ALL_DRUGS = Object.values(DRUG_CATEGORIES).flatMap(c => c.drugs)
+
+// แยกยาที่ count > 0 (เรียงมาก→น้อย) ออกจากยา count = 0 (รวมเป็น "ชนิดอื่น")
+function splitDrugLegend(universe, counts) {
+  const shown = [], zero = []
+  for (const d of universe) {
+    const c = counts[d] || 0
+    if (c > 0) shown.push([d, c]); else zero.push(d)
+  }
+  shown.sort((a, b) => b[1] - a[1])
+  return { shown, zero }
+}
 const ALL_VIEW_CFG = {
   drugs: ALL_DRUGS,
   title: 'การกระจายตัวยาเสพติดทุกชนิด',
@@ -182,7 +194,7 @@ export default function SubstanceRadar() {
       setLoadError(null)
       try {
         const all = await fetchAllPages('drug_incidents', '*')
-        setIncidents(all)
+        setIncidents(all.map(enrichDrugRow))  // wide one-hot → primary_drug/behaviors/primary_action
       } catch {
         setLoadError('ไม่สามารถโหลดข้อมูลแผนที่ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือลองใหม่')
       } finally {
@@ -617,17 +629,32 @@ export default function SubstanceRadar() {
               {viewMode === 'point' && (
                 <div className="mb-5">
                   <div className="text-xs text-slate-500 uppercase font-bold mb-2">สัญลักษณ์ (LEGEND)</div>
-                  <div className="space-y-2">
-                    {targetDrugs.map(d => (
-                      <div key={d} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full" style={{ background: DRUG_COLORS[d] || '#94A3B8' }}></div>
-                          <span className="text-sm text-slate-700">{d}</span>
-                        </div>
-                        <span className="text-xs font-bold text-slate-600">{drugCounts[d] || 0}</span>
+                  {(() => {
+                    const { shown, zero } = splitDrugLegend(targetDrugs, drugCounts)
+                    if (shown.length === 0) return <div className="text-sm text-slate-400 py-2">ไม่มีข้อมูลในช่วงที่เลือก</div>
+                    return (
+                      <div className="space-y-2">
+                        {shown.map(([d, c]) => (
+                          <div key={d} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full" style={{ background: DRUG_COLORS[d] || '#94A3B8' }}></div>
+                              <span className="text-sm text-slate-700">{d}</span>
+                            </div>
+                            <span className="text-xs font-bold text-slate-600">{c}</span>
+                          </div>
+                        ))}
+                        {zero.length > 0 && (
+                          <div className="flex items-center justify-between" title={`ไม่พบในช่วงนี้: ${zero.join(', ')}`}>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-slate-300" />
+                              <span className="text-sm text-slate-400">ชนิดอื่น</span>
+                            </div>
+                            <span className="text-xs font-bold text-slate-400">0</span>
+                          </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
+                    )
+                  })()}
                 </div>
               )}
               {viewMode === 'heatmap' && (
@@ -807,7 +834,8 @@ export default function SubstanceRadar() {
         {districtPanel && (() => {
           const stat = districtStats[districtPanel] || { total: 0, drugs: {} }
           const group = DNAME_TO_GROUP[districtPanel] || '—'
-          const drugList = Object.entries(stat.drugs).sort((a, b) => b[1] - a[1]).slice(0, 8)
+          const drugList = Object.entries(stat.drugs).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1])
+          const zeroDrugs = ALL_DRUGS.filter(d => !(stat.drugs[d] > 0))
           return (
             <div className="absolute top-4 right-4 z-[1200] w-72 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl ring-1 ring-slate-200 overflow-hidden animate-rise">
               <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-4 py-3 flex items-start justify-between gap-2">
@@ -834,9 +862,18 @@ export default function SubstanceRadar() {
                         <span className="font-bold text-sm tabular-nums">{count}</span>
                       </div>
                     ))}
+                    {zeroDrugs.length > 0 && (
+                      <div className="flex items-center justify-between" title={`ไม่พบในเขตนี้: ${zeroDrugs.join(', ')}`}>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-slate-300" />
+                          <span className="text-sm text-slate-400">ชนิดอื่น</span>
+                        </div>
+                        <span className="font-bold text-sm tabular-nums text-slate-400">0</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="text-sm text-slate-400 text-center py-3">ไม่พบข้อมูลในช่วงที่เลือก</div>
+                  <div className="text-sm text-slate-400 text-center py-3">ไม่มีข้อมูลในช่วงที่เลือก</div>
                 )}
                 <div className="mt-4 grid grid-cols-1 gap-2">
                   <button onClick={() => { pickDistrict(districtPanel); setDistrictPanel(null) }}
@@ -1089,7 +1126,8 @@ function CompareModal({ a, b, setA, setB, options, incidents, years, initialYear
     // avg |Δ| ของชนิดยา → ใช้ highlight row ที่ Δ สูง
     const diffs = drugKeys.map(d => Math.abs((A.drugs[d] || 0) - (B.drugs[d] || 0)))
     const avgDiff = diffs.length ? diffs.reduce((s, v) => s + v, 0) / diffs.length : 0
-    return { A, B, drugKeys, trend, ptsA, ptsB, insights, hiDiff: avgDiff * 1.5 }
+    const zeroBoth = ALL_DRUGS.filter(d => !drugKeys.includes(d))   // 0 ทั้ง A และ B → รวมเป็น "ชนิดอื่น"
+    return { A, B, drugKeys, trend, ptsA, ptsB, insights, hiDiff: avgDiff * 1.5, zeroBoth }
   }, [incidents, a, b, mYear, mMonth, aName, bName, yearLabel])
 
   return createPortal(
@@ -1170,6 +1208,9 @@ function CompareModal({ a, b, setA, setB, options, incidents, years, initialYear
                 {data.drugKeys.map(d => (
                   <Row key={d} label={d} dot={DRUG_COLORS[d]} a={data.A.drugs[d] || 0} b={data.B.drugs[d] || 0} hi={Math.abs((data.A.drugs[d] || 0) - (data.B.drugs[d] || 0)) > data.hiDiff} />
                 ))}
+                {data.zeroBoth.length > 0 && (
+                  <Row label="ชนิดอื่น" dot="#cbd5e1" muted a={0} b={0} title={`ไม่พบทั้ง 2 เขต: ${data.zeroBoth.join(', ')}`} />
+                )}
                 <SectionRow icon="📍" label="พื้นที่" />
                 <Row label="จำนวนแขวง" a={data.A.khwaengCount} b={data.B.khwaengCount} />
                 <Row label="จุดต่อแขวง" a={data.A.perKhwaeng} b={data.B.perKhwaeng} decimal />
@@ -1271,18 +1312,18 @@ function Delta({ a, b, decimal }) {
   const cls = eq ? 'bg-slate-100 text-slate-500' : d > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
   return <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${cls}`}>{eq ? '= 0' : `${d > 0 ? '▲ +' : '▼ -'}${v}`}</span>
 }
-function Row({ label, a, b, dot, bold, decimal, hi }) {
+function Row({ label, a, b, dot, bold, decimal, hi, muted, title }) {
   const fmt = (v) => decimal ? v.toFixed(1) : v.toLocaleString()
   return (
-    <tr className={`border-b border-slate-100 last:border-0 transition-colors hover:bg-slate-50 ${bold ? 'bg-slate-50/60' : hi ? 'bg-violet-50/40' : ''}`}>
-      <td className="px-4 py-2.5 text-slate-700 sticky left-0 bg-inherit">
+    <tr title={title} className={`border-b border-slate-100 last:border-0 transition-colors hover:bg-slate-50 ${bold ? 'bg-slate-50/60' : hi ? 'bg-violet-50/40' : ''}`}>
+      <td className={`px-4 py-2.5 sticky left-0 bg-inherit ${muted ? 'text-slate-400' : 'text-slate-700'}`}>
         <span className="inline-flex items-center gap-2">
           {dot && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: dot }} />}
           <span className={bold ? 'font-bold' : ''}>{label}</span>
         </span>
       </td>
-      <td className={`px-4 py-2.5 text-right tabular-nums font-bold text-violet-600 ${bold ? 'text-base' : ''}`}>{fmt(a)}</td>
-      <td className={`px-4 py-2.5 text-right tabular-nums font-bold text-amber-600 ${bold ? 'text-base' : ''}`}>{fmt(b)}</td>
+      <td className={`px-4 py-2.5 text-right tabular-nums font-bold ${muted ? 'text-slate-400' : 'text-violet-600'} ${bold ? 'text-base' : ''}`}>{fmt(a)}</td>
+      <td className={`px-4 py-2.5 text-right tabular-nums font-bold ${muted ? 'text-slate-400' : 'text-amber-600'} ${bold ? 'text-base' : ''}`}>{fmt(b)}</td>
       <td className="px-4 py-2.5 text-right"><Delta a={a} b={b} decimal={decimal} /></td>
     </tr>
   )

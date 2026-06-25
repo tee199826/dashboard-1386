@@ -387,8 +387,10 @@ export function detectType(rows) {
 // header เฉพาะตัวของแต่ละตาราง (ไม่ทับกัน — กันสับสน complaints↔drug ที่แชร์ วันที่/เขต/แขวง)
 const DETECT_RULES = {
   drug_incidents: {
-    fileKw:  ['drug', 'incident', 'เหตุการณ์', 'ยาเสพติด', 'จับ'],
-    headers: ['lat', 'lng', 'พิกัด', 'พฤติการณ์', 'behaviors', 'ยาหลัก', 'primary_drug', 'สน.', 'police_station'],
+    fileKw:  ['drug', 'incident', 'เหตุการณ์', 'ยาเสพติด', 'จับ', 'ฐานข้อมูล'],
+    // wide-format headers (ไฟล์ใหม่) + legacy ; 'พิกัด x/y'+'เสพ'+'ยาบ้า'+'ไอซ์' = signature เด่น
+    headers: ['lat', 'lng', 'พิกัด', 'พิกัด x', 'พิกัด y', 'พฤติการณ์', 'behaviors', 'เสพ', 'ค้า', 'ผลิต',
+      'ยาบ้า', 'ไอซ์', 'กระท่อม', 'ยาหลัก', 'primary_drug', 'สน.', 'police_station', 'กลุ่มพื้นที่ สูตร'],
   },
   complaints: {
     fileKw:  ['complaint', '1386', 'ร้องเรียน', 'สายด่วน', 'กลุ่ม', 'ปีงบ', 'งานร้องเรียน', 'รายงานร้องเรียน', 'สำนัก'],
@@ -420,6 +422,13 @@ export function detectTypeScored(rows, fileName = '') {
   const thaiOnlyName = !/[a-z]/i.test(baseName)   // ชื่อไฟล์ไทยล้วน → boost น้ำหนัก header (filename keyword อังกฤษ match ยาก)
   const headerWeight = thaiOnlyName ? 15 : 10
   const headerSet = new Set(Object.keys(rows[0]).map(h => h.trim().toLowerCase()))
+  // เผื่อ header จริงอยู่แถวลึก (ไฟล์ wide มี title/merge แถวแรก → keys ไม่ใช่ header) — รวมค่าจาก 6 แถวแรก
+  for (const r of rows.slice(0, 6)) {
+    for (const v of Object.values(r)) {
+      const s = String(v ?? '').trim().toLowerCase()
+      if (s && s.length <= 40) headerSet.add(s)
+    }
+  }
   const contentType = detectType(rows)
   const scores = {}   // type -> { score, reasons }
 
@@ -1052,4 +1061,144 @@ export function parse114(workbook) {
     throw new Error('ไม่พบแถวข้อมูลกลุ่มในไฟล์ — กรุณาตรวจสอบฟอร์แมต')
 
   return records
+}
+
+// ─── 8. parseDrugIncidents — ไฟล์ฐานข้อมูลดิบเรื่องร้องเรียน (wide one-hot) ──────────
+//   ⚠️ column mapping match จาก "ข้อความ header" (ไม่ผูก index ตายตัว) — ต้อง validate กับไฟล์จริง
+//   header 2 ชั้น: row title (merge) → ข้าม ; row column = หาแถวที่มี marker (พิกัด/เสพ/ยาบ้า)
+
+const TH_MONTH_NUM = {
+  'ม.ค.': 1, 'ก.พ.': 2, 'มี.ค.': 3, 'เม.ย.': 4, 'พ.ค.': 5, 'มิ.ย.': 6,
+  'ก.ค.': 7, 'ส.ค.': 8, 'ก.ย.': 9, 'ต.ค.': 10, 'พ.ย.': 11, 'ธ.ค.': 12,
+}
+// typo เขต (ฎ ชฎา → ฏ ปฏัก ฯลฯ) — normalize ให้ตรง geojson
+const DISTRICT_FIX = { 'เขตราษฎร์บูรณะ': 'เขตราษฏร์บูรณะ' }
+// header → ฟิลด์ bool (one-hot) — exact match (รวม alias typo 'ฝื่น' → 'ฝิ่น')
+const DRUG_HDR = {
+  'ยาบ้า': 'drug_yaba', 'ไอซ์': 'drug_ice', 'ยาอี': 'drug_ecstasy', 'คีตามีน': 'drug_ketamine',
+  'โคเคน': 'drug_cocaine', 'เฮโรอีน': 'drug_heroin', 'มอร์ฟีน': 'drug_morphine', 'ฝิ่น': 'drug_opium', 'ฝื่น': 'drug_opium',
+  'กระท่อม': 'drug_kratom', 'กัญชา': 'drug_cannabis', 'สารระเหย': 'drug_solvent', 'สี่คูณร้อย': 'drug_4x100',
+  'วัตถุออกฤทธิ์': 'drug_psychotropic', 'ยาใช้ในทางที่ผิด': 'drug_misuse',
+}
+const BEH_HDR = { 'เสพ': 'beh_use', 'ค้า': 'beh_sell', 'เสพ/ค้า': 'beh_use_sell', 'เสพ-ค้า': 'beh_use_sell', 'ผลิต': 'beh_produce' }
+// result/action — header มี suffix → ใช้ startsWith (เรียง prefix กันชน: 'ไม่พบ' ก่อน 'พบ' ไม่ชนเพราะขึ้นต้นต่างกัน)
+const RESULT_PREFIX = [['พบพฤติการณ์', 'result_found'], ['ไม่พบพฤติการณ์', 'result_not_found'], ['พิสูจน์', 'result_unprovable'], ['เสียชีวิต', 'result_deceased']]
+const ACTION_PREFIX = [['ตรวจค้น', 'action_search'], ['จับกุม', 'action_arrest'], ['หลบหนี', 'action_escape'], ['อยู่ระหว่างสืบสวน', 'action_investigating'], ['บำบัด', 'action_treatment']]
+const DI_IGNORE_FROM = 52   // คอลัมน์ตั้งแต่นี้ = บล็อกรายละเอียดข้อหา/หน่วยงาน — ไม่อยู่ใน schema ใหม่
+const DI_OTHER_RANGE = [37, 42]   // ช่วงคอลัมน์ "อื่นๆ" (ชนิดยาอื่น) ก่อนบล็อกผล
+
+const isOne = (v) => v === 1 || v === '1' || v === true || String(v ?? '').trim() === '1' || String(v ?? '').trim() === '✓'
+const normHdr = (v) => String(v ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+const matchPrefix = (h, list) => { for (const [p, f] of list) if (h.startsWith(p.toLowerCase())) return f; return null }
+
+/**
+ * parse ไฟล์ฐานข้อมูลดิบเรื่องร้องเรียน (wide schema)
+ * @returns { rows, stats: { parsed, skipped, normalized } }
+ *   (district PIP auto-assign ทำตอน upload ผ่าน assignDrugIncidentDistricts — รองรับ row.lat/lng/district)
+ */
+export function parseDrugIncidents(workbook) {
+  const sheet = workbook.Sheets['เรื่องร้องเรียน'] || workbook.Sheets[workbook.SheetNames[0]]
+  if (!sheet) throw new Error('ไม่พบชีตข้อมูล')
+  const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null })
+
+  // หาแถว header — แถวที่มี marker เด่น (พิกัด + เสพ/ยาบ้า)
+  let hdrRow = -1
+  for (let i = 0; i < Math.min(8, aoa.length); i++) {
+    const cells = (aoa[i] || []).map(c => normHdr(c))
+    if (cells.some(c => c.includes('พิกัด')) && cells.some(c => c === 'เสพ' || c === 'ยาบ้า')) { hdrRow = i; break }
+  }
+  if (hdrRow === -1) throw new Error('ไม่พบแถว header (ต้องมีคอลัมน์ พิกัด + เสพ/ยาบ้า) — ตรวจรูปแบบไฟล์')
+
+  const headers = aoa[hdrRow] || []
+  // ── column index (เฉพาะ col < DI_IGNORE_FROM) ──
+  const col = {}          // scalar field → index
+  const flagCols = []     // [colIndex, oneHotField]
+  const khwaeng = []      // index ของ header "แขวง"
+  const otherCols = []    // ช่วง "อื่นๆ" (ชนิดยา)
+  headers.forEach((raw, c) => {
+    if (c >= DI_IGNORE_FROM) return   // fix 5: ข้ามบล็อกข้อหา/หน่วยงาน
+    const h = normHdr(raw)
+    if (!h) return
+    if (h === 'แขวง') { khwaeng.push(c); return }
+    // scalar — includes-match (header มี suffix ได้: "รหัสชุมชน (Nispa)", "ที่อยู่ปัจจุบัน/...")  (fix 2)
+    if (col.day == null && h.startsWith('วัน')) col.day = c
+    else if (col.mon == null && h.startsWith('เดือน')) col.mon = c
+    else if (col.year == null && h === 'ปี') col.year = c
+    else if (col.group == null && h.startsWith('กลุ่ม') && !h.includes('พื้นที่')) col.group = c
+    else if (col.community == null && h.startsWith('ชุมชน')) col.community = c
+    else if (col.code == null && h.includes('รหัสชุมชน')) col.code = c
+    else if (col.addr == null && h.includes('ที่อยู่')) col.addr = c
+    else if (col.x == null && h.includes('พิกัด x')) col.x = c
+    else if (col.y == null && h.includes('พิกัด y')) col.y = c
+    else if (col.area == null && h.includes('กลุ่มพื้นที่')) col.area = c
+    // one-hot — beh/drug exact, result/action startsWith
+    else if (BEH_HDR[h]) flagCols.push([c, BEH_HDR[h]])
+    else if (DRUG_HDR[h]) flagCols.push([c, DRUG_HDR[h]])
+    else { const f = matchPrefix(h, RESULT_PREFIX) || matchPrefix(h, ACTION_PREFIX); if (f) flagCols.push([c, f]) }
+    // fix 4: drug_others จำกัด range [37,42] + header มี "อื่น"
+    if (c >= DI_OTHER_RANGE[0] && c <= DI_OTHER_RANGE[1] && h.includes('อื่น')) otherCols.push(c)
+  })
+  // fix 1: subdistrict = "แขวง" อันแรก ; district = อันที่ 2 (ถ้า excel ซ้ำ) ไม่งั้น = col ถัดไป (ไฟล์ต้นทาง header เขต ว่าง)
+  col.subdistrict = khwaeng[0] ?? -1
+  col.district = khwaeng[1] ?? (khwaeng[0] != null ? khwaeng[0] + 1 : -1)
+  if (col.day == null || col.mon == null || col.year == null) throw new Error('ไม่พบคอลัมน์ วัน/เดือน/ปี ใน header')
+
+  const cell = (row, c) => (c >= 0 && c != null ? row[c] : null)
+  const txt = (v) => { const s = String(v ?? '').trim(); return s === '' || s === '-' ? null : s }
+
+  const rows = []
+  let skipped = 0, normalized = 0
+  for (let i = hdrRow + 1; i < aoa.length; i++) {
+    const r = aoa[i] || []
+    // ── วันที่ ──
+    const day = parseInt(cell(r, col.day))
+    const monRaw = String(cell(r, col.mon) ?? '').trim()
+    const mon = TH_MONTH_NUM[monRaw] || parseInt(monRaw)
+    let yrBE = parseInt(cell(r, col.year))
+    if (yrBE < 100) yrBE += 2500   // 68 → 2568
+    if (!day || !mon || !yrBE || yrBE < 2500 || yrBE > 2600 || mon < 1 || mon > 12) { skipped++; continue }
+    const ce = yrBE - 543
+    const received_date = `${ce}-${String(mon).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    if (isNaN(new Date(received_date).getTime())) { skipped++; continue }
+    const fiscal_year = mon >= 10 ? yrBE + 1 : yrBE   // ต.ค.+ → ปีงบถัดไป
+
+    // ── district (normalize typo) ──
+    let district = txt(cell(r, col.district))
+    if (district) {
+      if (!district.startsWith('เขต')) district = 'เขต' + district
+      if (DISTRICT_FIX[district]) { district = DISTRICT_FIX[district]; normalized++ }
+    }
+
+    const out = {
+      received_date, fiscal_year,
+      group_no: parseInt(cell(r, col.group)) || null,
+      community: txt(cell(r, col.community)),
+      subdistrict: txt(cell(r, col.subdistrict)),
+      district,
+      community_code: txt(cell(r, col.code)),
+      address: txt(cell(r, col.addr)),
+      lng: (() => { const n = parseFloat(cell(r, col.x)); return isNaN(n) ? null : n })(),
+      lat: (() => { const n = parseFloat(cell(r, col.y)); return isNaN(n) ? null : n })(),
+      area_group: txt(cell(r, col.area)),
+      drug_others: null,
+    }
+    // one-hot จาก flagCols
+    for (const [c, field] of flagCols) out[field] = isOne(cell(r, c))
+    // ยาอื่นๆ → array (เก็บค่า string ที่ไม่ใช่ flag)
+    const others = otherCols.map(c => txt(cell(r, c))).filter(v => v && v !== '1')
+    if (others.length) out.drug_others = others
+
+    // ข้าม row ว่างจริง (ไม่มีทั้ง district และพิกัด และไม่มียา)
+    const anyDrug = Object.values(DRUG_HDR).some(f => out[f])
+    if (!out.district && out.lat == null && !anyDrug) { skipped++; continue }
+
+    out.content_hash = 'di:' + simpleHash([received_date, out.district, out.subdistrict, out.lat, out.lng, out.community,
+      Object.values(DRUG_HDR).map(f => out[f] ? '1' : '0').join('')].join('|'))
+    rows.push(out)
+  }
+
+  if (rows.length === 0) throw new Error('ไม่พบแถวข้อมูลในไฟล์ — ตรวจรูปแบบ header/วันที่')
+  // dedup ในไฟล์ตาม content_hash (last-wins)
+  const final = Array.from(new Map(rows.map(r => [r.content_hash, r])).values())
+  return { rows: final, stats: { parsed: final.length, skipped, normalized } }
 }

@@ -18,6 +18,7 @@ import PresentationBar, { PresentationEnterButton } from '../components/Presenta
 import PresentationSlides from '../components/PresentationSlides'
 import { BEHAVIOR_COLORS, BKK_GROUPS, DNAME_TO_GROUP } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
+import { deriveBehaviors } from '../utils/drugWide'
 import { thaiDateRange } from '../utils/formatDate'
 import PeriodBadge from '../components/PeriodBadge'
 import UnifiedHero from '../components/UnifiedHero'
@@ -97,8 +98,8 @@ export default function Overview() {
     const load = async () => {
       setIncidentError(null)
       try {
-        const all = await fetchAllPages('drug_incidents', 'district, subdistrict, community, behaviors, received_date')
-        setIncidentsRaw(all)
+        const all = await fetchAllPages('drug_incidents', 'district, subdistrict, community, beh_use, beh_sell, beh_use_sell, beh_produce, received_date')
+        setIncidentsRaw(all.map(r => ({ ...r, behaviors: deriveBehaviors(r) })))
       } catch {
         setIncidentError('ไม่สามารถโหลดข้อมูลพฤติการณ์ได้ กรุณาลองใหม่')
       }
@@ -185,9 +186,9 @@ export default function Overview() {
       try {
         const { data } = await supabase
           .from('drug_incidents')
-          .select('lat, lng, behaviors, district, received_date')
+          .select('lat, lng, beh_use, beh_sell, beh_use_sell, beh_produce, district, received_date')
           .limit(500)
-        setMapPoints((data || []).filter(p => p.lat && p.lng))
+        setMapPoints((data || []).filter(p => p.lat && p.lng).map(r => ({ ...r, behaviors: deriveBehaviors(r) })))
       } catch {
         setMapPoints([])
       } finally {

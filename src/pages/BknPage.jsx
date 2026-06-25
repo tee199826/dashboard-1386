@@ -12,6 +12,7 @@ import IncidentMap from '../components/IncidentMap'
 import { getBkn, getStations, BKN_ORDER, BKN_COLORS } from '../utils/bknMapping'
 import { BEHAVIOR_COLORS, MONTH_TH_SHORT } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
+import { enrichDrugRow } from '../utils/drugWide'
 import { formatThaiDateShort as formatThaiDate, thaiDateRange } from '../utils/formatDate'
 import PeriodBadge from '../components/PeriodBadge'
 import { usePresentation } from '../context/PresentationContext'
@@ -53,7 +54,7 @@ export default function BknPage() {
     setLoadError(null)
     try {
       const all = await fetchAllPages('drug_incidents', '*')
-      setIncidents(all)
+      setIncidents(all.map(enrichDrugRow))  // wide one-hot → primary_drug/behaviors/primary_action
     } catch {
       setLoadError('ไม่สามารถโหลดข้อมูลได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือลองใหม่')
     } finally {
