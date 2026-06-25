@@ -1177,8 +1177,10 @@ export function parseDrugIncidents(workbook) {
       district,
       community_code: txt(cell(r, col.code)),
       address: txt(cell(r, col.addr)),
-      lng: (() => { const n = parseFloat(cell(r, col.x)); return isNaN(n) ? null : n })(),
-      lat: (() => { const n = parseFloat(cell(r, col.y)); return isNaN(n) ? null : n })(),
+      // ⚠️ ไฟล์ต้นทางสลับแกน X/Y: คอลัมน์ "พิกัด X" เก็บ latitude (13.x), "พิกัด Y" เก็บ longitude (100.x)
+      //   (กลับจาก convention ปกติ X=lng/Y=lat — ยืนยันจากข้อมูลจริง เขต กทม. lat≈13 / lng≈100)
+      lat: (() => { const n = parseFloat(cell(r, col.x)); return isNaN(n) ? null : n })(),
+      lng: (() => { const n = parseFloat(cell(r, col.y)); return isNaN(n) ? null : n })(),
       area_group: txt(cell(r, col.area)),
       drug_others: null,
     }
