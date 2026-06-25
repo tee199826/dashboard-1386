@@ -1091,9 +1091,25 @@ const isOne = (v) => v === 1 || v === '1' || v === true || String(v ?? '').trim(
 const normHdr = (v) => String(v ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
 const matchPrefix = (h, list) => { for (const [p, f] of list) if (h.startsWith(p.toLowerCase())) return f; return null }
 
+// auto-detect orientation พิกัด — ไฟล์ต่างปีสลับ X/Y ไม่เหมือนกัน (ปี 63 vs 66) → ตัดสิน per-row
+//   latitude ต้อง |val| ≤ 90 เสมอ ; longitude ถึง 180 ได้ (กทม. lng ≈100 > 90 = ตัวชี้วัด)
+//   คืน { lat, lng, kind } — kind: 'normal' (X=lat) | 'swapped' (X=lng) | 'invalid' (ผิดทั้งคู่) | 'none' (ว่าง)
+function resolveLatLng(rawX, rawY) {
+  const x = parseFloat(rawX), y = parseFloat(rawY)
+  if (isNaN(x) || isNaN(y)) return { lat: null, lng: null, kind: 'none' }
+  const xIsLat = Math.abs(x) <= 90, yIsLat = Math.abs(y) <= 90
+  if (xIsLat && !yIsLat) return { lat: x, lng: y, kind: 'normal' }    // X=lat, Y=lng
+  if (!xIsLat && yIsLat) return { lat: y, lng: x, kind: 'swapped' }   // X=lng, Y=lat
+  if (xIsLat && yIsLat) {
+    // ทั้งคู่ ≤ 90 — ambiguous ; context กทม. lat≈13 < lng≈100 → ค่ามากกว่า = lng
+    return x > y ? { lat: y, lng: x, kind: 'swapped' } : { lat: x, lng: y, kind: 'normal' }
+  }
+  return { lat: null, lng: null, kind: 'invalid' }                    // ทั้งคู่ > 90 — ผิดแน่นอน
+}
+
 /**
  * parse ไฟล์ฐานข้อมูลดิบเรื่องร้องเรียน (wide schema)
- * @returns { rows, stats: { parsed, skipped, normalized } }
+ * @returns { rows, stats: { parsed, skipped, normalized, swappedXY, normalOrientation, invalidGeo, outOfBkk, skippedInvalidYear } }
  *   (district PIP auto-assign ทำตอน upload ผ่าน assignDrugIncidentDistricts — รองรับ row.lat/lng/district)
  */
 export function parseDrugIncidents(workbook) {
@@ -1147,7 +1163,7 @@ export function parseDrugIncidents(workbook) {
   const txt = (v) => { const s = String(v ?? '').trim(); return s === '' || s === '-' ? null : s }
 
   const rows = []
-  let skipped = 0, normalized = 0
+  let skipped = 0, normalized = 0, swappedXY = 0, normalOrientation = 0, invalidGeo = 0, outOfBkk = 0, skippedInvalidYear = 0
   for (let i = hdrRow + 1; i < aoa.length; i++) {
     const r = aoa[i] || []
     // ── วันที่ ──
@@ -1155,8 +1171,12 @@ export function parseDrugIncidents(workbook) {
     const monRaw = String(cell(r, col.mon) ?? '').trim()
     const mon = TH_MONTH_NUM[monRaw] || parseInt(monRaw)
     let yrBE = parseInt(cell(r, col.year))
-    if (yrBE < 100) yrBE += 2500   // 68 → 2568
-    if (!day || !mon || !yrBE || yrBE < 2500 || yrBE > 2600 || mon < 1 || mon > 12) { skipped++; continue }
+    // normalize ปี: 2 หลัก 50-99 → +2500 (63→2563) ; พ.ศ.เต็ม (2500-2600) ใช้ตามนั้น ; อื่น = invalid
+    //   (ปี < 50 เช่น "5" → ไม่แปลง → ตกเกณฑ์ range = skippedInvalidYear)
+    if (!isNaN(yrBE) && yrBE >= 50 && yrBE < 100) yrBE += 2500
+    // วัน/เดือน ไม่ครบ → skip (skipped) ; ปีผิดรูป → skip แยกนับ (skippedInvalidYear)
+    if (!day || !mon || mon < 1 || mon > 12) { skipped++; continue }
+    if (isNaN(yrBE) || yrBE < 2500 || yrBE > 2600) { skippedInvalidYear++; continue }
     const ce = yrBE - 543
     const received_date = `${ce}-${String(mon).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     if (isNaN(new Date(received_date).getTime())) { skipped++; continue }
@@ -1169,6 +1189,14 @@ export function parseDrugIncidents(workbook) {
       if (DISTRICT_FIX[district]) { district = DISTRICT_FIX[district]; normalized++ }
     }
 
+    // พิกัด — auto-detect orientation (ไฟล์ต่างปีสลับ X/Y ไม่เหมือนกัน)
+    const geo = resolveLatLng(cell(r, col.x), cell(r, col.y))
+    if (geo.kind === 'swapped') swappedXY++
+    else if (geo.kind === 'normal') normalOrientation++
+    else if (geo.kind === 'invalid') invalidGeo++
+    // range check — นอกกรอบ กทม. → warn แต่ยัง insert (เผื่อมีพื้นที่ติดขอบจริง)
+    if (geo.lat != null && (geo.lat < 13 || geo.lat > 14 || geo.lng < 100 || geo.lng > 101)) outOfBkk++
+
     const out = {
       received_date, fiscal_year,
       group_no: parseInt(cell(r, col.group)) || null,
@@ -1177,10 +1205,8 @@ export function parseDrugIncidents(workbook) {
       district,
       community_code: txt(cell(r, col.code)),
       address: txt(cell(r, col.addr)),
-      // ⚠️ ไฟล์ต้นทางสลับแกน X/Y: คอลัมน์ "พิกัด X" เก็บ latitude (13.x), "พิกัด Y" เก็บ longitude (100.x)
-      //   (กลับจาก convention ปกติ X=lng/Y=lat — ยืนยันจากข้อมูลจริง เขต กทม. lat≈13 / lng≈100)
-      lat: (() => { const n = parseFloat(cell(r, col.x)); return isNaN(n) ? null : n })(),
-      lng: (() => { const n = parseFloat(cell(r, col.y)); return isNaN(n) ? null : n })(),
+      lat: geo.lat,
+      lng: geo.lng,
       area_group: txt(cell(r, col.area)),
       drug_others: null,
     }
@@ -1200,7 +1226,10 @@ export function parseDrugIncidents(workbook) {
   }
 
   if (rows.length === 0) throw new Error('ไม่พบแถวข้อมูลในไฟล์ — ตรวจรูปแบบ header/วันที่')
+  if (outOfBkk) console.warn(`[parseDrugIncidents] ${outOfBkk} แถวมีพิกัดนอกกรอบ กทม. (lat 13-14 / lng 100-101) — ยัง insert`)
+  if (invalidGeo) console.warn(`[parseDrugIncidents] ${invalidGeo} แถวพิกัดผิด (X,Y > 90 ทั้งคู่) — เก็บเป็น null`)
+  if (skippedInvalidYear) console.warn(`[parseDrugIncidents] ${skippedInvalidYear} แถวปีไม่ถูกต้อง (นอก พ.ศ. 2500-2600) — ข้ามแถว`)
   // dedup ในไฟล์ตาม content_hash (last-wins)
   const final = Array.from(new Map(rows.map(r => [r.content_hash, r])).values())
-  return { rows: final, stats: { parsed: final.length, skipped, normalized } }
+  return { rows: final, stats: { parsed: final.length, skipped, normalized, swappedXY, normalOrientation, invalidGeo, outOfBkk, skippedInvalidYear } }
 }

@@ -41,6 +41,16 @@ const data = [
   set(blank(), { 1: 5, 2: 'ก.พ.', 3: 69, 12: 'ราษฎร์บูรณะ', 13: 'ราษฎร์บูรณะ', 23: 1 }),
   // F: duplicate ของ A → ต้อง dedup (content_hash ตรง)
   set(blank(), { 1: 1, 2: 'ต.ค.', 3: 68, 4: 1, 7: 'ทดสอบ', 8: 'หนึ่ง', 9: '1234567890123', 10: '99/9 ถนนทดสอบ', 11: 'ชุมชนเอ', 12: 'ทุ่งครุ', 13: 'ทุ่งครุ', 14: 'C001', 15: 13.7, 16: 100.5, 17: 'กรุงธนใต้', 19: 1, 23: 1, 30: 1, 43: 1, 48: 1, 69: 1 }),
+  // H: orientation SWAP — พิกัด X=lng(100.5), Y=lat(13.7) → heuristic swap เป็น lat=13.7, lng=100.5
+  set(blank(), { 1: 6, 2: 'มี.ค.', 3: 69, 12: 'จอมทอง', 13: 'จอมทอง', 15: 100.5, 16: 13.7, 23: 1 }),
+  // I: ambiguous — ทั้งคู่ ≤ 90 (X=13.7, Y=13.8) → ตัดสินด้วยค่ามาก: lat=13.7, lng=13.8 (นอก กทม.)
+  set(blank(), { 1: 7, 2: 'เม.ย.', 3: 69, 12: 'ราชเทวี', 13: 'ราชเทวี', 15: 13.7, 16: 13.8, 24: 1 }),
+  // J: invalid — ทั้งคู่ > 90 (X=200, Y=300) → lat/lng = null (district ยังอยู่ → ไม่ skip)
+  set(blank(), { 1: 8, 2: 'พ.ค.', 3: 69, 12: 'ดินแดง', 13: 'ดินแดง', 15: 200.1, 16: 300.2, 23: 1 }),
+  // K: ปี invalid (= 5 → 2505? ไม่ ตกเกณฑ์ range) → skippedInvalidYear (วัน/เดือนครบ)
+  set(blank(), { 1: 9, 2: 'ต.ค.', 3: 5, 12: 'ห้วยขวาง', 13: 'ห้วยขวาง', 23: 1 }),
+  // L: ปี พ.ศ. เต็ม (2566) → ok ; ธ.ค.(12) → fy 2567
+  set(blank(), { 1: 10, 2: 'ธ.ค.', 3: 2566, 12: 'พญาไท', 13: 'พญาไท', 15: 13.75, 16: 100.55, 24: 1 }),
   // G: วันที่ไม่ครบ (ไม่มี วัน) → skip
   set(blank(), { 2: 'ต.ค.', 3: 68, 23: 1 }),
 ]
@@ -56,7 +66,7 @@ console.log(JSON.stringify(Object.fromEntries(Object.entries(rows[0]).filter(([,
 
 let pass = 0, fail = 0
 const ok = (cond, msg) => { if (cond) { pass++ } else { fail++; console.log('  ✗ FAIL:', msg) } }
-const A = rows[0], B = rows[1], C = rows[2], D = rows[3], E = rows[4]
+const A = rows[0], B = rows[1], C = rows[2], D = rows[3], E = rows[4], rH = rows[5], rI = rows[6], rJ = rows[7], rL = rows[8]
 
 // fix 1: district positional (col 13 ไม่มี header)
 ok(A.district === 'เขตทุ่งครุ', `district = เขตทุ่งครุ (ได้ ${A.district})`)
@@ -87,8 +97,20 @@ ok(Array.isArray(D.drug_others) && D.drug_others[0] === 'เคนมผง', 'D
 ok(D.beh_use_sell === true, 'D: เสพ/ค้า → beh_use_sell')
 // fix 4: typo เขต E
 ok(E.district === 'เขตราษฏร์บูรณะ', `E: typo ฎ→ฏ normalize (ได้ ${E.district})`)
+// orientation heuristic (resolveLatLng)
+ok(rH.lat === 13.7 && rH.lng === 100.5, `H: SWAP X=100.5/Y=13.7 → lat=13.7 lng=100.5 (ได้ lat=${rH.lat} lng=${rH.lng})`)
+ok(rI.lat === 13.7 && rI.lng === 13.8, `I: ambiguous → ค่ามาก=lng → lat=13.7 lng=13.8 (ได้ lat=${rI.lat} lng=${rI.lng})`)
+ok(rJ.lat === null && rJ.lng === null && rJ.district === 'เขตดินแดง', `J: invalid X,Y>90 → lat/lng null, district คงอยู่ (ได้ lat=${rJ.lat})`)
+ok(stats.swappedXY === 1, `swappedXY = 1 (H) (ได้ ${stats.swappedXY})`)
+ok(stats.normalOrientation === 5, `normalOrientation = 5 (A,C,F,I,L) (ได้ ${stats.normalOrientation})`)
+ok(stats.invalidGeo === 1, `invalidGeo = 1 (J) (ได้ ${stats.invalidGeo})`)
+ok(stats.outOfBkk >= 1, `outOfBkk ≥ 1 (I นอก กทม.) (ได้ ${stats.outOfBkk})`)
+// year guard
+ok(stats.skippedInvalidYear === 1, `skippedInvalidYear = 1 (K ปี=5) (ได้ ${stats.skippedInvalidYear})`)
+ok(rL.received_date === '2023-12-10' && rL.fiscal_year === 2567, `L: ปี 2566 (full BE) → 2023-12-10, fy 2567 (ได้ ${rL.received_date}, fy ${rL.fiscal_year})`)
+ok(A.fiscal_year === 2569, `A: ปี 2 หลัก 68 → fy 2569 (2-digit convert)`)   // ครอบเคส 63→2563 แบบเดียวกัน
 // dedup + skip
-ok(rows.length === 5, `parsed 5 (A-E, F dedup) (ได้ ${rows.length})`)
+ok(rows.length === 9, `parsed 9 (A-E,H,I,J,L · F dedup · K,G skip) (ได้ ${rows.length})`)
 ok(stats.skipped >= 1, `skipped ≥ 1 (G ไม่มีวัน) (ได้ ${stats.skipped})`)
 ok(stats.normalized === 1, `normalized 1 (E typo) (ได้ ${stats.normalized})`)
 

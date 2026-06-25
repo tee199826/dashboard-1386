@@ -135,7 +135,7 @@ async function uploadParsedFor(table, raw, wb, fileName) {
     const a = await assignDrugIncidentDistricts(batch.rows)
     if (a.unmatched.length) console.warn('[upload] drug_incidents มี lat/lng แต่ไม่ match polygon (row_index):', a.unmatched)
     const result = await upsertDrugIncidents(batch.rows, { batchId: batch.batchId, fileName })
-    return { total: batch.rows.length, result, districtAssigned: a.districtAssigned }
+    return { total: batch.rows.length, result, districtAssigned: a.districtAssigned, geoStats: batch.geoStats }
   }
   const result = await upsertRecords(table, batch.rows, { batchId: batch.batchId, fileName })
   return { total: batch.rows.length, result }
@@ -163,8 +163,8 @@ function computePreview(raw, type, fileName, wb) {
   // drug_incidents: wide one-hot — parse จาก workbook ตรงๆ (content_hash idempotent, ไม่มี PII)
   if (type === 'drug_incidents') {
     try {
-      const { rows } = parseDrugIncidents(wb)
-      return { mapped: rows, batch: { rows, batchId: genBatchId() }, validation: { validCount: rows.length, issues: [] } }
+      const { rows, stats } = parseDrugIncidents(wb)
+      return { mapped: rows, batch: { rows, batchId: genBatchId(), geoStats: stats }, validation: { validCount: rows.length, issues: [] } }
     } catch (err) {
       return { mapped: [], batch: { rows: [], batchId: genBatchId() }, validation: { validCount: 0, issues: [{ rowIndex: '-', field: 'ไฟล์', message: err.message }] } }
     }
@@ -430,7 +430,7 @@ export default function UploadPage() {
           const a = await assignDrugIncidentDistricts(batch.rows)
           if (a.unmatched.length) console.warn('[upload] drug_incidents มี lat/lng แต่ไม่ match polygon (row_index):', a.unmatched)
           result = await upsertDrugIncidents(batch.rows, { batchId: batch.batchId, fileName: file.name })
-          if (a.districtAssigned) result = { ...result, districtAssigned: a.districtAssigned }
+          result = { ...result, geoStats: batch.geoStats, ...(a.districtAssigned ? { districtAssigned: a.districtAssigned } : {}) }
         } else {
           result = await upsertRecords(selectedType, batch.rows, {
             batchId:  batch.batchId,
@@ -995,6 +995,7 @@ function UploadResultModal({ open, result, fileName, type, onClose, onDashboard,
   const icon = variant === 'success' ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />
   const durationS = result.durationMs != null ? (result.durationMs / 1000).toFixed(1) : null
   const rowErrors = Array.isArray(result.errors) ? result.errors : []
+  const geo = result.geoStats   // drug_incidents เท่านั้น (parser คืน orientation stats)
 
   const copyLog = async () => {
     const log = JSON.stringify({ file: fileName, type, ...result, errors: rowErrors }, null, 2)
@@ -1053,6 +1054,41 @@ function UploadResultModal({ open, result, fileName, type, onClose, onDashboard,
         {result.districtAssigned > 0 && (
           <div className="flex items-center gap-2 text-sm text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2 border border-indigo-100">
             <MapPin size={14} className="flex-shrink-0" /> 🗺️ Auto-assign เขต: {result.districtAssigned.toLocaleString()} row
+          </div>
+        )}
+        {geo && (
+          <div className="bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-200">
+            <div className="text-sm font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5"><MapPin size={14} className="flex-shrink-0" /> 📍 ตรวจสอบพิกัด</div>
+            <div className="space-y-1 text-xs">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-slate-500">พิกัดปกติ (X=lat, Y=lng)</span>
+                <span className="font-semibold text-slate-700 tabular-nums">{(geo.normalOrientation || 0).toLocaleString()} row</span>
+              </div>
+              {geo.swappedXY > 0 && (
+                <div className="flex items-center justify-between gap-3 text-amber-700 bg-amber-50 -mx-1 px-1.5 py-1 rounded">
+                  <span>⚠️ พิกัดสลับแกน (X=lng, Y=lat) — auto-แก้แล้ว</span>
+                  <span className="font-semibold tabular-nums">{geo.swappedXY.toLocaleString()} row</span>
+                </div>
+              )}
+              {geo.invalidGeo > 0 && (
+                <div className="flex items-center justify-between gap-3 text-rose-700 bg-rose-50 -mx-1 px-1.5 py-1 rounded">
+                  <span>✕ พิกัดผิดรูป (เก็บเป็นค่าว่าง)</span>
+                  <span className="font-semibold tabular-nums">{geo.invalidGeo.toLocaleString()} row</span>
+                </div>
+              )}
+              {geo.outOfBkk > 0 && (
+                <div className="flex items-center justify-between gap-3 text-slate-500">
+                  <span>ℹ️ พิกัดนอกกรอบ กทม. (lat 13-14 / lng 100-101)</span>
+                  <span className="font-semibold tabular-nums">{geo.outOfBkk.toLocaleString()} row</span>
+                </div>
+              )}
+              {geo.skippedInvalidYear > 0 && (
+                <div className="flex items-center justify-between gap-3 text-amber-700 bg-amber-50 -mx-1 px-1.5 py-1 rounded">
+                  <span>⚠️ ปีไม่ถูกต้อง (ข้ามแถว)</span>
+                  <span className="font-semibold tabular-nums">{geo.skippedInvalidYear.toLocaleString()} row</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
         {durationS != null && (
@@ -1275,7 +1311,7 @@ function GuidedUpload({ navigate, reload }) {
     let res
     try {
       const out = await uploadParsedFor(type, raw, wb, fileName)
-      res = { ...out.result, districtAssigned: out.districtAssigned || 0 }
+      res = { ...out.result, districtAssigned: out.districtAssigned || 0, geoStats: out.geoStats }
     } catch (err) {
       res = { inserted: 0, updated: 0, failed: previewCount(type, raw, wb) || 0, error: err?.message || String(err) }
     }
