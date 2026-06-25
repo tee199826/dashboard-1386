@@ -16,7 +16,7 @@ const BUILD_DATE = typeof __BUILD_DATE__ !== 'undefined' ? __BUILD_DATE__ : ''
 
 // ── meta ต่อตาราง ──
 const TABLES = [
-  { id: 'drug_incidents',  emoji: '🎯', name: 'เหตุการณ์ยาเสพติด',     desc: 'เหตุการณ์ยาเสพติด (จับกุม/ตรวจค้น)', yearKind: 'date', yearCol: 'received_date' },
+  { id: 'drug_incidents',  emoji: '🎯', name: 'เหตุการณ์ยาเสพติด',     desc: 'เหตุการณ์ยาเสพติด (จับกุม/ตรวจค้น)', yearKind: 'fy',   yearCol: 'fiscal_year' },
   { id: 'complaints',      emoji: '📞', name: 'เรื่องร้องเรียน 1386',    desc: 'เรื่องร้องเรียนผ่านสายด่วน 1386',     yearKind: 'date', yearCol: 'received_date' },
   { id: 'substance_users', emoji: '🧑', name: 'แบบเก็บข้อมูลผู้เสพ',     desc: 'แบบสำรวจข้อมูลผู้เสพ',               yearKind: 'fy',   yearCol: 'fiscal_year' },
   { id: 'bkn_summary',     emoji: '📊', name: 'สรุป บก.น. (RPT 115_B)',  desc: 'สรุปราย บก.น.',                     yearKind: 'unknown' },

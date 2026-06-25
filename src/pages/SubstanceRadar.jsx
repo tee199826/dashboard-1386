@@ -65,6 +65,15 @@ const DRUG_COLORS = {
 const FY_MONTHS = ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.']
 const fyMonthIdx = (monthNum) => (monthNum + 2) % 12   // ต.ค.(10)→0 ... ก.ย.(9)→11
 
+// ปีงบประมาณ (พ.ศ.) ของ row — ใช้ field fiscal_year จาก DB (wide schema) ตรงๆ
+//   fallback: คำนวณจาก received_date (เดือน ≥ ต.ค. → ปีงบถัดไป) เผื่อ row เก่าที่ไม่มี fiscal_year
+const fiscalYearOf = (r) => {
+  if (r.fiscal_year != null) return r.fiscal_year
+  if (!r.received_date) return null
+  const ce = parseInt(r.received_date.slice(0, 4)), m = parseInt(r.received_date.slice(5, 7))
+  return ce + 543 + (m >= 10 ? 1 : 0)
+}
+
 const DISTRICT_GROUPS = {
   'กรุงเทพเหนือ':     { border: '#a16207', fill: '#fde047', emoji: '🟡', count: 7 },
   'กรุงเทพใต้':      { border: '#1e40af', fill: '#93c5fd', emoji: '🔵', count: 10 },
@@ -212,9 +221,10 @@ export default function SubstanceRadar() {
   const years = useMemo(() => {
     const s = new Set()
     incidents.forEach(r => {
-      if (r.received_date) s.add(parseInt(r.received_date.slice(0, 4)) + 543)
+      const fy = fiscalYearOf(r)
+      if (fy != null) s.add(fy)
     })
-    return Array.from(s).sort()
+    return Array.from(s).sort((a, b) => b - a)   // ปีงบล่าสุดบนสุด
   }, [incidents])
 
   // Phase 2: รายการเขต (50 เขต) + แขวง (cascade ตามเขตที่เลือก, จาก subdistrict)
@@ -238,11 +248,11 @@ export default function SubstanceRadar() {
   // ── ชั้น filter เดียว (Bug 1 fix) — ทุก count/legend/popup derive จากตรงนี้ ──
   // ymFiltered = year+month (base) ; filteredIncidents = + district + khwaeng
   const ymFiltered = useMemo(() => incidents.filter(r => {
-    if (year !== 'all' && r.received_date) {
-      if (parseInt(r.received_date.slice(0, 4)) + 543 !== parseInt(year)) return false
+    if (year !== 'all') {
+      if (fiscalYearOf(r) !== parseInt(year)) return false   // กรองตามปีงบ (fiscal_year)
     }
     if (month !== 'all' && r.received_date) {
-      if (parseInt(r.received_date.slice(5, 7)) !== parseInt(month)) return false
+      if (parseInt(r.received_date.slice(5, 7)) !== parseInt(month)) return false   // เดือนปฏิทินตามเดิม
     }
     return true
   }), [incidents, year, month])
@@ -618,7 +628,7 @@ export default function SubstanceRadar() {
                 <select value={year} onChange={e => setYear(e.target.value)}
                   className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
                   <option value="all">ทุกปี</option>
-                  {years.map(y => <option key={y} value={y}>พ.ศ. {y}</option>)}
+                  {years.map(y => <option key={y} value={y}>ปีงบ {y}</option>)}
                 </select>
                 <select value={month} onChange={e => setMonth(e.target.value)}
                   className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
@@ -715,7 +725,7 @@ export default function SubstanceRadar() {
                 <select value={year} onChange={e => setYear(e.target.value)}
                   className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
                   <option value="all">ทุกปี</option>
-                  {years.map(y => <option key={y} value={y}>พ.ศ. {y}</option>)}
+                  {years.map(y => <option key={y} value={y}>ปีงบ {y}</option>)}
                 </select>
                 <select value={month} onChange={e => setMonth(e.target.value)}
                   className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
@@ -927,7 +937,7 @@ export default function SubstanceRadar() {
                     <div className="grid grid-cols-2 gap-2">
                       <select value={year} onChange={e => setYear(e.target.value)} className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
                         <option value="all">ทุกปี</option>
-                        {years.map(y => <option key={y} value={y}>พ.ศ. {y}</option>)}
+                        {years.map(y => <option key={y} value={y}>ปีงบ {y}</option>)}
                       </select>
                       <select value={month} onChange={e => setMonth(e.target.value)} className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
                         <option value="all">ทุกเดือน</option>
@@ -1054,7 +1064,7 @@ function computeDistrict(incidents, dname, year, month) {
   const trend = Array(12).fill(0)
   for (const r of incidents) {
     if (r.district !== dname || !r.received_date) continue
-    const y = parseInt(r.received_date.slice(0, 4)) + 543
+    const y = fiscalYearOf(r)
     const m = parseInt(r.received_date.slice(5, 7))
     if (year !== 'all' && y !== parseInt(year)) continue
     if (r.primary_drug) trend[fyMonthIdx(m)]++   // trend = year-only (ไม่กรองเดือน)
@@ -1102,7 +1112,7 @@ function CompareModal({ a, b, setA, setB, options, incidents, years, initialYear
   const [mYear, setMYear] = useState(initialYear)
   const [mMonth, setMMonth] = useState(initialMonth)
   const aName = a.replace(/^เขต/, ''), bName = b.replace(/^เขต/, '')
-  const yearLabel = mYear === 'all' ? 'ทุกปี' : 'พ.ศ. ' + mYear
+  const yearLabel = mYear === 'all' ? 'ทุกปี' : 'ปีงบ ' + mYear
   const monthLabel = mMonth === 'all' ? 'ทุกเดือน' : THAI_MONTHS.find(m => m.v === mMonth)?.l || mMonth
   const usingMain = mYear === initialYear && mMonth === initialMonth
 
@@ -1120,8 +1130,8 @@ function CompareModal({ a, b, setA, setB, options, incidents, years, initialYear
     const drugKeys = [...new Set([...Object.keys(A.drugs), ...Object.keys(B.drugs)])]
       .sort((x, y) => (B.drugs[y] || 0) + (A.drugs[y] || 0) - (B.drugs[x] || 0) - (A.drugs[x] || 0))
     const trend = FY_MONTHS.map((label, i) => ({ label, A: A.trend[i], B: B.trend[i] }))
-    const ptsA = incidents.filter(r => r.district === a && r.lat && r.lng && (mYear === 'all' || parseInt(r.received_date?.slice(0, 4)) + 543 === parseInt(mYear)) && (mMonth === 'all' || parseInt(r.received_date?.slice(5, 7)) === parseInt(mMonth)))
-    const ptsB = incidents.filter(r => r.district === b && r.lat && r.lng && (mYear === 'all' || parseInt(r.received_date?.slice(0, 4)) + 543 === parseInt(mYear)) && (mMonth === 'all' || parseInt(r.received_date?.slice(5, 7)) === parseInt(mMonth)))
+    const ptsA = incidents.filter(r => r.district === a && r.lat && r.lng && (mYear === 'all' || fiscalYearOf(r) === parseInt(mYear)) && (mMonth === 'all' || parseInt(r.received_date?.slice(5, 7)) === parseInt(mMonth)))
+    const ptsB = incidents.filter(r => r.district === b && r.lat && r.lng && (mYear === 'all' || fiscalYearOf(r) === parseInt(mYear)) && (mMonth === 'all' || parseInt(r.received_date?.slice(5, 7)) === parseInt(mMonth)))
     const insights = buildInsights(A, B, aName, bName, drugKeys, trend, yearLabel)
     // avg |Δ| ของชนิดยา → ใช้ highlight row ที่ Δ สูง
     const diffs = drugKeys.map(d => Math.abs((A.drugs[d] || 0) - (B.drugs[d] || 0)))
@@ -1170,7 +1180,7 @@ function CompareModal({ a, b, setA, setB, options, incidents, years, initialYear
             <div className="flex items-center gap-2 flex-wrap border-t border-slate-100 pt-3">
               <select value={mYear} onChange={e => setMYear(e.target.value)} className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none">
                 <option value="all">ทุกปี</option>
-                {years.map(y => <option key={y} value={y}>พ.ศ. {y}</option>)}
+                {years.map(y => <option key={y} value={y}>ปีงบ {y}</option>)}
               </select>
               <select value={mMonth} onChange={e => setMMonth(e.target.value)} className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none">
                 <option value="all">ทุกเดือน</option>
@@ -1221,7 +1231,7 @@ function CompareModal({ a, b, setA, setB, options, incidents, years, initialYear
           {/* งาน2: trend chart premium */}
           <div className="bg-white rounded-2xl ring-1 ring-slate-200 p-6">
             <div className="text-base font-semibold text-slate-800">📉 แนวโน้มรายเดือน (12 เดือน)</div>
-            <div className="text-xs text-slate-400 mb-3">ปีงบ {yearLabel} · ต.ค. → ก.ย.</div>
+            <div className="text-xs text-slate-400 mb-3">{yearLabel} · ต.ค. → ก.ย.</div>
             <PremiumTrendChart data={data.trend} aName={aName} bName={bName} />
           </div>
 
