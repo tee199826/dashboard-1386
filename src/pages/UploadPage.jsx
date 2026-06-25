@@ -1076,10 +1076,10 @@ function UploadResultModal({ open, result, fileName, type, onClose, onDashboard,
                   <span className="font-semibold tabular-nums">{geo.invalidGeo.toLocaleString()} row</span>
                 </div>
               )}
-              {geo.outOfBkk > 0 && (
-                <div className="flex items-center justify-between gap-3 text-slate-500">
-                  <span>ℹ️ พิกัดนอกกรอบ กทม. (lat 13-14 / lng 100-101)</span>
-                  <span className="font-semibold tabular-nums">{geo.outOfBkk.toLocaleString()} row</span>
+              {geo.clearedOutOfBkk > 0 && (
+                <div className="flex items-center justify-between gap-3 text-slate-500 bg-slate-100/70 -mx-1 px-1.5 py-1 rounded">
+                  <span>ℹ️ พิกัดนอก กทม. — ตั้งเป็นค่าว่าง (เก็บข้อมูลยาไว้)</span>
+                  <span className="font-semibold tabular-nums">{geo.clearedOutOfBkk.toLocaleString()} row</span>
                 </div>
               )}
               {geo.skippedInvalidYear > 0 && (

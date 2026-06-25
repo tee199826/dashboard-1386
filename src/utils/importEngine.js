@@ -1109,7 +1109,7 @@ function resolveLatLng(rawX, rawY) {
 
 /**
  * parse ไฟล์ฐานข้อมูลดิบเรื่องร้องเรียน (wide schema)
- * @returns { rows, stats: { parsed, skipped, normalized, swappedXY, normalOrientation, invalidGeo, outOfBkk, skippedInvalidYear } }
+ * @returns { rows, stats: { parsed, skipped, normalized, swappedXY, normalOrientation, invalidGeo, clearedOutOfBkk, skippedInvalidYear } }
  *   (district PIP auto-assign ทำตอน upload ผ่าน assignDrugIncidentDistricts — รองรับ row.lat/lng/district)
  */
 export function parseDrugIncidents(workbook) {
@@ -1163,7 +1163,7 @@ export function parseDrugIncidents(workbook) {
   const txt = (v) => { const s = String(v ?? '').trim(); return s === '' || s === '-' ? null : s }
 
   const rows = []
-  let skipped = 0, normalized = 0, swappedXY = 0, normalOrientation = 0, invalidGeo = 0, outOfBkk = 0, skippedInvalidYear = 0
+  let skipped = 0, normalized = 0, swappedXY = 0, normalOrientation = 0, invalidGeo = 0, clearedOutOfBkk = 0, skippedInvalidYear = 0
   for (let i = hdrRow + 1; i < aoa.length; i++) {
     const r = aoa[i] || []
     // ── วันที่ ──
@@ -1194,8 +1194,10 @@ export function parseDrugIncidents(workbook) {
     if (geo.kind === 'swapped') swappedXY++
     else if (geo.kind === 'normal') normalOrientation++
     else if (geo.kind === 'invalid') invalidGeo++
-    // range check — นอกกรอบ กทม. → warn แต่ยัง insert (เผื่อมีพื้นที่ติดขอบจริง)
-    if (geo.lat != null && (geo.lat < 13 || geo.lat > 14 || geo.lng < 100 || geo.lng > 101)) outOfBkk++
+    // range check — พิกัดนอกกรอบ กทม. (lat 13-14.2 / lng 100-101.2) → ตั้ง null (เก็บ row + district/ยา ไว้)
+    if (geo.lat != null && (geo.lat < 13 || geo.lat > 14.2 || geo.lng < 100 || geo.lng > 101.2)) {
+      geo.lat = null; geo.lng = null; clearedOutOfBkk++
+    }
 
     const out = {
       received_date, fiscal_year,
@@ -1226,10 +1228,10 @@ export function parseDrugIncidents(workbook) {
   }
 
   if (rows.length === 0) throw new Error('ไม่พบแถวข้อมูลในไฟล์ — ตรวจรูปแบบ header/วันที่')
-  if (outOfBkk) console.warn(`[parseDrugIncidents] ${outOfBkk} แถวมีพิกัดนอกกรอบ กทม. (lat 13-14 / lng 100-101) — ยัง insert`)
+  if (clearedOutOfBkk) console.warn(`[parseDrugIncidents] ${clearedOutOfBkk} แถวพิกัดนอกกรอบ กทม. — ตั้ง lat/lng เป็น null (เก็บ row)`)
   if (invalidGeo) console.warn(`[parseDrugIncidents] ${invalidGeo} แถวพิกัดผิด (X,Y > 90 ทั้งคู่) — เก็บเป็น null`)
   if (skippedInvalidYear) console.warn(`[parseDrugIncidents] ${skippedInvalidYear} แถวปีไม่ถูกต้อง (นอก พ.ศ. 2500-2600) — ข้ามแถว`)
   // dedup ในไฟล์ตาม content_hash (last-wins)
   const final = Array.from(new Map(rows.map(r => [r.content_hash, r])).values())
-  return { rows: final, stats: { parsed: final.length, skipped, normalized, swappedXY, normalOrientation, invalidGeo, outOfBkk, skippedInvalidYear } }
+  return { rows: final, stats: { parsed: final.length, skipped, normalized, swappedXY, normalOrientation, invalidGeo, clearedOutOfBkk, skippedInvalidYear } }
 }
