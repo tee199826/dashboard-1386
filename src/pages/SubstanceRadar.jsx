@@ -1230,10 +1230,14 @@ function CompareModal({ a, b, setA, setB, options, incidents, years, initialYear
 
           {/* งาน2: trend chart premium */}
           <div className="bg-white rounded-2xl ring-1 ring-slate-200 p-6">
-            <div className="text-base font-semibold text-slate-800">📉 แนวโน้มรายเดือน (12 เดือน)</div>
-            <div className="text-xs text-slate-400 mb-3">{yearLabel} · ต.ค. → ก.ย.</div>
-            <PremiumTrendChart data={data.trend} aName={aName} bName={bName} />
+            <div className="text-base font-semibold text-slate-800">📉 จำนวนเหตุการณ์รายเดือน · เปรียบเทียบ 12 เดือน</div>
+            <div className="text-xs text-slate-400 mb-1">{yearLabel} · ต.ค. → ก.ย. · จำนวนเหตุการณ์ต่อเดือน</div>
+            <div className="text-[11px] text-slate-400 mb-3">💡 จุดบนเส้น = จำนวนเหตุการณ์ที่เกิดขึ้นในเดือนนั้น (อิงวันที่รับเรื่อง)</div>
+            <PremiumTrendChart data={data.trend} aName={aName} bName={bName} yearLabel={yearLabel} />
           </div>
+
+          {/* mini-summary แนวโน้ม */}
+          <TrendSummary aName={aName} bName={bName} trend={data.trend} />
 
           {/* งาน6: insights */}
           <InsightsCard insights={data.insights} />
@@ -1274,21 +1278,23 @@ function RibbonMap({ side, full, pts, stat }) {
 }
 
 // งาน2: premium trend chart (gradient fill + peak markers + custom tooltip)
-function PremiumTrendChart({ data, aName, bName }) {
+function PremiumTrendChart({ data, aName, bName, yearLabel }) {
   const peakA = data.reduce((mx, p, i) => p.A > data[mx].A ? i : mx, 0)
   const peakB = data.reduce((mx, p, i) => p.B > data[mx].B ? i : mx, 0)
   const maxY = Math.max(1, ...data.map(p => Math.max(p.A, p.B)))
   return (
-    <ResponsiveContainer width="100%" height={320}>
-      <ComposedChart data={data} margin={{ top: 24, right: 20, left: 0, bottom: 4 }}>
+    <ResponsiveContainer width="100%" height={340}>
+      <ComposedChart data={data} margin={{ top: 24, right: 20, left: 8, bottom: 24 }}>
         <defs>
           <linearGradient id="cmpA" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#7c3aed" stopOpacity={0.22} /><stop offset="100%" stopColor="#7c3aed" stopOpacity={0.02} /></linearGradient>
           <linearGradient id="cmpB" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f59e0b" stopOpacity={0.18} /><stop offset="100%" stopColor="#f59e0b" stopOpacity={0.02} /></linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="2 4" stroke="#e2e8f0" vertical={false} />
-        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-        <YAxis domain={[0, Math.ceil(maxY * 1.15)]} ticks={[0, maxY]} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={28} />
-        <RTooltip content={<TrendTooltip aName={aName} bName={bName} />} />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} height={40}
+          label={{ value: 'เดือน (ปีงบประมาณ)', position: 'insideBottom', offset: -4, style: { fontSize: 12, fill: '#64748b' } }} />
+        <YAxis domain={[0, Math.ceil(maxY * 1.15)]} ticks={[0, maxY]} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={44}
+          label={{ value: 'เหตุการณ์/เดือน', angle: -90, position: 'insideLeft', style: { fontSize: 12, fill: '#64748b', textAnchor: 'middle' } }} />
+        <RTooltip content={<TrendTooltip aName={aName} bName={bName} yearLabel={yearLabel} />} />
         <Legend wrapperStyle={{ fontSize: 12, paddingTop: 6 }} />
         <Area type="monotone" dataKey="A" name={aName} stroke="#7c3aed" strokeWidth={3} fill="url(#cmpA)" dot={false} activeDot={{ r: 5 }} isAnimationActive animationDuration={1000} />
         <Area type="monotone" dataKey="B" name={bName} stroke="#f59e0b" strokeWidth={2.5} strokeDasharray="6 3" fill="url(#cmpB)" dot={false} activeDot={{ r: 5 }} isAnimationActive animationDuration={1000} />
@@ -1298,18 +1304,50 @@ function PremiumTrendChart({ data, aName, bName }) {
     </ResponsiveContainer>
   )
 }
-function TrendTooltip({ active, payload, label, aName, bName }) {
+function TrendTooltip({ active, payload, label, aName, bName, yearLabel }) {
   if (!active || !payload?.length) return null
   const A = payload.find(p => p.dataKey === 'A')?.value ?? 0
   const B = payload.find(p => p.dataKey === 'B')?.value ?? 0
   const d = A - B
   const pct = Math.min(A, B) > 0 ? (Math.abs(d) / Math.min(A, B) * 100).toFixed(0) : null
+  const more = d > 0 ? aName : bName
   return (
-    <div className="bg-white rounded-lg ring-1 ring-slate-200 shadow-xl px-3 py-2 text-xs">
-      <div className="font-bold text-slate-800 mb-1">{label}</div>
-      <div className="flex items-center justify-between gap-4"><span className="text-violet-600">● {aName}</span><span className="font-bold tabular-nums">{A.toLocaleString()}</span></div>
-      <div className="flex items-center justify-between gap-4"><span className="text-amber-600">● {bName}</span><span className="font-bold tabular-nums">{B.toLocaleString()}</span></div>
-      {d !== 0 && <div className={`mt-1 pt-1 border-t border-slate-100 text-right font-bold ${d > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>Δ {d > 0 ? '+' : ''}{d}{pct ? ` (${d > 0 ? '▲' : '▼'} ${pct}%)` : ''}</div>}
+    <div className="bg-white rounded-lg ring-1 ring-slate-200 shadow-xl px-3 py-2 text-xs min-w-[180px]">
+      <div className="font-bold text-slate-800">{label}{yearLabel && yearLabel !== 'ทุกปี' ? ` ${yearLabel}` : ''}</div>
+      <div className="text-[11px] text-slate-400 mb-1.5 pb-1.5 border-b border-slate-100">จำนวนเหตุการณ์</div>
+      <div className="flex items-center justify-between gap-4"><span className="text-violet-600">● {aName}</span><span className="font-bold tabular-nums">{A.toLocaleString()} เหตุการณ์</span></div>
+      <div className="flex items-center justify-between gap-4"><span className="text-amber-600">● {bName}</span><span className="font-bold tabular-nums">{B.toLocaleString()} เหตุการณ์</span></div>
+      {d !== 0 && <div className={`mt-1.5 pt-1.5 border-t border-slate-100 text-right font-bold ${d > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>Δ {more} มากกว่า: {d > 0 ? '+' : ''}{d}{pct ? ` (${d > 0 ? '▲' : '▼'} ${pct}%)` : ''}</div>}
+    </div>
+  )
+}
+
+// mini-summary ใต้ trend chart — total/เฉลี่ย/เดือน peak ของแต่ละเขต
+function TrendSummary({ aName, bName, trend }) {
+  const sum = (k) => trend.reduce((s, p) => s + p[k], 0)
+  const peak = (k) => trend.reduce((mx, p) => (p[k] > mx[k] ? p : mx), trend[0])
+  const tA = sum('A'), tB = sum('B'), pA = peak('A'), pB = peak('B')
+  const line = (name, total, peakM, color) => (
+    <div className="flex items-baseline gap-2">
+      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 translate-y-0.5" style={{ background: color }} />
+      <span className="font-semibold text-slate-700">{name}:</span>
+      <span className="text-slate-600 tabular-nums">{total.toLocaleString()} เหตุการณ์ · เฉลี่ย {(total / 12).toFixed(1)}/เดือน</span>
+    </div>
+  )
+  return (
+    <div className="bg-slate-50 rounded-2xl ring-1 ring-slate-200 p-5">
+      <div className="flex items-center gap-2 mb-3"><span>📊</span><h3 className="text-sm font-semibold text-slate-700">สรุปแนวโน้ม (12 เดือน)</h3></div>
+      <div className="space-y-1.5 text-sm">
+        {line(aName, tA, pA, '#7c3aed')}
+        {line(bName, tB, pB, '#f59e0b')}
+      </div>
+      <div className="mt-3 pt-3 border-t border-slate-200 text-sm">
+        <div className="text-xs text-slate-400 mb-1.5">เดือนที่มากที่สุด</div>
+        <div className="space-y-1 text-slate-600">
+          <div>• <span className="text-violet-600 font-medium">{aName}</span>: {tA > 0 ? `${pA.label} (${pA.A.toLocaleString()} เหตุ)` : '—'}</div>
+          <div>• <span className="text-amber-600 font-medium">{bName}</span>: {tB > 0 ? `${pB.label} (${pB.B.toLocaleString()} เหตุ)` : '—'}</div>
+        </div>
+      </div>
     </div>
   )
 }
