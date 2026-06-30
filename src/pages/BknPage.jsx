@@ -1,20 +1,15 @@
 ﻿import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Cell, LabelList,
-} from 'recharts'
-import {
-  TrendingUp, RefreshCw, ChevronLeft, MapPin, Users, AlertTriangle,
-  Activity, BarChart2, Calendar,
+  RefreshCw, MapPin, AlertTriangle,
 } from 'lucide-react'
 import IncidentMap from '../components/IncidentMap'
-import { getBkn, getStations, BKN_ORDER, BKN_COLORS } from '../utils/bknMapping'
-import { BEHAVIOR_COLORS, MONTH_TH_SHORT } from '../utils/constants'
+import BknSection1 from '../components/BknSection1'
+import BknDrilldown from '../components/BknDrilldown'
+import { getBknByDistrict, BKN_ORDER, BKN_COLORS } from '../utils/bknMapping'
 import { fetchAllPages } from '../utils/supabasePagination'
 import { enrichDrugRow } from '../utils/drugWide'
-import { formatThaiDateShort as formatThaiDate, thaiDateRange } from '../utils/formatDate'
-import PeriodBadge from '../components/PeriodBadge'
+import { formatThaiDateShort as formatThaiDate } from '../utils/formatDate'
 import { usePresentation } from '../context/PresentationContext'
 import PresentationBar, { PresentationEnterButton } from '../components/PresentationBar'
 import PresentationSlides from '../components/PresentationSlides'
@@ -30,21 +25,13 @@ const BKN_SOURCE_INFO = {
   sources: ['bkn_summary (RPT_115_B)'],
 }
 
-const DRUG_PALETTE = {
-  'ยาบ้า': '#EF4444', 'ไอซ์': '#0EA5E9', 'กัญชา': '#22C55E',
-  'ยาอี': '#A855F7', 'คีตามีน': '#10B981', 'โคเคน': '#6366F1',
-  'เฮโรอีน': '#7C3AED', 'กระท่อม': '#65A30D', 'สี่คูณร้อย': '#D97706',
-  'สารระเหย': '#0891B2', 'มอร์ฟีน': '#9F1239', 'แฮปปี้วอเตอร์': '#EC4899',
-}
-
 export default function BknPage() {
   const { isPresentation } = usePresentation()
   const [incidents, setIncidents] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [selectedBkn, setSelectedBkn] = useState(null)
-  const [yearFilter, setYearFilter] = useState('all')
-  const [activePieIdx, setActivePieIdx] = useState(null)
+  const [drilldownBkn, setDrilldownBkn] = useState(null)   // Phase 4: drill-down ระดับ สน.
   const [viewMode, setViewMode] = useState('point')
   const [lastUpload115B, setLastUpload115B] = useState(undefined)
   const [bannerPeriod, setBannerPeriod] = useState(null)
@@ -64,6 +51,24 @@ export default function BknPage() {
 
   useEffect(() => { load() }, [load])
 
+  // ── drill-down + URL state (?drilldown=4) → back/forward ใช้งานได้ ──
+  const goDrilldown = useCallback((bkn) => {
+    setDrilldownBkn(bkn)
+    const url = new URL(window.location)
+    const n = bkn ? String(bkn).replace(/\D+/g, '') : ''
+    if (n) url.searchParams.set('drilldown', n); else url.searchParams.delete('drilldown')
+    window.history.pushState({}, '', url)
+  }, [])
+  useEffect(() => {
+    const sync = () => {
+      const p = new URLSearchParams(window.location.search).get('drilldown')
+      setDrilldownBkn(p ? `บก.น.${p}` : null)
+    }
+    sync()
+    window.addEventListener('popstate', sync)
+    return () => window.removeEventListener('popstate', sync)
+  }, [])
+
   useEffect(() => {
     supabase.from('upload_batches')
       .select('uploaded_at')
@@ -73,143 +78,13 @@ export default function BknPage() {
       .then(({ data }) => setLastUpload115B(data?.[0]?.uploaded_at ?? null))
   }, [])
 
-  // ── bkn_summary aggregate สำหรับ KPI cards หลักและกราฟ Level-1 ────────────
-  const [bknStats, setBknStats] = useState(null)
-  const [bknStatsLoading, setBknStatsLoading] = useState(true)
-
-  useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase
-        .from('bkn_summary')
-        .select('bkn,total,done,pending,period')
-        .eq('report_id', '115_B')
-        .limit(500)
-      if (!data || data.length === 0) { setBknStatsLoading(false); return }
-      const periods = [...new Set(data.map(r => r.period).filter(Boolean))].sort()
-      const latestPeriod = periods[periods.length - 1]
-      const rows = latestPeriod ? data.filter(r => r.period === latestPeriod) : data
-      const isSpwBkn = b => b?.includes('สปพ')
-      const map = {}
-      rows.forEach(r => {
-        if (!r.bkn) return
-        if (!map[r.bkn]) map[r.bkn] = { total: 0, done: 0, pending: 0 }
-        map[r.bkn].total += r.total || 0
-        map[r.bkn].done  += r.done  || 0
-        map[r.bkn].pending += r.pending || 0
-      })
-      const bknList = Object.entries(map).filter(([b]) => !isSpwBkn(b))
-      const spwList = Object.entries(map).filter(([b]) =>  isSpwBkn(b))
-      const sumBkn = bknList.reduce((a, [, v]) => ({ total: a.total+v.total, done: a.done+v.done, pending: a.pending+v.pending }), { total:0, done:0, pending:0 })
-      const sumSpw = spwList.reduce((a, [, v]) => ({ total: a.total+v.total, done: a.done+v.done, pending: a.pending+v.pending }), { total:0, done:0, pending:0 })
-      setBknStats({
-        ...sumBkn,
-        pctDone: sumBkn.total > 0 ? ((sumBkn.done / sumBkn.total) * 100).toFixed(1) : '0.0',
-        spwName: spwList[0]?.[0] || null,
-        spw: sumSpw,
-        period: latestPeriod,
-        byBkn: bknList.map(([name, v]) => ({
-          name, done: v.done, pending: v.pending, total: v.total,
-          color: BKN_COLORS[name] || '#94a3b8',
-          pctDone: v.total > 0 ? ((v.done / v.total) * 100).toFixed(0) : '0',
-        })).sort((a, b) => (parseInt(a.name.replace(/\D+/g,'')) || 999) - (parseInt(b.name.replace(/\D+/g,'')) || 999)),
-      })
-      setBknStatsLoading(false)
-    }
-    load()
-  }, [])
-
-  const years = useMemo(() => {
-    const s = new Set()
-    incidents.forEach(r => { if (r.received_date) s.add(parseInt(r.received_date.slice(0, 4)) + 543) })
-    return Array.from(s).sort()
-  }, [incidents])
-
-  // Year-filtered only (for Level-1 bar comparison)
-  const yearFiltered = useMemo(() => {
-    if (yearFilter === 'all') return incidents
-    const ce = parseInt(yearFilter) - 543
-    return incidents.filter(r => r.received_date?.startsWith(String(ce)))
-  }, [incidents, yearFilter])
-
-  // Fully filtered: year + selected บก.น.
-  const filtered = useMemo(() => {
-    if (!selectedBkn) return yearFiltered
-    return yearFiltered.filter(r => getBkn(r.police_station) === selectedBkn)
-  }, [yearFiltered, selectedBkn])
-
-  // period ของข้อมูล drug_incidents ที่ filter แล้ว (สำหรับ BknDrugStats + bar Level-2)
-  const incidentsPeriod = useMemo(
-    () => thaiDateRange(filtered, 'received_date', { unfiltered: yearFilter === 'all' && !selectedBkn }),
-    [filtered, yearFilter, selectedBkn])
-
-  // KPI
-  const totals = useMemo(() => {
-    const b = { 'เสพ': 0, 'ค้า': 0, 'เสพ/ค้า': 0, 'ผลิต': 0 }
-    filtered.forEach(r => {
-      if (!r.behaviors) return
-      String(r.behaviors).split(',').forEach(k => { const t = k.trim(); if (b[t] !== undefined) b[t]++ })
-    })
-    return { total: filtered.length, ...b }
-  }, [filtered])
-
-  const pctOf = n => totals.total > 0 ? ((n / totals.total) * 100).toFixed(1) : '0.0'
-
-  // Bar data (Level 1: by บก.น. from yearFiltered, Level 2: by สน. from filtered)
-  const barData = useMemo(() => {
-    if (!selectedBkn) {
-      const map = {}
-      BKN_ORDER.filter(b => b !== 'ไม่ระบุ').forEach(b => { map[b] = 0 })
-      yearFiltered.forEach(r => { const b = getBkn(r.police_station); if (map[b] !== undefined) map[b]++ })
-      return BKN_ORDER.filter(b => b !== 'ไม่ระบุ').map(b => ({ name: b, count: map[b], color: BKN_COLORS[b] }))
-    }
-    const stns = getStations(selectedBkn)
-    const map = {}; stns.forEach(s => { map[s] = 0 })
-    filtered.forEach(r => { const s = r.police_station?.trim(); if (s && map[s] !== undefined) map[s]++ })
-    return stns.map(s => ({ name: s, count: map[s], color: BKN_COLORS[selectedBkn] })).sort((a, b) => b.count - a.count)
-  }, [yearFiltered, filtered, selectedBkn])
-
-  // Behavior donut
-  const behaviorData = useMemo(() => {
-    const counts = { 'เสพ': 0, 'ค้า': 0, 'เสพ/ค้า': 0, 'ผลิต': 0 }
-    filtered.forEach(r => {
-      if (!r.behaviors) return
-      String(r.behaviors).split(',').forEach(k => { const t = k.trim(); if (counts[t] !== undefined) counts[t]++ })
-    })
-    return Object.entries(counts).filter(([, v]) => v > 0)
-      .map(([name, value]) => ({ name, value, color: BEHAVIOR_COLORS[name] }))
-  }, [filtered])
-  const behaviorTotal = useMemo(() => behaviorData.reduce((s, d) => s + d.value, 0), [behaviorData])
-
-  // Drug type breakdown (top 10)
-  const drugData = useMemo(() => {
-    const map = {}
-    filtered.forEach(r => { if (r.primary_drug) map[r.primary_drug] = (map[r.primary_drug] || 0) + 1 })
-    return Object.entries(map).sort(([, a], [, b]) => b - a).slice(0, 10)
-      .map(([name, count]) => ({ name, count, color: DRUG_PALETTE[name] || '#94a3b8' }))
-  }, [filtered])
-  const topDrug = drugData[0] || null
-
-  // Monthly trend
-  const trendData = useMemo(() => {
-    const map = {}
-    filtered.forEach(r => {
-      if (!r.received_date) return
-      const key = r.received_date.slice(0, 7)
-      map[key] = (map[key] || 0) + 1
-    })
-    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, count]) => {
-        const [y, m] = key.split('-')
-        const ty = (parseInt(y) + 543).toString().slice(-2)
-        return { key, label: `${MONTH_TH_SHORT[parseInt(m)]}${ty}`, count }
-      }).slice(-24)
-  }, [filtered])
-
-  // Top 5
-  const top5 = useMemo(() => [...barData].sort((a, b) => b.count - a.count).slice(0, 5), [barData])
-
-  const mapPoints = useMemo(() => incidents.filter(r => r.lat && r.lng), [incidents])
-  const getColor = useCallback(p => BKN_COLORS[getBkn(p.police_station)] || '#9ca3af', [])
+  // แผนที่: จุดที่มีพิกัด · สีตาม บก.น. (แมปจาก district เพราะไม่มี police_station แล้ว)
+  // กรองตาม บก.น. ที่เลือกจาก pill ใต้แผนที่
+  const mapPoints = useMemo(() => {
+    const pts = incidents.filter(r => r.lat && r.lng)
+    return selectedBkn ? pts.filter(r => getBknByDistrict(r.district) === selectedBkn) : pts
+  }, [incidents, selectedBkn])
+  const getColor = useCallback(p => BKN_COLORS[getBknByDistrict(p.district)] || '#9ca3af', [])
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center min-h-[400px]">
@@ -232,7 +107,15 @@ export default function BknPage() {
     </div>
   )
 
-  const isLevel2 = !!selectedBkn
+  // ── DRILL-DOWN: มุมมองระดับ สน. ของ บก.น. ที่เลือก (Phase 4) ──
+  if (drilldownBkn) return (
+    <>
+      {isPresentation && <PresentationBar title={`สน. ในสังกัด ${drilldownBkn}`} />}
+      <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto'}>
+        <BknDrilldown bkn={drilldownBkn} incidents={incidents} onBack={() => goDrilldown(null)} onSelect={goDrilldown} />
+      </div>
+    </>
+  )
 
   return (
     <>
@@ -262,225 +145,30 @@ export default function BknPage() {
 
       <PresentationSlides isPresentation={isPresentation} normalClassName="max-w-[1600px] mx-auto space-y-8">
 
-      {/* ── HEADER + KPI (slide 1 in presentation) ── */}
-      <div className="space-y-5">
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          {isLevel2 && (
-            <button onClick={() => { setSelectedBkn(null); setActivePieIdx(null) }}
-              className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold mb-2 transition">
-              <ChevronLeft size={15} /> ภาพรวมทุก บก.น.
-            </button>
-          )}
-          <div className="flex items-center gap-3 flex-wrap">
-            {isLevel2 && (
-              <span className="px-3 py-1 rounded-lg text-sm font-bold text-white shadow"
-                style={{ background: BKN_COLORS[selectedBkn] }}>
-                {selectedBkn}
-              </span>
-            )}
-            <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">
-              {isLevel2 ? `สถิติ ${selectedBkn}` : 'สถิติคดียาเสพติด'}
-            </h1>
-          </div>
-          <p className="text-sm text-slate-500 mt-1">
-            {isLevel2
-              ? `${selectedBkn} · ${getStations(selectedBkn).length} สถานีตำรวจ · กองบัญชาการตำรวจนครบาล`
-              : 'กองบัญชาการตำรวจนครบาล · บก.น.1–9 · RPT_115_B'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {years.length > 0 && (
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
-              <Calendar size={14} className="text-slate-400 flex-shrink-0" />
-              <span className="text-xs text-slate-400">ปีงบประมาณ</span>
-              <select value={yearFilter} onChange={e => setYearFilter(e.target.value)}
-                className="text-sm font-semibold text-slate-700 bg-transparent outline-none cursor-pointer pr-1">
-                <option value="all">ทั้งหมด</option>
-                {years.map(y => <option key={y} value={y}>พ.ศ. {y}</option>)}
-              </select>
-            </div>
-          )}
-          {!isPresentation && (
-            <button onClick={load} disabled={loading} title="รีเฟรชข้อมูล"
-              className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-blue-600 hover:border-blue-300 shadow-sm transition">
-              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-            </button>
-          )}
-          {/* 115_B badge — ใช้ bannerPeriod (จาก bkn_summary จริง) เป็นตัวชี้ว่ามีข้อมูล */}
-          {!isPresentation && !bannerPeriod && lastUpload115B === null && (
-            <span className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-400 border border-slate-200 whitespace-nowrap">
-              115_B: ยังไม่มีข้อมูล
-            </span>
-          )}
-          {!isPresentation && bannerPeriod && lastUpload115B === null && (
-            <span className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-green-50 text-green-700 border border-green-200 whitespace-nowrap">
-              115_B · {bannerPeriod}
-            </span>
-          )}
-          {!isPresentation && lastUpload115B != null && lastUpload115B !== undefined && (() => {
-            const isStale = (Date.now() - new Date(lastUpload115B).getTime()) > 30 * 24 * 3600 * 1000
-            return (
-              <a href="/upload" title="ไปหน้าอัปโหลด"
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors whitespace-nowrap ${
-                  isStale
-                    ? 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
-                    : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-                }`}>
-                {isStale && <span>⚠</span>}
-                <span>115_B: {formatThaiDate(lastUpload115B)}</span>
-              </a>
-            )
-          })()}
-          {!isPresentation && <PresentationEnterButton />}
-        </div>
-      </div>
-
-      {/* ── KPI STRIP: จาก bkn_summary (RPT_115_B) ── */}
-      {bknStatsLoading ? (
-        <div className="h-24 flex items-center justify-center text-slate-400 text-sm">
-          <div className="w-5 h-5 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin mr-2" />
-          กำลังโหลดข้อมูล 115_B...
-        </div>
-      ) : bknStats ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KpiCard icon={<BarChart2 size={20} />}
-            label="เรื่องร้องเรียนรวม" sub="บก.น.1–9 · ไม่รวม สปพ."
-            value={bknStats.total.toLocaleString()}
-            bg="from-blue-700 to-blue-600" foot="#1D4ED8" source="RPT_115_B" />
-          <KpiCard icon={<Activity size={20} />}
-            label="ดำเนินการแล้ว" sub={`${bknStats.pctDone}% ของทั้งหมด`}
-            value={bknStats.done.toLocaleString()}
-            bg="from-emerald-600 to-green-500" foot="#047857" source="RPT_115_B" />
-          <KpiCard icon={<AlertTriangle size={20} />}
-            label="ยังไม่ได้รับผล" sub={`${bknStats.total > 0 ? ((bknStats.pending / bknStats.total) * 100).toFixed(1) : '0.0'}% ของทั้งหมด`}
-            value={bknStats.pending.toLocaleString()}
-            bg="from-red-600 to-rose-500" foot="#B91C1C" source="RPT_115_B" />
-          {bknStats.spwName ? (
-            <KpiCard icon={<Users size={20} />}
-              label={bknStats.spwName} sub={`เสร็จ ${bknStats.spw.done.toLocaleString()} · ค้าง ${bknStats.spw.pending.toLocaleString()}`}
-              value={bknStats.spw.total.toLocaleString()}
-              bg="from-violet-700 to-purple-600" foot="#5B21B6" source="RPT_115_B" />
-          ) : (
-            <KpiCard icon={<Users size={20} />}
-              label="บก.สปพ.(191)" sub="ไม่มีข้อมูลในชุดนี้"
-              value="—"
-              bg="from-slate-400 to-slate-500" foot="#475569" source="RPT_115_B" />
-          )}
-        </div>
-      ) : (
-        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 text-sm text-amber-800">
-          <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
-          ยังไม่มีข้อมูล RPT_115_B — กรุณาอัปโหลดไฟล์ที่หน้า /upload
+      {/* ── control bar ── */}
+      {!isPresentation && (
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={load} disabled={loading} title="รีเฟรชข้อมูล"
+            className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-blue-600 hover:border-blue-300 shadow-sm transition">
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+          </button>
+          <PresentationEnterButton />
         </div>
       )}
-      </div>{/* end header+KPI group */}
 
-      {/* ── BAR CHART: Level-1 จาก bkn_summary / Level-2 จาก drug_incidents ── */}
-      <Panel accent="from-blue-500 to-indigo-600">
-        <div className="flex items-start justify-between mb-1 flex-wrap gap-2">
-          <div>
-            <h3 className="text-lg font-bold text-slate-800">
-              {isLevel2 ? `เปรียบเทียบสถานีตำรวจใน ${selectedBkn}` : 'ผลการดำเนินการแยกตาม บก.น.'}
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {isLevel2
-                ? `${getStations(selectedBkn).length} สถานีตำรวจ · จาก drug_incidents`
-                : `จาก RPT_115_B${bknStats?.period ? ` · ${bknStats.period}` : ''} · คลิกแท่งเพื่อดูรายละเอียด`}
-            </p>
-            <PeriodBadge period={isLevel2 ? incidentsPeriod : bknStats?.period} className="mt-1" />
-          </div>
-          <span className="text-sm font-semibold text-slate-500">
-            รวม {isLevel2 ? totals.total.toLocaleString() : (bknStats?.total || 0).toLocaleString()} เรื่อง
-          </span>
-        </div>
-        {isLevel2 ? (
-          <ResponsiveContainer width="100%" height={barData.length > 12 ? 500 : 360}>
-            <BarChart data={barData}
-              margin={{ top: 28, right: 20, left: 0, bottom: barData.length > 9 ? 100 : 65 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }}
-                angle={barData.length > 9 ? -40 : -20} textAnchor="end"
-                height={barData.length > 9 ? 100 : 65} interval={0} />
-              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 13 }}
-                formatter={v => [v.toLocaleString(), 'จำนวนคดี']} />
-              <Bar dataKey="count" radius={[6, 6, 0, 0]} name="จำนวนคดี">
-                <LabelList dataKey="count" position="top"
-                  style={{ fontSize: 11, fontWeight: 700, fill: '#334155' }} />
-                {barData.map((d, i) => <Cell key={i} fill={d.color} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <ResponsiveContainer width="100%" height={360}>
-            <BarChart data={bknStats?.byBkn || []}
-              margin={{ top: 28, right: 20, left: 0, bottom: 60 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }}
-                angle={-20} textAnchor="end" height={60} interval={0} />
-              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 13 }}
-                formatter={(v, name) => [v.toLocaleString(), name === 'done' ? 'เสร็จ' : 'ค้าง']} />
-              <Bar dataKey="done" stackId="a" name="เสร็จ" cursor="pointer"
-                onClick={d => d?.name && setSelectedBkn(d.name)}>
-                {(bknStats?.byBkn || []).map((d, i) => <Cell key={i} fill={BKN_COLORS[d.name] || '#10b981'} />)}
-              </Bar>
-              <Bar dataKey="pending" stackId="a" name="ค้าง" radius={[4, 4, 0, 0]} cursor="pointer"
-                onClick={d => d?.name && setSelectedBkn(d.name)}>
-                <LabelList dataKey="pctDone" position="top"
-                  style={{ fontSize: 10, fontWeight: 700, fill: '#334155' }}
-                  formatter={v => `${v}%`} />
-                {(bknStats?.byBkn || []).map((d, i) => <Cell key={i} fill="#f87171" />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        )}
-      </Panel>
-
-      <BknDrugStats
-        incidentCount={incidents.length}
-        yearFilter={yearFilter}
-        selectedBkn={selectedBkn}
-        setSelectedBkn={setSelectedBkn}
-        isLevel2={isLevel2}
-        trendData={trendData}
-        behaviorData={behaviorData}
-        behaviorTotal={behaviorTotal}
-        drugData={drugData}
-        filteredCount={filtered.length}
-        top5={top5}
-        activePieIdx={activePieIdx}
-        setActivePieIdx={setActivePieIdx}
-        period={incidentsPeriod}
+      {/* ── SECTION 1: ผลการดำเนินการตาม บก.น. (bkn_summary / RPT_115_B) ── */}
+      <BknSection1
+        onDrilldown={goDrilldown}
+        onPeriodReady={setBannerPeriod}
+        lastUpload={lastUpload115B ? formatThaiDate(lastUpload115B) : null}
+        totalReceived={incidents.length}
       />
 
+      {/* ── SECTION 2: สถิติเหตุการณ์ยาเสพติด (drug_incidents) ── */}
+      <BknDrugStats incidents={incidents} onDrilldown={goDrilldown} />
 
-
-      {/* ── RPT 115-B ── */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-md overflow-hidden">
-        <div className="h-1.5 bg-gradient-to-r from-blue-600 to-indigo-600" />
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex flex-col items-center justify-center flex-shrink-0 border border-blue-100">
-              <span className="text-blue-700 font-extrabold text-[11px] leading-none">115</span>
-              <span className="text-blue-500 font-bold text-[9px] leading-none mt-0.5">B</span>
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-800">
-                ผลการดำเนินการตาม บก.น. จำแนกตามกลุ่ม 1–5
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">รายงาน RPT_115_B · ข้อมูลจากตาราง bkn_summary</p>
-            </div>
-          </div>
-          <span className="px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-700 rounded-lg text-xs font-bold flex-shrink-0">
-            RPT 115_B
-          </span>
-        </div>
-        <div className="p-6">
-          <BknSummarySection selectedBkn={selectedBkn} onPeriodReady={setBannerPeriod} />
-        </div>
-      </div>
+      {/* ── SECTION 3: ตารางแยกตามกลุ่ม (heatmap + highlights) — single card ── */}
+      <BknSummarySection />
 
       {/* ── MAP ── */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-md overflow-hidden">
@@ -534,10 +222,10 @@ export default function BknPage() {
             getColor={getColor}
             renderPopup={p => (
               <div style={{ minWidth: 200 }}>
-                <div style={{ fontWeight: 700, fontSize: 13, color: BKN_COLORS[getBkn(p.police_station)] || '#475569', marginBottom: 6 }}>
-                  {getBkn(p.police_station)}
+                <div style={{ fontWeight: 700, fontSize: 13, color: BKN_COLORS[getBknByDistrict(p.district)] || '#475569', marginBottom: 6 }}>
+                  {getBknByDistrict(p.district)}
                 </div>
-                {[['สน.', p.police_station], ['เขต', p.district], ['ยา', p.primary_drug], ['พฤติการณ์', p.behaviors]]
+                {[['เขต', p.district], ['แขวง', p.subdistrict], ['ยา', p.primary_drug], ['พฤติการณ์', p.behaviors]]
                   .filter(([, v]) => v).map(([l, v]) => (
                     <div key={l} style={{ fontSize: 12, display: 'flex', justifyContent: 'space-between', gap: 8, padding: '2px 0' }}>
                       <span style={{ color: '#94a3b8', flexShrink: 0 }}>{l}</span>
@@ -546,7 +234,7 @@ export default function BknPage() {
                   ))}
               </div>
             )}
-            tooltipText={p => `${getBkn(p.police_station)} · ${p.police_station || ''}`}
+            tooltipText={p => `${getBknByDistrict(p.district)} · ${p.district || ''}`}
             viewMode={viewMode}
           />
         </div>
@@ -556,40 +244,5 @@ export default function BknPage() {
 
     </div>
     </>
-  )
-}
-
-/* ─── SUB COMPONENTS ─── */
-
-function Panel({ accent, children }) {
-  return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-md overflow-hidden">
-      <div className={`h-1.5 bg-gradient-to-r ${accent}`} />
-      <div className="p-8">{children}</div>
-    </div>
-  )
-}
-
-function KpiCard({ icon, label, value, sub, bg, foot, smallValue, source = 'drug_incidents', period }) {
-  return (
-    <div className={`rounded-2xl text-white overflow-hidden shadow-sm bg-gradient-to-br ${bg}`}>
-      <div className="relative px-5 pt-5 pb-3 min-h-[118px]">
-        <div className="absolute right-3 top-3 opacity-15 pointer-events-none"
-          style={{ transform: 'scale(3.2)', transformOrigin: 'top right' }}>
-          {icon}
-        </div>
-        <div className="relative z-10">
-          <div className={`font-extrabold leading-tight mb-1.5 tabular-nums ${smallValue ? 'text-xl' : 'text-4xl'}`}>
-            {value}
-          </div>
-          <div className="text-sm font-semibold opacity-95 leading-none">{label}</div>
-          <div className="text-xs opacity-65 mt-1">{sub}</div>
-          {period && <div className="mt-1.5"><PeriodBadge period={period} tone="dark" /></div>}
-        </div>
-      </div>
-      <div className="px-5 py-1.5 text-xs font-medium opacity-60" style={{ background: foot }}>
-        {source}
-      </div>
-    </div>
   )
 }
