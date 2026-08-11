@@ -1,5 +1,5 @@
 import { cloneElement, useMemo, useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Search, MapPin, AlertTriangle, Info, ChevronRight, ChevronDown, Trophy, Clock,
   BarChart3, TrendingUp, PieChart as PieIcon, Grid3X3, Layers, CalendarRange, Download, X,
@@ -141,6 +141,7 @@ const districtCountsOf = (rows) => {
 export default function AllDistricts() {
   const { records } = useData()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState('incidents')
   const [metric, setMetric] = useState('incidents')
@@ -171,6 +172,12 @@ export default function AllDistricts() {
       .then(setLastUpload)
       .catch(err => { console.error('[/districts] fetch lastUpload failed:', err); return null })
   }, [])
+
+  // deep link จากหน้าอื่น (เช่น /pixel-map bubble tooltip): ?district=เขตประเวศ → เลือก + เลื่อนไปแผนที่ให้ทันที
+  useEffect(() => {
+    const d = searchParams.get('district')
+    if (d) { setSelectedDistrict(d); mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const heroPeriod = useMemo(() => {
     const c = minMaxDate(records, 'date'), i = minMaxDate(incidents, 'received_date')

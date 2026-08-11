@@ -15,6 +15,7 @@ import Operations from './pages/Operations'
 import PublicSidebar from './components/PublicSidebar'
 import Header from './components/Header'
 import SubstanceRadar from './pages/SubstanceRadar'
+import PixelMap from './pages/PixelMap'
 import UploadPage from './pages/UploadPage'
 import BknPage from './pages/BknPage'
 import SubstanceUsers from './pages/SubstanceUsers'
@@ -63,6 +64,7 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/radar" element={<MainLayout><SubstanceRadar /></MainLayout>} />
+            <Route path="/pixel-map" element={<MainLayout><PixelMap /></MainLayout>} />
 
             <Route path="/" element={<MainLayout><FilterProvider><Overview /></FilterProvider></MainLayout>} />
             <Route path="/districts" element={<MainLayout><FilterProvider><AllDistricts /></FilterProvider></MainLayout>} />

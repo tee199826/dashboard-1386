@@ -5,28 +5,27 @@ import {
 } from 'recharts'
 import { RefreshCw } from 'lucide-react'
 import { BKN_COLORS, BKN_ORDER, getBknByDistrict } from '../utils/bknMapping'
-import { BEHAVIOR_COLORS, MONTH_TH_SHORT } from '../utils/constants'
+import { MONTH_TH_SHORT } from '../utils/constants'
 import FilterPill from './FilterPill'
 
 const BKN_LIST = BKN_ORDER.filter(b => b !== 'ไม่ระบุ')
 const FISCAL_MONTHS = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9]   // ปีงบ ต.ค.→ก.ย.
 const BEH_KEYS = ['เสพ', 'ค้า', 'เสพ/ค้า', 'ผลิต']
 
-function Panel({ accent, children }) {
+// palette — slate + emerald + amber + rose เท่านั้น
+const BEH_COLOR = { 'เสพ': '#64748b', 'ค้า': '#f59e0b', 'เสพ/ค้า': '#e11d48', 'ผลิต': '#059669' }
+
+function Panel({ children }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-md overflow-hidden">
-      <div className={`h-1.5 bg-gradient-to-r ${accent}`} />
-      <div className="p-6">{children}</div>
-    </div>
+    <div className="bg-white rounded-lg ring-1 ring-slate-200 p-6 md:p-8">{children}</div>
   )
 }
 
 function renderActiveShape(props) {
   const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props
   return (
-    <Sector cx={cx} cy={cy} innerRadius={innerRadius - 4} outerRadius={outerRadius + 14}
-      startAngle={startAngle} endAngle={endAngle} fill={fill}
-      style={{ filter: 'brightness(1.1) drop-shadow(0 4px 16px rgba(0,0,0,0.3))' }} />
+    <Sector cx={cx} cy={cy} innerRadius={innerRadius - 3} outerRadius={outerRadius + 10}
+      startAngle={startAngle} endAngle={endAngle} fill={fill} />
   )
 }
 
@@ -62,14 +61,12 @@ export default function BknDrugStats({ incidents = [], onDrilldown, groupBy = 'b
   return (
     <>
       {!compact && (
-        <div className="flex items-center gap-3 pt-2">
-          <span className="w-1.5 h-7 rounded-full bg-gradient-to-b from-pink-500 to-violet-600" />
-          <div>
-            <h2 className="text-lg font-bold text-slate-800">สถิติเหตุการณ์ยาเสพติด</h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              📊 ข้อมูลจาก drug_incidents (รายเหตุการณ์ · ปีงบ {fiscalYears.length ? `${fiscalYears[fiscalYears.length - 1]}–${fiscalYears[0]}` : '—'})
-            </p>
-          </div>
+        <div className="pt-2">
+          <div className="text-[11px] font-medium uppercase tracking-widest text-slate-500">Drug incidents</div>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">สถิติเหตุการณ์ยาเสพติด</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            ข้อมูลรายเหตุการณ์ · ปีงบ {fiscalYears.length ? `${fiscalYears[fiscalYears.length - 1]}–${fiscalYears[0]}` : '—'}
+          </p>
         </div>
       )}
 
@@ -115,15 +112,15 @@ function TrendChart({ rows, g, fiscalYears, latestFy, prevFy }) {
   const prevOpts = fiscalYears.map(y => [String(y), `ปี ${y}`])
 
   return (
-    <Panel accent="from-blue-500 via-violet-500 to-pink-500">
+    <Panel>
       <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
-        <h3 className="text-base font-bold text-slate-800">แนวโน้มรายเดือน</h3>
+        <h3 className="text-lg font-semibold tracking-tight text-slate-900">แนวโน้มรายเดือน</h3>
         <div className="flex items-center gap-2 flex-wrap">
-          <FilterPill variant="blue" value={keyF} onChange={setKeyF}
+          <FilterPill variant="white" value={keyF} onChange={setKeyF}
             options={[['all', g.allLabel], ...g.list.map(b => [b, b])]} />
-          <FilterPill variant="blue" value={yearF} onChange={setYearF} options={yearOpts} />
+          <FilterPill variant="slate" value={yearF} onChange={setYearF} options={yearOpts} />
           <span className="text-xs font-semibold text-slate-500">เปรียบเทียบปี</span>
-          <FilterPill variant="pink" value={prevYearF} onChange={setPrevYearF} options={prevOpts} />
+          <FilterPill variant="amber" value={prevYearF} onChange={setPrevYearF} options={prevOpts} />
           <button className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-blue-600 shadow-sm transition">
             <RefreshCw size={14} />
           </button>
@@ -135,12 +132,12 @@ function TrendChart({ rows, g, fiscalYears, latestFy, prevFy }) {
           <ComposedChart data={data} margin={{ top: 24, right: 24, left: 0, bottom: 5 }}>
             <defs>
               <linearGradient id="curGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#8B5CF6" stopOpacity={0.28} />
-                <stop offset="100%" stopColor="#8B5CF6" stopOpacity={0.02} />
+                <stop offset="0%" stopColor="#334155" stopOpacity={0.16} />
+                <stop offset="100%" stopColor="#334155" stopOpacity={0.01} />
               </linearGradient>
               <linearGradient id="prevGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#F59E0B" stopOpacity={0.16} />
-                <stop offset="100%" stopColor="#F59E0B" stopOpacity={0.01} />
+                <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.12} />
+                <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.01} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -149,18 +146,18 @@ function TrendChart({ rows, g, fiscalYears, latestFy, prevFy }) {
             <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 13 }}
               formatter={(v, n) => [v.toLocaleString(), n === 'cur' ? `ปี ${yearF}` : `ปี ${prevYearF}`]} />
             {prevYearF && (
-              <Area type="monotone" dataKey="prev" stroke="#F59E0B" strokeWidth={2}
+              <Area type="monotone" dataKey="prev" stroke="#f59e0b" strokeWidth={2}
                 strokeDasharray="5 4" fill="url(#prevGrad)" dot={false} name="prev" />
             )}
-            <Area type="monotone" dataKey="cur" stroke="#8B5CF6" strokeWidth={2.5}
-              fill="url(#curGrad)" dot={false} activeDot={{ r: 5, fill: '#8B5CF6' }} name="cur" />
+            <Area type="monotone" dataKey="cur" stroke="#334155" strokeWidth={2.5}
+              fill="url(#curGrad)" dot={false} activeDot={{ r: 5, fill: '#334155' }} name="cur" />
             {peakPrev && peakPrev.prev > 0 && (
-              <ReferenceDot x={peakPrev.label} y={peakPrev.prev} r={4} fill="#F59E0B" stroke="#fff" strokeWidth={2}
-                label={{ value: peakPrev.prev.toLocaleString(), position: 'top', fontSize: 11, fontWeight: 700, fill: '#d97706' }} />
+              <ReferenceDot x={peakPrev.label} y={peakPrev.prev} r={4} fill="#f59e0b" stroke="#fff" strokeWidth={2}
+                label={{ value: peakPrev.prev.toLocaleString(), position: 'top', fontSize: 11, fontWeight: 700, fill: '#b45309' }} />
             )}
             {peakCur && peakCur.cur > 0 && (
-              <ReferenceDot x={peakCur.label} y={peakCur.cur} r={5} fill="#8B5CF6" stroke="#fff" strokeWidth={2}
-                label={{ value: peakCur.cur.toLocaleString(), position: 'top', fontSize: 11, fontWeight: 700, fill: '#7c3aed' }} />
+              <ReferenceDot x={peakCur.label} y={peakCur.cur} r={5} fill="#334155" stroke="#fff" strokeWidth={2}
+                label={{ value: peakCur.cur.toLocaleString(), position: 'top', fontSize: 11, fontWeight: 700, fill: '#334155' }} />
             )}
           </ComposedChart>
         </ResponsiveContainer>
@@ -185,18 +182,18 @@ function BehaviorDonut({ rows, g, fiscalYears, latestFy }) {
       if (!r.behaviors) return
       String(r.behaviors).split(',').forEach(k => { const t = k.trim(); if (counts[t] !== undefined) counts[t]++ })
     })
-    return BEH_KEYS.filter(k => counts[k] > 0).map(k => ({ name: k, value: counts[k], color: BEHAVIOR_COLORS[k] }))
+    return BEH_KEYS.filter(k => counts[k] > 0).map(k => ({ name: k, value: counts[k], color: BEH_COLOR[k] || '#64748b' }))
   }, [rows, keyF, yearF])   // eslint-disable-line react-hooks/exhaustive-deps
   const total = data.reduce((s, d) => s + d.value, 0)
 
   return (
-    <Panel accent="from-blue-500 via-indigo-500 to-violet-500">
+    <Panel>
       <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
-        <h3 className="text-base font-bold text-slate-800">สัดส่วนพฤติการณ์ยาเสพติด</h3>
+        <h3 className="text-lg font-semibold tracking-tight text-slate-900">สัดส่วนพฤติการณ์ยาเสพติด</h3>
         <div className="flex items-center gap-2 flex-wrap">
-          <FilterPill variant="blue" value={keyF} onChange={setKeyF}
+          <FilterPill variant="white" value={keyF} onChange={setKeyF}
             options={[['all', g.allLabel], ...g.list.map(b => [b, b])]} />
-          <FilterPill variant="blue" value={yearF} onChange={setYearF}
+          <FilterPill variant="white" value={yearF} onChange={setYearF}
             options={[['all', 'ทุกปี'], ...fiscalYears.map(y => [String(y), `ปี ${y}`])]} />
         </div>
       </div>
@@ -274,35 +271,33 @@ function TopChart({ rows, g, fiscalYears, onDrilldown }) {
   const maxCount = top5[0]?.count || 1
 
   return (
-    <Panel accent="from-pink-500 via-fuchsia-500 to-violet-500">
+    <Panel>
       <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
         <div>
-          <h3 className="text-base font-bold text-slate-800">5 อันดับ{g.noun}ที่มีคดีสูงสุด</h3>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <h3 className="text-lg font-semibold tracking-tight text-slate-900">5 อันดับ{g.noun}ที่มีคดีสูงสุด</h3>
+          <p className="text-sm text-slate-500 mt-1">
             {g.drill ? 'กองบัญชาการตำรวจนครบาล · คลิกเพื่อดูรายละเอียด' : 'เขตในสังกัด · เรียงตามจำนวนคดี'}
           </p>
         </div>
-        <FilterPill variant="blue" value={yearF} onChange={setYearF}
+        <FilterPill variant="white" value={yearF} onChange={setYearF}
           options={[['all', 'ทุกปี'], ...fiscalYears.map(y => [String(y), `ปี ${y}`])]} />
       </div>
       <div className="space-y-3.5">
         {top5.length > 0 && top5[0].count > 0 ? top5.map((d, i) => {
           const barW = (d.count / maxCount) * 100
-          const MEDAL = ['🥇', '🥈', '🥉', '', ''][i]
+          const barColor = i === 0 ? '#f59e0b' : '#64748b'   // อันดับ 1 = amber, ที่เหลือ slate
           return (
             <div key={d.name} onClick={() => g.drill && onDrilldown?.(d.name)}
               className={g.drill ? 'cursor-pointer group' : ''}>
               <div className="flex items-center gap-2.5 mb-1.5">
-                {MEDAL
-                  ? <span className="text-lg leading-none">{MEDAL}</span>
-                  : <span className="w-6 h-6 rounded-md bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">{i + 1}</span>}
+                <span className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold ${i === 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{i + 1}</span>
                 <span className="font-semibold text-slate-800 text-sm">{d.name}</span>
               </div>
-              <div className="relative h-7 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full rounded-full transition-all"
-                  style={{ width: `${Math.max(barW, 18)}%`, background: `linear-gradient(90deg, ${d.color}cc, ${d.color})` }} />
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 px-2.5 py-0.5 rounded-full bg-white/90 shadow-sm text-xs font-bold tabular-nums"
-                  style={{ color: d.color }}>
+              <div className="relative h-7 bg-slate-100 rounded-md overflow-hidden">
+                <div className="h-full rounded-md transition-all"
+                  style={{ width: `${Math.max(barW, 18)}%`, background: barColor }} />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 px-2.5 py-0.5 rounded-full bg-white/90 text-xs font-bold tabular-nums"
+                  style={{ color: barColor }}>
                   {d.count.toLocaleString()} เรื่อง
                 </span>
               </div>

@@ -1,8 +1,6 @@
 ﻿import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import {
-  RefreshCw, MapPin, AlertTriangle,
-} from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import IncidentMap from '../components/IncidentMap'
 import BknSection1 from '../components/BknSection1'
 import BknDrilldown from '../components/BknDrilldown'
@@ -11,19 +9,13 @@ import { fetchAllPages } from '../utils/supabasePagination'
 import { enrichDrugRow } from '../utils/drugWide'
 import { formatThaiDateShort as formatThaiDate } from '../utils/formatDate'
 import { usePresentation } from '../context/PresentationContext'
-import PresentationBar, { PresentationEnterButton } from '../components/PresentationBar'
+import PresentationBar from '../components/PresentationBar'
 import PresentationSlides from '../components/PresentationSlides'
 import BknSummarySection from '../components/BknSummarySection'
 import BknDrugStats from '../components/BknDrugStats'
-import UnifiedHero from '../components/UnifiedHero'
-import DateFilter from '../components/DateFilter'
+import BknExecutiveHeader from '../components/BknExecutiveHeader'
+import BknExecutiveSummary from '../components/BknExecutiveSummary'
 import { formatThaiDate as fmtHeroDate } from '../utils/heroMeta'
-
-const BKN_SOURCE_INFO = {
-  title: 'แหล่งข้อมูล · รายงาน บก.น.',
-  description: 'สถิติคดียาเสพติด รายงาน บก.น. 1-9',
-  sources: ['bkn_summary (RPT_115_B)'],
-}
 
 export default function BknPage() {
   const { isPresentation } = usePresentation()
@@ -32,7 +24,7 @@ export default function BknPage() {
   const [loadError, setLoadError] = useState(null)
   const [selectedBkn, setSelectedBkn] = useState(null)
   const [drilldownBkn, setDrilldownBkn] = useState(null)   // Phase 4: drill-down ระดับ สน.
-  const [viewMode, setViewMode] = useState('point')
+  const [viewMode, setViewMode] = useState('choropleth')
   const [lastUpload115B, setLastUpload115B] = useState(undefined)
   const [bannerPeriod, setBannerPeriod] = useState(null)
 
@@ -86,6 +78,37 @@ export default function BknPage() {
   }, [incidents, selectedBkn])
   const getColor = useCallback(p => BKN_COLORS[getBknByDistrict(p.district)] || '#9ca3af', [])
 
+  // ── CHOROPLETH: จำนวนเหตุการณ์รายเขต (slate sequential) — Phase 4 ──
+  const normDist = d => {
+    let s = String(d || '').replace(/^เขต\s*/, '')
+    if (s === 'ราษฏร์บูรณะ') s = 'ราษฎร์บูรณะ'
+    return s
+  }
+  const districtCounts = useMemo(() => {
+    const src = selectedBkn ? incidents.filter(r => getBknByDistrict(r.district) === selectedBkn) : incidents
+    const m = {}
+    src.forEach(r => { if (r.district) { const d = normDist(r.district); m[d] = (m[d] || 0) + 1 } })
+    return m
+  }, [incidents, selectedBkn])
+  const maxDistCount = useMemo(() => Math.max(1, ...Object.values(districtCounts)), [districtCounts])
+
+  const choroStyle = useCallback(feature => {
+    const c = districtCounts[normDist(feature.properties?.dname)] || 0
+    const ratio = c / maxDistCount
+    return {
+      color: '#475569', weight: 1, opacity: 0.55,
+      fillColor: '#0f172a', fillOpacity: c ? 0.10 + ratio * 0.62 : 0.03,
+    }
+  }, [districtCounts, maxDistCount])
+  const choroEach = useCallback((feature, layer) => {
+    const name = feature.properties?.dname || 'เขต'
+    const c = districtCounts[normDist(name)] || 0
+    const bkn = getBknByDistrict(name)
+    layer.bindTooltip(
+      `${name} · ${c.toLocaleString()} เรื่อง${bkn !== 'ไม่ระบุ' ? ' · ' + bkn : ''}`,
+      { sticky: true, className: 'district-tooltip' })
+  }, [districtCounts])
+
   if (loading) return (
     <div className="flex flex-col items-center justify-center min-h-[400px]">
       <div className="w-14 h-14 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mb-4" />
@@ -120,48 +143,28 @@ export default function BknPage() {
   return (
     <>
     {isPresentation && <PresentationBar title="รายงานความรวดเร็วการดำเนินการ บก.น." />}
-    <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-8'}>
+    <div className={isPresentation ? '' : 'p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-8 bg-[#fafaf9] min-h-screen'}>
 
-      {/* ── OFFICIAL BANNER ── */}
+      {/* ── EDITORIAL HEADER (single — แทน hero + DateFilter + control bar) ── */}
       {!isPresentation && (
-        <UnifiedHero
-          gradient="slate"
-          eyebrow="POLICE COMMAND · บก.น. 1-9"
-          title="รายงาน บก.น."
-          description="ความรวดเร็วการดำเนินการ · RPT 115_B"
+        <BknExecutiveHeader
           period={bannerPeriod}
           lastUpload={fmtHeroDate(lastUpload115B)}
-          sourceInfo={BKN_SOURCE_INFO}
+          onRefresh={load}
+          refreshing={loading}
         />
-      )}
-
-      {/* DateFilter — read-only: bkn_summary มีงวดเดียว ยังกรองไม่ได้ */}
-      {!isPresentation && (
-        <div className="flex items-center gap-2 -mt-4">
-          <DateFilter availableYears={[]} disabledModes={['fiscal', 'month', 'custom']} />
-          <span className="text-xs text-slate-400">ข้อมูล บก.น. มีงวดเดียว · ยังไม่รองรับการกรอง</span>
-        </div>
       )}
 
       <PresentationSlides isPresentation={isPresentation} normalClassName="max-w-[1600px] mx-auto space-y-8">
 
-      {/* ── control bar ── */}
-      {!isPresentation && (
-        <div className="flex items-center justify-end gap-2">
-          <button onClick={load} disabled={loading} title="รีเฟรชข้อมูล"
-            className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-blue-600 hover:border-blue-300 shadow-sm transition">
-            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-          </button>
-          <PresentationEnterButton />
-        </div>
-      )}
+      {/* ── EXECUTIVE SUMMARY (opening slide in presentation) ── */}
+      <BknExecutiveSummary incidents={incidents} />
 
       {/* ── SECTION 1: ผลการดำเนินการตาม บก.น. (bkn_summary / RPT_115_B) ── */}
       <BknSection1
         onDrilldown={goDrilldown}
         onPeriodReady={setBannerPeriod}
         lastUpload={lastUpload115B ? formatThaiDate(lastUpload115B) : null}
-        totalReceived={incidents.length}
       />
 
       {/* ── SECTION 2: สถิติเหตุการณ์ยาเสพติด (drug_incidents) ── */}
@@ -171,55 +174,71 @@ export default function BknPage() {
       <BknSummarySection />
 
       {/* ── MAP ── */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-md overflow-hidden">
-        <div className="h-1.5 bg-gradient-to-r from-blue-600 via-indigo-500 to-violet-600" />
-        <div className="p-4 border-b border-slate-100">
-          <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+      <div className="bg-white rounded-lg ring-1 ring-slate-200 overflow-hidden">
+        <div className="p-6 md:p-8 pb-4 border-b border-slate-200">
+          <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
             <div>
-              <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-                <MapPin size={16} className="text-blue-600" /> แผนที่จุดเกิดเหตุ
+              <div className="text-[11px] font-medium uppercase tracking-widest text-slate-500">Geography</div>
+              <h3 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+                {viewMode === 'choropleth' ? 'ความหนาแน่นรายเขต' : 'แผนที่จุดเกิดเหตุ'}
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {mapPoints.length.toLocaleString()} จุดทั้งหมด · สีตาม บก.น.
+              <p className="text-sm text-slate-500 mt-1">
+                {viewMode === 'choropleth'
+                  ? 'เขตยิ่งเข้ม = เหตุการณ์ยิ่งมาก · คลิก บก.น. เพื่อกรอง'
+                  : `${mapPoints.length.toLocaleString()} จุด · สีตาม บก.น.`}
               </p>
             </div>
-            <div className="flex gap-2">
-              {[['point', '● จุด'], ['heatmap', '🌡 Heatmap']].map(([m, l]) => (
-                <button key={m} onClick={() => setViewMode(m)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                    viewMode === m ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}>{l}</button>
-              ))}
+            <div className="flex items-center gap-3 flex-wrap">
+              {viewMode === 'choropleth' && (
+                <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                  <span>น้อย</span>
+                  <span className="flex gap-px">
+                    {[0.08, 0.24, 0.42, 0.6, 0.72].map(o => (
+                      <span key={o} className="w-4 h-3 rounded-sm" style={{ background: `rgba(15,23,42,${o})` }} />
+                    ))}
+                  </span>
+                  <span>มาก</span>
+                </div>
+              )}
+              <div className="flex gap-1 p-0.5 rounded-md ring-1 ring-slate-200 bg-slate-50">
+                {[['choropleth', 'พื้นที่'], ['point', 'จุด']].map(([m, l]) => (
+                  <button key={m} onClick={() => setViewMode(m)}
+                    className={`px-3 py-1.5 rounded text-xs font-semibold transition ${
+                      viewMode === m ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'
+                    }`}>{l}</button>
+                ))}
+              </div>
             </div>
           </div>
           <div className="flex flex-wrap gap-1.5">
             <button onClick={() => setSelectedBkn(null)}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition ${
-                !selectedBkn ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold ring-1 transition ${
+                !selectedBkn ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-500 ring-slate-200 hover:ring-slate-300'
               }`}>ทั้งหมด</button>
-            {BKN_ORDER.filter(b => b !== 'ไม่ระบุ').map(b => (
-              <button key={b} onClick={() => setSelectedBkn(selectedBkn === b ? null : b)}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition"
-                style={{
-                  background: selectedBkn === b ? BKN_COLORS[b] : BKN_COLORS[b] + '15',
-                  borderColor: selectedBkn === b ? BKN_COLORS[b] : BKN_COLORS[b] + '50',
-                  color: selectedBkn === b ? '#fff' : BKN_COLORS[b],
-                  opacity: selectedBkn && selectedBkn !== b ? 0.45 : 1,
-                  outline: selectedBkn === b ? `2px solid ${BKN_COLORS[b]}` : 'none',
-                  outlineOffset: 2,
-                }}>
-                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                  style={{ background: selectedBkn === b ? '#fff' : BKN_COLORS[b] }} />
-                {b}
-              </button>
-            ))}
+            {BKN_ORDER.filter(b => b !== 'ไม่ระบุ').map(b => {
+              const on = selectedBkn === b
+              return (
+                <button key={b} onClick={() => setSelectedBkn(on ? null : b)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 transition ${
+                    on ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-600 ring-slate-200 hover:ring-slate-300'
+                  } ${selectedBkn && !on ? 'opacity-50' : ''}`}>
+                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                    style={{ background: on ? '#fff' : BKN_COLORS[b] }} />
+                  {b}
+                </button>
+              )
+            })}
           </div>
         </div>
         <div className="h-[500px]">
           <IncidentMap
             className="w-full h-full"
-            points={mapPoints}
+            points={viewMode === 'point' ? mapPoints : []}
             getColor={getColor}
+            viewMode={viewMode === 'point' ? 'point' : 'none'}
+            districtLayerKey={viewMode === 'choropleth' ? `choro-${selectedBkn || 'all'}-${incidents.length}` : ''}
+            districtLayerStyle={viewMode === 'choropleth' ? choroStyle : null}
+            districtLayerOnEachFeature={viewMode === 'choropleth' ? choroEach : null}
             renderPopup={p => (
               <div style={{ minWidth: 200 }}>
                 <div style={{ fontWeight: 700, fontSize: 13, color: BKN_COLORS[getBknByDistrict(p.district)] || '#475569', marginBottom: 6 }}>
@@ -235,7 +254,6 @@ export default function BknPage() {
               </div>
             )}
             tooltipText={p => `${getBknByDistrict(p.district)} · ${p.district || ''}`}
-            viewMode={viewMode}
           />
         </div>
       </div>

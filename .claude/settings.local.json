@@ -83,7 +83,15 @@
       "PowerShell(node --import ./scripts/register.mjs scripts/test-parse-fixtures.mjs 2>&1 | Select-Object -Last 6)",
       "PowerShell(node --import ./scripts/register.mjs scripts/test-detect.mjs 2>&1 | Select-Object -Last 4)",
       "Bash(git commit *)",
-      "PowerShell(node --import ./scripts/register.mjs scripts/test-parse-fixtures.mjs 2>&1 | Select-Object -Last 14)"
+      "PowerShell(node --import ./scripts/register.mjs scripts/test-parse-fixtures.mjs 2>&1 | Select-Object -Last 14)",
+      "Bash(npm i *)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(npm uninstall *)",
+      "Bash(echo \"exit $?\")",
+      "Skill(dataviz)",
+      "Bash(grep -vE \"set-state-in-effect|setState|cascading|Effects are|synchron|Update external|Subscribe|body of an|^\\\\s*\\\\*|react.dev|^\\\\s*$|^\\\\s*[0-9]+ \\\\|\")",
+      "Bash(rm -f .shot.mjs)",
+      "Bash(npm remove *)"
     ]
   }
 }
