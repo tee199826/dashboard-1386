@@ -32,6 +32,16 @@ const VALID_DISTRICTS = new Set(Object.keys(DNAME_TO_GROUP))
 // ลำดับ 6 กลุ่มโซน กทม. — ตรงกับ GROUP_ORDER ใน AllDistricts.jsx (คงลำดับเดียวกันข้ามหน้า ให้อ่านเทียบง่าย)
 const ZONE_ORDER = ['กรุงเทพกลาง', 'กรุงเทพเหนือ', 'กรุงเทพใต้', 'กรุงเทพตะวันออก', 'กรุงธนเหนือ', 'กรุงธนใต้']
 
+// สีพื้นหลังแยกโซน (Sheet "Top 3 เขตต่อโซน") — ARGB, ตัวเดียวกับที่ user ระบุ (blue/purple/pink/emerald/amber/rose -100)
+const ZONE_COLORS = {
+  กรุงเทพเหนือ: 'FFDBEAFE',
+  กรุงเทพกลาง: 'FFE9D5FF',
+  กรุงเทพใต้: 'FFFCE7F3',
+  กรุงเทพตะวันออก: 'FFD1FAE5',
+  กรุงธนเหนือ: 'FFFEF3C7',
+  กรุงธนใต้: 'FFFFE4E6',
+}
+
 const deriveStatus = (r) => (DONE_FLAGS.some(f => r[f]) ? 'ดำเนินการแล้ว' : 'ยังไม่ดำเนินการ')
 // จำนวน "ครั้งตรวจพบยา" ต่อแถว — 1 แถวร้องเรียนอาจพบยาหลายชนิด นับซ้ำได้ (ต่างจาก "ร้องเรียน" ที่นับ 1 แถว = 1)
 const drugInstanceCount = (r) => {
@@ -228,6 +238,22 @@ function buildDetailRowsZone(validRows) {
     }))
 }
 
+// Sheet 2b: Top 3 เขตในแต่ละโซน — โซนเรียงตาม zoneOrder ที่รับมา (มาก→น้อยตามร้องเรียนรวม, คำนวณไว้แล้วจาก buildZoneSummary)
+// ในแต่ละโซนเรียงเขตตามร้องเรียนมาก→น้อยเอง แล้วตัดเหลือ 3 อันดับแรก
+function buildTop3PerZone(validRows, zoneOrder) {
+  return zoneOrder.map((zone) => {
+    const districts = Object.keys(DNAME_TO_GROUP).filter((d) => DNAME_TO_GROUP[d] === zone)
+    const stats = districts.map((d) => {
+      const rows = validRows.filter((r) => r.district === d)
+      const total = rows.length
+      const done = rows.filter((r) => deriveStatus(r) === 'ดำเนินการแล้ว').length
+      return { district: d, total, done, notDone: total - done, pct: total ? done / total : 0 }
+    })
+    stats.sort((a, b) => b.total - a.total)
+    return { zone, rows: stats.slice(0, 3) }
+  })
+}
+
 // Sheet 3: สถานะการดำเนินการ (โหมดโซน) — breakdown ต่อกลุ่มโซน, คอลัมน์แบนราบ (ต่างจากโหมดเขตที่มี 2 header ซ้อน)
 function buildStatusBreakdownZone(validRows) {
   const countFlag = (rows, col) => rows.filter((r) => r[col]).length
@@ -335,6 +361,43 @@ function writeChargeSheet(workbook, metaLines, { mainRows, districtRows }) {
   return ws
 }
 
+// ── Sheet "Top 3 เขตต่อโซน" — layout พิเศษ: merge cell คอลัมน์กลุ่มโซนต่อโซน + สีพื้นหลังแยกโซน + เส้นขอบหนาคั่นโซน ──
+function writeTop3PerZoneSheet(workbook, metaLines, zoneGroups) {
+  const ws = workbook.addWorksheet('Top 3 เขตต่อโซน')
+  metaLines.forEach((line) => ws.addRow([line]))
+  ws.addRow([])
+  const header = ['กลุ่มโซน', 'อันดับ', 'เขต', 'ร้องเรียน', 'ดำเนินการแล้ว', 'ยังไม่ดำเนิน', '% สำเร็จ']
+  styleHeaderRow(ws.addRow(header))
+
+  for (const group of zoneGroups) {
+    const startRow = ws.rowCount + 1
+    const color = ZONE_COLORS[group.zone]
+    group.rows.forEach((r, i) => {
+      const excelRow = ws.addRow([group.zone, i + 1, r.district, r.total, r.done, r.notDone, r.pct])
+      excelRow.eachCell((cell) => { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } } })
+      excelRow.getCell(4).numFmt = '#,##0'
+      excelRow.getCell(5).numFmt = '#,##0'
+      excelRow.getCell(6).numFmt = '#,##0'
+      excelRow.getCell(7).numFmt = '0.0%'
+    })
+    const endRow = ws.rowCount
+    if (endRow > startRow) ws.mergeCells(startRow, 1, endRow, 1)
+    ws.getCell(startRow, 1).alignment = { vertical: 'middle', horizontal: 'center' }
+    for (let c = 1; c <= header.length; c++) ws.getRow(startRow).getCell(c).border = { top: { style: 'medium' } }
+  }
+
+  const widths = header.map((h) => String(h).length)
+  for (const group of zoneGroups) {
+    for (const r of group.rows) {
+      const values = [group.zone, 0, r.district, r.total, r.done, r.notDone, r.pct]
+      values.forEach((v, i) => { const len = typeof v === 'number' ? String(v).length + 2 : String(v ?? '').length; if (len > widths[i]) widths[i] = len })
+    }
+  }
+  widths.forEach((w, i) => { ws.getColumn(i + 1).width = Math.min(Math.max(w + 2, 10), 50) })
+  ws.getColumn(1).width = Math.max(ws.getColumn(1).width, 34)
+  return ws
+}
+
 /**
  * สร้าง + ดาวน์โหลด multi-sheet Excel report จาก drug_incidents (+ substance_users สำหรับ "แหล่งซื้อ")
  * @param {object} opts
@@ -376,6 +439,9 @@ export async function exportDrugIncidentReport({
     const zoneSummaryRows = buildZoneSummary(validRows)
     writeSheet(wb, 'สรุปรายกลุ่มโซน', meta,
       ['กลุ่มโซน', 'จำนวนเขต', 'ร้องเรียน', 'ดำเนินการแล้ว', 'ยังไม่ดำเนิน', '% สำเร็จ', 'เหตุการณ์'], zoneSummaryRows)
+
+    const top3PerZone = buildTop3PerZone(validRows, zoneSummaryRows.map((r) => r.กลุ่มโซน))
+    writeTop3PerZoneSheet(wb, meta, top3PerZone)
 
     const zoneDetailRows = buildDetailRowsZone(validRows)
     writeSheet(wb, 'รายละเอียดเรื่องร้องเรียน', meta,
