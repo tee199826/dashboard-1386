@@ -457,7 +457,7 @@ export default function AllDistricts() {
       await exportDrugIncidentReport({
         incidentRows: scoped,
         dealerRows: fDealers,
-        mode,
+        mode, dateRange,
         periodLabel,
         filterLabel: `${scopeLabel} · ทุกชนิดยา`,
         filenamePrefix: 'districts-report',

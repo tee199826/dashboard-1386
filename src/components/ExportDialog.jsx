@@ -19,7 +19,7 @@ function RadioOption({ selected, onSelect, title, desc, children }) {
           {desc && <div className="text-xs text-slate-500 mt-0.5">{desc}</div>}
         </div>
       </label>
-      {children && <div className="px-2.5 pb-2.5 pl-9">{children}</div>}
+      {selected && children && <div className="px-2.5 pb-2.5 pl-9">{children}</div>}
     </div>
   )
 }
