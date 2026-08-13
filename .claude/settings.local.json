@@ -91,7 +91,10 @@
       "Skill(dataviz)",
       "Bash(grep -vE \"set-state-in-effect|setState|cascading|Effects are|synchron|Update external|Subscribe|body of an|^\\\\s*\\\\*|react.dev|^\\\\s*$|^\\\\s*[0-9]+ \\\\|\")",
       "Bash(rm -f .shot.mjs)",
-      "Bash(npm remove *)"
+      "Bash(npm remove *)",
+      "Bash(git status *)",
+      "mcp__ide__getDiagnostics",
+      "Bash(./node_modules/.bin/jiti _tmp_test_export.mjs)"
     ]
   }
 }

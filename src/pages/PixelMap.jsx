@@ -32,13 +32,20 @@ export default function PixelMap() {
 
   const {
     mode, setMode,
-    checkedDistricts, checkedSubdistricts, toggleDistrict, toggleSubdistrict,
+    checkedDistricts, checkedSubdistricts, checkedCommunities,
+    toggleDistrict, toggleSubdistrict, toggleCommunity,
+    selectDistricts, clearSelection,
+    expandedDistricts, toggleExpanded, expandedSubdistricts, toggleSubExpanded,
     layers, updateLayer, toggleLayerVisible, addDataLayer, removeDataLayer, reorderDataLayers,
-    compareSlots, addComparePanel, removeComparePanel, setCompareSlotDistrict, setCompareSlotColor,
+    compareSlots, addComparePanel, removeComparePanel, toggleCompareSlotDistrict, setCompareSlotDistricts, setCompareSlotColor,
     style, updateStyle,
     labelsConfig, updateLabelsConfig, toggleLabelsVisible, toggleLabelsLevel,
     zoomTransform, setZoomTransform, syncZoom, setSyncZoom, sharedCompareZoom, setSharedCompareZoom, setCompareSlotZoom,
   } = usePixelMapState()
+
+  // ยังไม่มีไฟล์ขอบเขตแขวง/ชุมชนจริงใน public/ — lookupSubdistrict/lookupCommunity คืน undefined เสมอ แล้ว fallback ไปใช้รูปทรงประมาณ
+  const subdistrictIndex = null
+  const communityIndex = null
 
   const dataLayers = useMemo(() => layers.filter(l => l.type === 'data'), [layers])
 
@@ -117,27 +124,34 @@ export default function PixelMap() {
         <SelectionTree
           districtOptions={districtOptions} hierarchy={hierarchy}
           mode={mode} setMode={setMode}
-          checkedDistricts={checkedDistricts} checkedSubdistricts={checkedSubdistricts}
-          toggleDistrict={toggleDistrict} toggleSubdistrict={toggleSubdistrict}
+          checkedDistricts={checkedDistricts} checkedSubdistricts={checkedSubdistricts} checkedCommunities={checkedCommunities}
+          toggleDistrict={toggleDistrict} toggleSubdistrict={toggleSubdistrict} toggleCommunity={toggleCommunity}
+          expandedDistricts={expandedDistricts} toggleExpanded={toggleExpanded}
+          expandedSubdistricts={expandedSubdistricts} toggleSubExpanded={toggleSubExpanded}
+          selectDistricts={selectDistricts} clearSelection={clearSelection}
         />
 
         <div ref={canvasAreaRef} className="flex-1 min-w-0 bg-white rounded-xl shadow-lg ring-1 ring-slate-200 p-4 overflow-auto">
           {mode === 'compare' ? (
             <CompareGrid
               compareSlots={compareSlots} layers={layers} layerCounts={layerCounts}
-              geojson={geojson} hierarchy={hierarchy} levelMaxes={levelMaxes} labelsConfig={labelsConfig}
+              geojson={geojson} hierarchy={hierarchy} subdistrictIndex={subdistrictIndex} communityIndex={communityIndex}
+              levelMaxes={levelMaxes} labelsConfig={labelsConfig}
               style={style} svgRef={svgRef} districtOptions={districtOptions}
+              checkedSubdistricts={checkedSubdistricts} checkedCommunities={checkedCommunities}
+              toggleSubdistrict={toggleSubdistrict} toggleCommunity={toggleCommunity}
               syncZoom={syncZoom} setSyncZoom={setSyncZoom} sharedCompareZoom={sharedCompareZoom}
               setSharedCompareZoom={setSharedCompareZoom} setCompareSlotZoom={setCompareSlotZoom}
-              setCompareSlotDistrict={setCompareSlotDistrict} setCompareSlotColor={setCompareSlotColor}
+              toggleCompareSlotDistrict={toggleCompareSlotDistrict} setCompareSlotDistricts={setCompareSlotDistricts}
+              setCompareSlotColor={setCompareSlotColor}
               addComparePanel={addComparePanel} removeComparePanel={removeComparePanel}
             />
           ) : (
             <MapCanvas
               ref={svgRef}
               width={CANVAS_W} height={CANVAS_H}
-              geojson={geojson} hierarchy={hierarchy}
-              checkedDistricts={checkedDistricts} checkedSubdistricts={checkedSubdistricts}
+              geojson={geojson} hierarchy={hierarchy} subdistrictIndex={subdistrictIndex} communityIndex={communityIndex}
+              checkedDistricts={checkedDistricts} checkedSubdistricts={checkedSubdistricts} checkedCommunities={checkedCommunities}
               layers={layers} layerCounts={layerCounts} levelMaxes={levelMaxes} labelsConfig={labelsConfig}
               style={style}
               zoomTransform={zoomTransform} onZoomChange={setZoomTransform}

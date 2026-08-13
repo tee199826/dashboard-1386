@@ -5,7 +5,7 @@ import { SHAPES } from '../../utils/pixelMapStyle'
 import AccordionSection from './AccordionSection'
 
 const SHAPE_GLYPH = { circle: '●', square: '■', diamond: '◆', triangle: '▲' }
-const LEVEL_OPTIONS = [['district', 'เขต'], ['subdistrict', 'แขวง'], ['community', 'ชุมชน']]
+const LEVEL_OPTIONS = [['subdistrict', 'แขวง'], ['community', 'ชุมชน']] // ระดับเขตคุมแยกที่ "ชื่อเขตบนแผนที่"
 
 function Seg({ options, value, onChange }) {
   return (
@@ -71,8 +71,13 @@ export default function StylePanel({
           <input type="checkbox" checked={style.showBorders} onChange={e => updateStyle({ showBorders: e.target.checked })} className="accent-violet-600" />
           แสดงเส้นขอบเขต
         </label>
+        <Field label="ภาพแผนที่พื้นหลัง">
+          <Seg options={[['carto', 'ยาเสพติด'], ['osm', 'OSM'], ['', 'ไม่ใช้']]}
+            value={style.tileSource} onChange={v => updateStyle({ tileSource: v })} />
+        </Field>
         <Field label="พื้นหลัง">
-          <Seg options={[['light', 'Light'], ['dark', 'Dark']]} value={style.background} onChange={v => updateStyle({ background: v })} />
+          <Seg options={[['map', 'แผนที่'], ['light', 'Light'], ['dark', 'Dark']]}
+            value={style.background} onChange={v => updateStyle({ background: v })} />
         </Field>
 
         {!compareActive && zoomTransform && (
@@ -82,6 +87,10 @@ export default function StylePanel({
               className="w-full h-1 accent-violet-600" />
           </Field>
         )}
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={style.focusSelection} onChange={e => updateStyle({ focusSelection: e.target.checked })} className="accent-violet-600" />
+          โฟกัสเฉพาะเขตที่เลือก (ตัดพื้นที่อื่นออก)
+        </label>
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={style.autoFitOnSelection} onChange={e => updateStyle({ autoFitOnSelection: e.target.checked })} className="accent-violet-600" />
           Auto-fit เมื่อเลือกพื้นที่
@@ -140,13 +149,29 @@ export default function StylePanel({
       </AccordionSection>
 
       <AccordionSection title="Labels" icon={<Hash size={14} className="text-slate-400" />}>
+        <Field label="ชื่อเขตบนแผนที่">
+          <Seg options={[['off', 'ปิด'], ['selected', 'ที่เลือก'], ['all', 'ทุกเขต']]}
+            value={labelsConfig.districtNames} onChange={v => updateLabelsConfig({ districtNames: v })} />
+        </Field>
+        {labelsConfig.districtNames !== 'off' && (
+          <Field label="ขนาดชื่อพื้นที่">
+            <Seg options={[['sm', 'เล็ก'], ['md', 'กลาง'], ['lg', 'ใหญ่']]}
+              value={labelsConfig.districtNameSize} onChange={v => updateLabelsConfig({ districtNameSize: v })} />
+          </Field>
+        )}
+        <Field label="สีตัวอักษร">
+          <Seg options={[['#000000', 'ดำ'], ['auto', 'Auto contrast']]}
+            value={labelsConfig.textColor === 'auto' ? 'auto' : '#000000'}
+            onChange={v => updateLabelsConfig({ textColor: v })} />
+        </Field>
+
         <label className="flex items-center gap-2 text-sm text-slate-700 font-medium">
           <input type="checkbox" checked={labelsConfig.visible} onChange={toggleLabelsVisible} className="accent-violet-600" />
-          แสดงตัวเลข
+          แสดงชื่อแขวง/ชุมชน
         </label>
         {labelsConfig.visible && (
           <>
-            <Field label="Level (เลือกได้หลาย)">
+            <Field label="ระดับ (เลือกได้หลาย)">
               <div className="flex gap-1.5">
                 {LEVEL_OPTIONS.map(([val, lbl]) => (
                   <button key={val} type="button" onClick={() => toggleLabelsLevel(val)}
@@ -156,33 +181,16 @@ export default function StylePanel({
                 ))}
               </div>
             </Field>
-            <Field label="Metric">
+            <Field label="จัดลำดับความสำคัญตาม (ตอนชื่อชนกัน)">
               <FilterPill value={labelsConfig.metric} onChange={v => updateLabelsConfig({ metric: v })}
                 options={METRIC_OPTIONS.map(([col, lbl]) => [col, lbl])} />
             </Field>
-            <Field label="รูปแบบ label">
-              <Seg options={[['number', 'ตัวเลข'], ['nameNumber', 'ชื่อ+เลข'], ['percent', '%']]} value={labelsConfig.labelMode}
-                onChange={v => updateLabelsConfig({ labelMode: v })} />
-            </Field>
-            <Field label="ขนาดตัวเลข">
-              <Seg options={[['auto', 'Auto'], ['fixed12', '12px'], ['fixed16', '16px']]} value={labelsConfig.labelSize}
-                onChange={v => updateLabelsConfig({ labelSize: v })} />
-            </Field>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={labelsConfig.showPill} onChange={e => updateLabelsConfig({ showPill: e.target.checked })} className="accent-violet-600" />
-              พื้นหลัง pill ใต้ตัวเลข
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={labelsConfig.counterScaleLabels} onChange={e => updateLabelsConfig({ counterScaleLabels: e.target.checked })} className="accent-violet-600" />
-              ตัวเลขคงขนาดเดิมตอนซูม
-            </label>
-            <Field label="สีตัวเลข">
-              <Seg options={[['auto', 'Auto contrast'], ['custom', 'กำหนดเอง']]}
-                value={labelsConfig.textColor === 'auto' ? 'auto' : 'custom'}
-                onChange={v => updateLabelsConfig({ textColor: v === 'auto' ? 'auto' : '#0f172a' })} />
-            </Field>
           </>
         )}
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={labelsConfig.showPill} onChange={e => updateLabelsConfig({ showPill: e.target.checked })} className="accent-violet-600" />
+          พื้นหลัง pill ใต้ชื่อ
+        </label>
       </AccordionSection>
 
       <AccordionSection title="Export" icon={<Download size={14} className="text-slate-400" />}>

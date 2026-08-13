@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from 'react'
-import { Search, X, Plus } from 'lucide-react'
-import { subKey } from '../../hooks/usePixelMapState'
+import { Search, X, ChevronDown, ChevronRight } from 'lucide-react'
+import { subKey, communityKey } from '../../hooks/usePixelMapState'
+import { buildAreaRows } from '../../utils/pixelMapAreas'
 
 function Seg({ options, value, onChange }) {
   return (
@@ -17,56 +18,37 @@ function Seg({ options, value, onChange }) {
   )
 }
 
-function Chip({ label, onRemove }) {
+function Chip({ label, tone = 'violet', onRemove }) {
+  const tones = {
+    violet: 'bg-violet-50 text-violet-700',
+    amber: 'bg-amber-50 text-amber-700',
+    rose: 'bg-rose-50 text-rose-700',
+  }
   return (
-    <span className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full bg-violet-50 text-violet-700 text-xs font-medium">
+    <span className={`inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium ${tones[tone]}`}>
       <span className="truncate max-w-[180px]">{label}</span>
-      <button type="button" onClick={onRemove} className="text-violet-400 hover:text-violet-700 shrink-0"><X size={12} /></button>
+      <button type="button" onClick={onRemove} className="opacity-60 hover:opacity-100 shrink-0"><X size={12} /></button>
     </span>
   )
-}
-
-// suggestion เมื่อพิมพ์ค้นหา — ไม่ expand ทั้ง tree อีกต่อไป (Issue 5) แค่ผลลัพธ์สั้นๆ ที่ตรงกับคำค้น
-function buildSuggestions(hierarchy, districtOptions, query, max = 8) {
-  const needle = query.trim()
-  if (!needle) return []
-  const out = []
-  for (const d of districtOptions) {
-    if (out.length >= max) break
-    if (d.includes(needle)) out.push({ type: 'district', label: d, district: d })
-  }
-  outer:
-  for (const [district, node] of Object.entries(hierarchy)) {
-    for (const [sub, subNode] of Object.entries(node.subdistricts || {})) {
-      if (out.length >= max) break outer
-      if (sub.includes(needle)) out.push({ type: 'subdistrict', label: `${sub} (${district})`, district, sub })
-      for (const community of Object.keys(subNode.communities || {})) {
-        if (out.length >= max) break outer
-        if (community.includes(needle)) out.push({ type: 'community', label: `${community} — ${sub}`, district, sub })
-      }
-    }
-  }
-  return out
 }
 
 export default function SelectionTree({
   districtOptions, hierarchy,
   mode, setMode,
-  checkedDistricts, checkedSubdistricts, toggleDistrict, toggleSubdistrict,
+  checkedDistricts, checkedSubdistricts, checkedCommunities,
+  toggleDistrict, toggleSubdistrict, toggleCommunity,
+  expandedDistricts, toggleExpanded, expandedSubdistricts, toggleSubExpanded,
+  selectDistricts, clearSelection,
 }) {
   const [q, setQ] = useState('')
   const searchRef = useRef(null)
 
-  const suggestions = useMemo(() => buildSuggestions(hierarchy, districtOptions, q), [hierarchy, districtOptions, q])
-
-  const pickSuggestion = (s) => {
-    if (s.type === 'district') { if (!checkedDistricts.has(s.district)) toggleDistrict(s.district) }
-    else { if (!checkedSubdistricts.has(subKey(s.district, s.sub))) toggleSubdistrict(s.district, s.sub) }
-    setQ('')
-  }
+  const rows = useMemo(() => buildAreaRows(hierarchy, districtOptions, q), [hierarchy, districtOptions, q])
+  const allVisibleChecked = rows.length > 0 && rows.every(r => checkedDistricts.has(r.dname))
+  const totalChecked = checkedDistricts.size + checkedSubdistricts.size + checkedCommunities.size
 
   return (
-    <div className="w-full lg:w-[300px] shrink-0 bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-5 space-y-4">
+    <div className="w-full xl:w-[280px] shrink-0 bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-4 space-y-3.5">
       <div className="space-y-2">
         <div className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">Mode</div>
         <Seg options={[['multi', 'Multi-select'], ['compare', 'Compare']]} value={mode} onChange={setMode} />
@@ -75,33 +57,104 @@ export default function SelectionTree({
       {mode === 'compare' ? (
         <p className="text-xs text-slate-500 leading-relaxed bg-slate-50 rounded-lg p-3">
           เลือกเขตของแต่ละ panel ได้โดยตรงที่ dropdown บน panel นั้นๆ (ด้านขวา) —
-          ตัวเลข/สี/ข้อมูลใช้ค่าเดียวกับโหมด Multi-select ที่ตั้งไว้ในแผงขวา
+          แขวง/ชุมชนที่ติ๊กไว้ในโหมด Multi-select จะถูกระบายสีในทุก panel ที่มีพื้นที่นั้นอยู่
         </p>
       ) : (
         <>
           <div className="relative">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input ref={searchRef} value={q} onChange={e => setQ(e.target.value)} placeholder="ค้นหาเขต/แขวง/ชุมชน..."
-              className="w-full h-9 pl-8 pr-2.5 rounded-lg ring-1 ring-slate-200 text-sm outline-none focus:ring-2 focus:ring-violet-500" />
-            {suggestions.length > 0 && (
-              <div className="absolute z-10 top-10 left-0 right-0 bg-white rounded-lg ring-1 ring-slate-200 shadow-lg py-1 max-h-64 overflow-y-auto">
-                {suggestions.map((s, i) => (
-                  <button key={i} type="button" onClick={() => pickSuggestion(s)}
-                    className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-violet-50 flex items-center justify-between gap-2">
-                    <span className="truncate">{s.label}</span>
-                    <span className="text-[10px] text-slate-400 uppercase shrink-0">{s.type === 'district' ? 'เขต' : s.type === 'subdistrict' ? 'แขวง' : 'ชุมชน'}</span>
-                  </button>
-                ))}
-              </div>
+              className="w-full h-9 pl-8 pr-8 rounded-lg ring-1 ring-slate-200 text-sm outline-none focus:ring-2 focus:ring-violet-500" />
+            {q && (
+              <button type="button" onClick={() => setQ('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <X size={13} />
+              </button>
             )}
           </div>
 
-          <div className="space-y-2">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">
-              Selected ({checkedDistricts.size + checkedSubdistricts.size})
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">
+                พื้นที่ ({rows.length} เขต)
+              </span>
+              <span className="flex items-center gap-1">
+                <button type="button" onClick={() => selectDistricts(rows.map(r => r.dname))} disabled={allVisibleChecked}
+                  className="h-6 px-2 rounded-md ring-1 ring-slate-200 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                  เลือกทั้งหมด
+                </button>
+                <button type="button" onClick={clearSelection} disabled={totalChecked === 0}
+                  className="h-6 px-2 rounded-md ring-1 ring-slate-200 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                  ล้าง
+                </button>
+              </span>
             </div>
-            {checkedDistricts.size === 0 && checkedSubdistricts.size === 0 ? (
-              <p className="text-xs text-slate-400">ยังไม่ได้เลือกพื้นที่</p>
+
+            <div className="max-h-[340px] overflow-y-auto rounded-lg ring-1 ring-slate-200 divide-y divide-slate-100">
+              {rows.length === 0 && <p className="px-3 py-4 text-xs text-slate-400 text-center">ไม่พบพื้นที่ที่ตรงกับคำค้น</p>}
+              {rows.map(({ dname, subs, autoExpand }) => {
+                const open = autoExpand || expandedDistricts.has(dname)
+                const districtOn = checkedDistricts.has(dname) // ต้องติ๊กเขตก่อน ถึงจะติ๊กแขวง/ชุมชนได้
+                const subCount = subs.filter(s => checkedSubdistricts.has(subKey(dname, s.sub))).length
+                return (
+                  <div key={dname}>
+                    <div className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50">
+                      <input type="checkbox" checked={districtOn} onChange={() => toggleDistrict(dname)}
+                        className="accent-violet-600 shrink-0" />
+                      <span className="flex-1 min-w-0 text-sm text-slate-700 truncate">{dname}</span>
+                      {subCount > 0 && (
+                        <span className="shrink-0 text-[10px] font-medium text-amber-600 bg-amber-50 rounded-full px-1.5 py-0.5">{subCount} แขวง</span>
+                      )}
+                      {subs.length > 0 && (
+                        <button type="button" onClick={() => toggleExpanded(dname)} className="text-slate-400 hover:text-slate-600 shrink-0"
+                          title={open ? 'ย่อแขวง' : 'กางแขวง'}>
+                          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </button>
+                      )}
+                    </div>
+
+                    {open && subs.map(({ sub, communities, autoExpand: subAuto }) => {
+                      const sKey = subKey(dname, sub)
+                      const subOpen = subAuto || expandedSubdistricts.has(sKey)
+                      const comCount = communities.filter(c => checkedCommunities.has(communityKey(dname, sub, c))).length
+                      return (
+                        <div key={sKey}>
+                          <div className={`flex items-center gap-2 pl-7 pr-2 py-1 ${districtOn ? 'hover:bg-slate-50' : 'opacity-45'}`}
+                            title={districtOn ? undefined : 'ติ๊กเขตก่อนจึงจะเลือกแขวงได้'}>
+                            <input type="checkbox" disabled={!districtOn} checked={checkedSubdistricts.has(sKey)}
+                              onChange={() => toggleSubdistrict(dname, sub)}
+                              className="accent-amber-500 shrink-0 disabled:cursor-not-allowed" />
+                            <span className="flex-1 min-w-0 text-xs text-slate-600 truncate">{sub}</span>
+                            {comCount > 0 && (
+                              <span className="shrink-0 text-[10px] font-medium text-rose-600 bg-rose-50 rounded-full px-1.5 py-0.5">{comCount}</span>
+                            )}
+                            {communities.length > 0 && (
+                              <button type="button" onClick={() => toggleSubExpanded(dname, sub)} className="text-slate-400 hover:text-slate-600 shrink-0"
+                                title={subOpen ? 'ย่อชุมชน' : `กางชุมชน (${communities.length})`}>
+                                {subOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                              </button>
+                            )}
+                          </div>
+                          {subOpen && communities.map(c => (
+                            <label key={c} className={`flex items-center gap-2 pl-12 pr-2 py-1 text-[11px] text-slate-500 ${districtOn ? 'hover:bg-slate-50 cursor-pointer' : 'opacity-45 cursor-not-allowed'}`}
+                              title={districtOn ? undefined : 'ติ๊กเขตก่อนจึงจะเลือกชุมชนได้'}>
+                              <input type="checkbox" disabled={!districtOn} checked={checkedCommunities.has(communityKey(dname, sub, c))}
+                                onChange={() => toggleCommunity(dname, sub, c)} className="accent-rose-500 shrink-0 disabled:cursor-not-allowed" />
+                              <span className="truncate">{c}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">Selected ({totalChecked})</div>
+            {totalChecked === 0 ? (
+              <p className="text-xs text-slate-400">ยังไม่ได้เลือกพื้นที่ — ติ๊กจากรายการด้านบนได้หลายอัน (เขต/แขวง/ชุมชน)</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {[...checkedDistricts].sort().map(d => (
@@ -109,14 +162,14 @@ export default function SelectionTree({
                 ))}
                 {[...checkedSubdistricts].sort().map(key => {
                   const [district, sub] = key.split('|')
-                  return <Chip key={key} label={`${sub} (แขวง)`} onRemove={() => toggleSubdistrict(district, sub)} />
+                  return <Chip key={key} tone="amber" label={`${sub} (แขวง)`} onRemove={() => toggleSubdistrict(district, sub)} />
+                })}
+                {[...checkedCommunities].sort().map(key => {
+                  const [district, sub, community] = key.split('|')
+                  return <Chip key={key} tone="rose" label={community} onRemove={() => toggleCommunity(district, sub, community)} />
                 })}
               </div>
             )}
-            <button type="button" onClick={() => searchRef.current?.focus()}
-              className="w-full h-8 rounded-lg ring-1 ring-dashed ring-slate-300 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-violet-600 flex items-center justify-center gap-1">
-              <Plus size={13} />เพิ่มเขต/แขวง
-            </button>
           </div>
         </>
       )}

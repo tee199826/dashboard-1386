@@ -21,6 +21,7 @@ import { useFilter } from '../context/FilterContext'
 import { exportDrugIncidentReport, DRUG_INCIDENT_EXPORT_COLUMNS } from '../utils/exportReport'
 import IncidentMap from '../components/IncidentMap'
 import DateFilter from '../components/DateFilter'
+import ExportDialog from '../components/ExportDialog'
 
 // ── Palette (จำกัด: violet / emerald / rose / slate / amber) ──
 const C = {
@@ -430,30 +431,38 @@ export default function AllDistricts() {
 
   // export ต้อง fetch column เต็ม (drug_*/action_*/subdistrict/community) แยกจาก `incidents` หลักของหน้านี้ซึ่ง
   // ตั้งใจ select แบบแคบไว้เพื่อ perf (ดู useEffect ด้านบน) — fetch เฉพาะตอนกดปุ่ม + กรองตาม range/scope ที่ query ได้เลย
+  // dateRange (จาก ExportDialog โหมด "กำหนดเอง") ใช้แทน range ปกติของหน้าตอน query — กำหนดเองแล้วต้อง query กว้างกว่าที่ fetch ปกติได้ ไม่ใช่แค่ filter ซ้ำในเครื่อง
   const [exporting, setExporting] = useState(false)
-  const handleExport = async () => {
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const handleExportConfirm = async ({ mode, dateRange }) => {
     setExporting(true)
     try {
+      const qFrom = dateRange?.from ?? range?.from
+      const qTo = dateRange?.to ?? range?.to
       const rows = await fetchAllPages('drug_incidents', DRUG_INCIDENT_EXPORT_COLUMNS, {
         filter: (q) => {
           let qq = q
-          if (range?.from) qq = qq.gte('received_date', range.from)
-          if (range?.to) qq = qq.lte('received_date', range.to)
+          if (qFrom) qq = qq.gte('received_date', qFrom)
+          if (qTo) qq = qq.lte('received_date', qTo)
           if (selectedDistrict) qq = qq.eq('district', selectedDistrict)
           return qq
         },
       })
       const scoped = selectedGroup ? rows.filter((r) => DNAME_TO_GROUP[r.district] === selectedGroup) : rows
       const base = filterLabel(state)
-      const periodLabel = (range?.from && range?.to) ? `${base} (${formatThaiDate(range.from)} - ${formatThaiDate(range.to)})` : base
+      const periodLabel = dateRange
+        ? `กำหนดเอง (${formatThaiDate(dateRange.from)} - ${formatThaiDate(dateRange.to)})`
+        : (range?.from && range?.to) ? `${base} (${formatThaiDate(range.from)} - ${formatThaiDate(range.to)})` : base
       const scopeLabel = selectedDistrict || selectedGroup || 'ทุกเขต'
       await exportDrugIncidentReport({
         incidentRows: scoped,
         dealerRows: fDealers,
+        mode,
         periodLabel,
         filterLabel: `${scopeLabel} · ทุกชนิดยา`,
         filenamePrefix: 'districts-report',
       })
+      setExportDialogOpen(false)
     } catch (err) {
       console.error('[/districts] export failed:', err)
     } finally {
@@ -472,8 +481,14 @@ export default function AllDistricts() {
           period={heroPeriod}
           lastUpload={formatThaiDate(lastUpload)}
           subtitle={`เหตุการณ์ยาเสพติดรายเขต · ${filterLabel(state)}`}
-          onExport={handleExport}
+          onExport={() => setExportDialogOpen(true)}
           exporting={exporting}
+        />
+        <ExportDialog
+          open={exportDialogOpen} onClose={() => setExportDialogOpen(false)} onConfirm={handleExportConfirm}
+          busy={exporting}
+          currentPeriodLabel={(range?.from && range?.to) ? `${filterLabel(state)} (${formatThaiDate(range.from)} - ${formatThaiDate(range.to)})` : filterLabel(state)}
+          defaultFrom={range?.from ?? ''} defaultTo={range?.to ?? ''}
         />
 
         {/* control bar */}

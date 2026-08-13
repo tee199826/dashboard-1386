@@ -1,12 +1,14 @@
 // usePixelMapState.js — state ศูนย์กลางของ /pixel-map
-// selection (multi mode) = tree เดียว (checkedDistricts/checkedSubdistricts)
+// selection (multi mode) = tree เดียว (checkedDistricts/checkedSubdistricts/checkedCommunities)
 // layers[] = [เขต, แขวง, ...dataLayers] — ชุมชนไม่มี "รูปทรง" ของตัวเอง (มีแต่ตัวเลข) จึงย้ายไปอยู่ใน labelsConfig แทน ไม่นับเป็น layer
 // labelsConfig = จุดควบคุมตัวเลขเดียว (on/off + เลือกได้หลาย level) แยกจาก layers[] โดยตั้งใจ — ดู plan "decouple layer visibility from number labels"
-// compare mode: 1 เขตต่อ panel (compareSlots[i].selectedDistrict) ไม่ใช่ tree แบบ multi-select
-// key แขวง composite เสมอ "district|subdistrict" กันชื่อซ้ำข้ามเขต (พบจริงในข้อมูล 59 กรณี)
+// compare mode: หลายเขตต่อ panel ได้ (compareSlots[i].districts) — แขวง/ชุมชนใช้ชุดเดียวกับโหมด multi-select (checkedSubdistricts/checkedCommunities)
+//   แล้วกรองเฉพาะที่อยู่ในเขตของ panel นั้นตอนวาด (ดู CompareGrid.jsx)
+// key แขวง/ชุมชน composite เสมอ "district|subdistrict"(|community) กันชื่อซ้ำข้ามเขต (พบจริงในข้อมูล 59 กรณี)
 import { useState, useCallback } from 'react'
 
 export const subKey = (district, subdistrict) => `${district}|${subdistrict}`
+export const communityKey = (district, subdistrict, community) => `${district}|${subdistrict}|${community}`
 
 const makeId = () => `L-${Math.random().toString(36).slice(2, 9)}`
 const DATA_PALETTE = ['#10b981', '#7c3aed', '#d97706', '#db2777'] // emerald ก่อนตาม spec Layer 4+ แล้วหมุนสีอื่นถ้าเพิ่มหลายตัว
@@ -31,7 +33,7 @@ function makeDataLayer(label) {
 function makeCompareSlots(n, startAt = 1) {
   return Array.from({ length: n }, (_, i) => ({
     id: `panel-${startAt + i}`, label: `Panel ${startAt + i}`,
-    selectedDistrict: null, color: COMPARE_PALETTE[(startAt - 1 + i) % COMPARE_PALETTE.length], zoom: ZOOM_IDENTITY,
+    districts: [], color: COMPARE_PALETTE[(startAt - 1 + i) % COMPARE_PALETTE.length], zoom: ZOOM_IDENTITY,
   }))
 }
 
@@ -46,7 +48,9 @@ export function usePixelMapState() {
 
   const [checkedDistricts, setCheckedDistricts] = useState(() => new Set())
   const [checkedSubdistricts, setCheckedSubdistricts] = useState(() => new Set())
+  const [checkedCommunities, setCheckedCommunities] = useState(() => new Set())
   const [expandedDistricts, setExpandedDistricts] = useState(() => new Set())
+  const [expandedSubdistricts, setExpandedSubdistricts] = useState(() => new Set())
 
   const [layers, setLayers] = useState(() => makeFixedLayers())
 
@@ -63,16 +67,19 @@ export function usePixelMapState() {
     shape: 'circle',
     autoFitOnSelection: true,
     showZoomControls: true,
+    tileSource: '',    // '' | 'carto' | 'osm' — ภาพแผนที่พื้นหลัง, '' = ไม่ใช้
+    focusSelection: false,
   })
   const updateStyle = useCallback((patch) => setStyleState(s => ({ ...s, ...patch })), [])
 
-  // ── ตัวเลขพื้นที่ — จุดควบคุมเดียว แยกจาก layers[] โดยตั้งใจ (default ปิด — Issue 2) ──
+  // ── ตัวเลข/ชื่อพื้นที่ — จุดควบคุมเดียว แยกจาก layers[] โดยตั้งใจ (default ปิด — Issue 2) ──
+  // ชื่อเขต (districtNames) แยกออกจาก levels เพราะเขตมีตัวเลือก "ทุกเขต" ที่แขวง/ชุมชนไม่มี (ต้องติ๊กทีละอันเท่านั้น)
   const [labelsConfig, setLabelsConfig] = useState({
     visible: false,
-    levels: new Set(['district']),
+    levels: new Set(),       // 'subdistrict' | 'community'
+    districtNames: 'off',    // 'off' | 'selected' | 'all'
+    districtNameSize: 'md',  // 'sm' | 'md' | 'lg'
     metric: 'count',
-    labelSize: 'auto',       // 'auto' | 'fixed12' | 'fixed16'
-    labelMode: 'number',     // 'number' | 'nameNumber' | 'percent'
     showPill: false,
     textColor: 'auto',       // 'auto' | hex
     counterScaleLabels: false,
@@ -93,7 +100,15 @@ export function usePixelMapState() {
 
   const toggleDistrict = useCallback((dname) => setCheckedDistricts(s => flip(s, dname)), [])
   const toggleSubdistrict = useCallback((district, subdistrict) => setCheckedSubdistricts(s => flip(s, subKey(district, subdistrict))), [])
+  const toggleCommunity = useCallback((district, subdistrict, community) => setCheckedCommunities(s => flip(s, communityKey(district, subdistrict, community))), [])
   const toggleExpanded = useCallback((dname) => setExpandedDistricts(s => flip(s, dname)), [])
+  const toggleSubExpanded = useCallback((district, subdistrict) => setExpandedSubdistricts(s => flip(s, subKey(district, subdistrict))), [])
+  const selectDistricts = useCallback((names) => setCheckedDistricts(new Set(names)), [])
+  const clearSelection = useCallback(() => {
+    setCheckedDistricts(new Set())
+    setCheckedSubdistricts(new Set())
+    setCheckedCommunities(new Set())
+  }, [])
 
   // ── layers: 2 ตัวแรก fixed (เขต/แขวง — แก้ผ่าน updateLayer/toggleLayerVisible) data layer (index 2+) เพิ่ม/ลบ/ลากได้ ──
   const updateLayer = useCallback((id, patch) => {
@@ -130,15 +145,18 @@ export function usePixelMapState() {
     })
   }, [])
 
-  // ── compare panels: สูงสุด 4, 1 เขตต่อ panel ──
+  // ── compare panels: สูงสุด 4, หลายเขตต่อ panel ได้ ──
   const addComparePanel = useCallback(() => {
     setCompareSlots(slots => (slots.length >= 4 ? slots : [...slots, ...makeCompareSlots(1, slots.length + 1)]))
   }, [])
   const removeComparePanel = useCallback((id) => {
     setCompareSlots(slots => (slots.length <= 1 ? slots : slots.filter(s => s.id !== id)))
   }, [])
-  const setCompareSlotDistrict = useCallback((id, dname) => {
-    setCompareSlots(slots => slots.map(s => (s.id === id ? { ...s, selectedDistrict: dname } : s)))
+  const toggleCompareSlotDistrict = useCallback((id, dname) => {
+    setCompareSlots(slots => slots.map(s => (s.id === id ? { ...s, districts: [...flip(new Set(s.districts), dname)] } : s)))
+  }, [])
+  const setCompareSlotDistricts = useCallback((id, names) => {
+    setCompareSlots(slots => slots.map(s => (s.id === id ? { ...s, districts: names } : s)))
   }, [])
   const setCompareSlotColor = useCallback((id, color) => {
     setCompareSlots(slots => slots.map(s => (s.id === id ? { ...s, color } : s)))
@@ -146,10 +164,12 @@ export function usePixelMapState() {
 
   return {
     mode, setMode,
-    checkedDistricts, checkedSubdistricts, toggleDistrict, toggleSubdistrict,
-    expandedDistricts, toggleExpanded,
+    checkedDistricts, checkedSubdistricts, checkedCommunities,
+    toggleDistrict, toggleSubdistrict, toggleCommunity,
+    selectDistricts, clearSelection,
+    expandedDistricts, toggleExpanded, expandedSubdistricts, toggleSubExpanded,
     layers, updateLayer, toggleLayerVisible, addDataLayer, removeDataLayer, reorderDataLayers,
-    compareSlots, addComparePanel, removeComparePanel, setCompareSlotDistrict, setCompareSlotColor,
+    compareSlots, addComparePanel, removeComparePanel, toggleCompareSlotDistrict, setCompareSlotDistricts, setCompareSlotColor,
     style, updateStyle,
     labelsConfig, updateLabelsConfig, toggleLabelsVisible, toggleLabelsLevel,
     zoomTransform, setZoomTransform, syncZoom, setSyncZoom, sharedCompareZoom, setSharedCompareZoom, setCompareSlotZoom,

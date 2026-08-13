@@ -47,7 +47,7 @@ function LayerRow({ layer, draggable, dragOver, onDragStart, onDragOver, onDrop,
   )
 }
 
-// ชุมชนไม่มีรูปทรงของตัวเอง (มีแต่ตัวเลข) — แถวนี้จึงเป็น "หน้าต่างมองเข้าไปใน labelsConfig" ไม่ใช่ layer จริงใน layers[]
+// ชุมชนไม่มีรูปทรงของตัวเอง (มีแต่หมุด+ชื่อ) — แถวนี้จึงเป็น "หน้าต่างมองเข้าไปใน labelsConfig" ไม่ใช่ layer จริงใน layers[]
 // eye = toggle 'community' ใน labelsConfig.levels, swatch = labelsConfig.textColor (แสดง rose-500 เมื่อยังเป็น auto), opacity = labelsConfig.opacity
 function CommunityLabelsRow({ labelsConfig, toggleLabelsLevel, updateLabelsConfig }) {
   const isOn = labelsConfig.levels.has('community')
@@ -58,15 +58,15 @@ function CommunityLabelsRow({ labelsConfig, toggleLabelsLevel, updateLabelsConfi
         <button type="button" onClick={() => toggleLabelsLevel('community')} className="text-slate-500 shrink-0">
           {isOn ? <Eye size={14} /> : <EyeOff size={14} className="text-slate-300" />}
         </button>
-        <span className="flex-1 text-xs font-medium text-slate-700 truncate">ชุมชน (ตัวเลข)</span>
-        <ColorSwatch value={color} onChange={v => updateLabelsConfig({ textColor: v })} title="สีตัวเลขชุมชน" />
+        <span className="flex-1 text-xs font-medium text-slate-700 truncate">ชุมชน (ชื่อ)</span>
+        <ColorSwatch value={color} onChange={v => updateLabelsConfig({ textColor: v })} title="สีชื่อพื้นที่" />
       </div>
       <div className="flex items-center gap-2 pl-5">
         <input type="range" min={0} max={100} value={labelsConfig.opacity}
           onChange={e => updateLabelsConfig({ opacity: Number(e.target.value) })} className="flex-1 h-1 accent-violet-600" />
         <span className="text-[10px] text-slate-400 tabular-nums w-8 text-right">{labelsConfig.opacity}%</span>
       </div>
-      <p className="text-[10px] text-slate-400 pl-5">เปิด/ปิดตัวเลขทุกระดับพร้อมกันได้ที่ส่วน LABELS ด้านล่าง</p>
+      <p className="text-[10px] text-slate-400 pl-5">เปิด/ปิดชื่อพื้นที่ทุกระดับพร้อมกันได้ที่ส่วน LABELS ด้านล่าง</p>
     </div>
   )
 }

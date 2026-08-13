@@ -7,6 +7,7 @@ import { fetchAllPages } from '../utils/supabasePagination'
 import { enrichDrugRow } from '../utils/drugWide'
 import { thaiDateRange } from '../utils/formatDate'
 import { exportDrugIncidentReport } from '../utils/exportReport'
+import ExportDialog from '../components/ExportDialog'
 import { getFiscalYearRange, getMonthRange } from '../utils/fiscalYear'
 import { formatThaiDate } from '../utils/heroMeta'
 import PeriodBadge from '../components/PeriodBadge'
@@ -280,29 +281,57 @@ export default function SubstanceRadar() {
     return filteredIncidents.filter(r => r.primary_drug && targetDrugs.includes(r.primary_drug))
   }, [filteredIncidents, category, targetDrugs])
 
-  const handleExport = () => {
-    let periodLabel = 'ทั้งหมด'
-    if (year !== 'all') {
-      const fy = parseInt(year)
-      if (month !== 'all') {
-        const mo = parseInt(month)
-        const range = getMonthRange(fy, mo)
-        periodLabel = `${THAI_MONTHS.find(m => m.v === mo)?.l || ''} ${fy} (${formatThaiDate(range.from)} - ${formatThaiDate(range.to)})`
+  // ตัวกรอง ปี/เดือน ของหน้านี้ — ใช้ทำ periodLabel + ค่าตั้งต้นของ ExportDialog โหมด "กำหนดเอง"
+  const currentPeriodRange = useMemo(() => {
+    if (year === 'all') return null
+    const fy = parseInt(year)
+    return month !== 'all' ? getMonthRange(fy, parseInt(month)) : getFiscalYearRange(fy)
+  }, [year, month])
+  const currentPeriodLabel = useMemo(() => {
+    if (year === 'all') return 'ทั้งหมด'
+    const fy = parseInt(year)
+    if (month !== 'all') return `${THAI_MONTHS.find(m => m.v === parseInt(month))?.l || ''} ${fy}`
+    return `ปีงบ ${fy}`
+  }, [year, month])
+
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const handleExportConfirm = async ({ mode, dateRange }) => {
+    setExporting(true)
+    try {
+      // กำหนดเอง → ข้ามการกรองปี/เดือนของหน้านี้ (ให้ dateRange เป็นตัวกำหนดช่วงแทน) แต่ยังกรองเขต/แขวง/ชนิดยาตามเดิม
+      let rows, periodLabel
+      if (dateRange) {
+        rows = incidents.filter(r => {
+          if (selectedDistrict !== 'all' && r.district !== selectedDistrict) return false
+          if (selectedKhwaeng !== 'all' && r.subdistrict !== selectedKhwaeng) return false
+          return true
+        })
+        if (category !== 'all') rows = rows.filter(r => r.primary_drug && targetDrugs.includes(r.primary_drug))
+        periodLabel = `กำหนดเอง (${formatThaiDate(dateRange.from)} - ${formatThaiDate(dateRange.to)})`
       } else {
-        const range = getFiscalYearRange(fy)
-        periodLabel = `ปีงบ ${fy} (${formatThaiDate(range.from)} - ${formatThaiDate(range.to)})`
+        rows = exportRows
+        periodLabel = currentPeriodRange
+          ? `${currentPeriodLabel} (${formatThaiDate(currentPeriodRange.from)} - ${formatThaiDate(currentPeriodRange.to)})`
+          : currentPeriodLabel
       }
+      const scopeParts = [selectedDistrict !== 'all' ? selectedDistrict : 'ทุกเขต']
+      if (selectedKhwaeng !== 'all') scopeParts.push(selectedKhwaeng)
+      scopeParts.push(category !== 'all' ? category : 'ทุกชนิดยา')
+      await exportDrugIncidentReport({
+        incidentRows: rows,
+        dealerRows,
+        mode, dateRange,
+        periodLabel,
+        filterLabel: scopeParts.join(' · '),
+        filenamePrefix: 'radar-report',
+      })
+      setExportDialogOpen(false)
+    } catch (err) {
+      console.error('[/radar] export failed:', err)
+    } finally {
+      setExporting(false)
     }
-    const scopeParts = [selectedDistrict !== 'all' ? selectedDistrict : 'ทุกเขต']
-    if (selectedKhwaeng !== 'all') scopeParts.push(selectedKhwaeng)
-    scopeParts.push(category !== 'all' ? category : 'ทุกชนิดยา')
-    exportDrugIncidentReport({
-      incidentRows: exportRows,
-      dealerRows,
-      periodLabel,
-      filterLabel: scopeParts.join(' · '),
-      filenamePrefix: 'radar-report',
-    }).catch(err => console.error('[/radar] export failed:', err))
   }
 
   const drugCounts = useMemo(() => {
@@ -830,7 +859,7 @@ export default function SubstanceRadar() {
         {!isPresentation && (
           <div className="absolute top-4 right-4 z-[1000] flex items-center gap-2">
             <PresentationEnterButton />
-            <button onClick={handleExport}
+            <button onClick={() => setExportDialogOpen(true)}
               className="bg-white hover:bg-slate-50 rounded-lg shadow-lg px-4 py-2 border border-slate-200 flex items-center gap-2 text-sm font-medium text-slate-700 transition">
               <Download size={16} /> Export Excel
             </button>
@@ -840,6 +869,12 @@ export default function SubstanceRadar() {
             </a>
           </div>
         )}
+        <ExportDialog
+          open={exportDialogOpen} onClose={() => setExportDialogOpen(false)} onConfirm={handleExportConfirm}
+          busy={exporting}
+          currentPeriodLabel={currentPeriodRange ? `${currentPeriodLabel} (${formatThaiDate(currentPeriodRange.from)} - ${formatThaiDate(currentPeriodRange.to)})` : currentPeriodLabel}
+          defaultFrom={currentPeriodRange?.from ?? ''} defaultTo={currentPeriodRange?.to ?? ''}
+        />
         <div className="absolute top-4 left-4 z-[1000] bg-slate-900/95 backdrop-blur rounded-2xl shadow-xl px-5 py-4 border border-slate-700 max-w-md">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-blue-600/20 text-blue-400 rounded-lg flex items-center justify-center">

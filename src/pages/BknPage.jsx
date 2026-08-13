@@ -15,8 +15,9 @@ import BknSummarySection from '../components/BknSummarySection'
 import BknDrugStats from '../components/BknDrugStats'
 import BknExecutiveHeader from '../components/BknExecutiveHeader'
 import BknExecutiveSummary from '../components/BknExecutiveSummary'
-import { formatThaiDate as fmtHeroDate } from '../utils/heroMeta'
+import { formatThaiDate as fmtHeroDate, minMaxDate } from '../utils/heroMeta'
 import { exportDrugIncidentReport } from '../utils/exportReport'
+import ExportDialog from '../components/ExportDialog'
 
 export default function BknPage() {
   const { isPresentation } = usePresentation()
@@ -81,16 +82,32 @@ export default function BknPage() {
   }, [incidents, selectedBkn])
   const getColor = useCallback(p => BKN_COLORS[getBknByDistrict(p.district)] || '#9ca3af', [])
 
-  const handleExport = useCallback(() => {
-    const scoped = selectedBkn ? incidents.filter(r => getBknByDistrict(r.district) === selectedBkn) : incidents
-    exportDrugIncidentReport({
-      incidentRows: scoped,
-      dealerRows,
-      periodLabel: bannerPeriod || 'ปีงบ 2569',
-      filterLabel: `${selectedBkn || 'ทุก บก.น.'} · ทุกชนิดยา`,
-      filenamePrefix: 'bkn-report',
-    }).catch(err => console.error('[/bkn] export failed:', err))
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const handleExportConfirm = useCallback(async ({ mode, dateRange }) => {
+    setExporting(true)
+    try {
+      const scoped = selectedBkn ? incidents.filter(r => getBknByDistrict(r.district) === selectedBkn) : incidents
+      const periodLabel = dateRange
+        ? `กำหนดเอง (${fmtHeroDate(dateRange.from)} - ${fmtHeroDate(dateRange.to)})`
+        : (bannerPeriod || 'ปีงบ 2569')
+      await exportDrugIncidentReport({
+        incidentRows: scoped,
+        dealerRows,
+        mode, dateRange,
+        periodLabel,
+        filterLabel: `${selectedBkn || 'ทุก บก.น.'} · ทุกชนิดยา`,
+        filenamePrefix: 'bkn-report',
+      })
+      setExportDialogOpen(false)
+    } catch (err) {
+      console.error('[/bkn] export failed:', err)
+    } finally {
+      setExporting(false)
+    }
   }, [incidents, selectedBkn, dealerRows, bannerPeriod])
+
+  const incidentsDateRange = useMemo(() => minMaxDate(incidents, 'received_date'), [incidents])
 
   // ── CHOROPLETH: จำนวนเหตุการณ์รายเขต (slate sequential) — Phase 4 ──
   const normDist = d => {
@@ -166,9 +183,15 @@ export default function BknPage() {
           lastUpload={fmtHeroDate(lastUpload115B)}
           onRefresh={load}
           refreshing={loading}
-          onExport={handleExport}
+          onExport={() => setExportDialogOpen(true)}
         />
       )}
+      <ExportDialog
+        open={exportDialogOpen} onClose={() => setExportDialogOpen(false)} onConfirm={handleExportConfirm}
+        busy={exporting}
+        currentPeriodLabel={bannerPeriod || 'ปีงบ 2569'}
+        defaultFrom={incidentsDateRange.min ?? ''} defaultTo={incidentsDateRange.max ?? ''}
+      />
 
       <PresentationSlides isPresentation={isPresentation} normalClassName="max-w-[1600px] mx-auto space-y-8">
 
