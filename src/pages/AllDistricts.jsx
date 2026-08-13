@@ -18,6 +18,7 @@ import { formatThaiDate, formatPeriod, minMaxDate, getLastUploadDate } from '../
 import { dateToFiscalYear } from '../utils/fiscalYear'
 import { filterByDateColumn } from '../utils/filterRows'
 import { useFilter } from '../context/FilterContext'
+import { exportDrugIncidentReport, DRUG_INCIDENT_EXPORT_COLUMNS } from '../utils/exportReport'
 import IncidentMap from '../components/IncidentMap'
 import DateFilter from '../components/DateFilter'
 
@@ -427,24 +428,37 @@ export default function AllDistricts() {
     }
   }
 
-  const handleExport = () => {
-    const cols = ['เขต', 'กลุ่ม บก.น.', 'ร้องเรียน', 'ดำเนินการ', 'เหตุการณ์', 'แหล่งซื้อ']
-    if (comparing) cols.push('ปีก่อน(YTD)', 'Δ%YoY')
-    const esc = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`
-    const lines = [cols.map(esc).join(',')]
-    for (const m of table) {
-      const row = [m.district, DNAME_TO_GROUP[m.district] || '', m.complaints, m.completed, m.incidents, m.dealers]
-      if (comparing) {
-        const prev = prevByD[m.district] || 0, cur = curByD[m.district] || 0
-        row.push(prev < 20 ? '' : prev, prev < 20 ? '' : ((cur - prev) / prev * 100).toFixed(1) + '%')
-      }
-      lines.push(row.map(esc).join(','))
+  // export ต้อง fetch column เต็ม (drug_*/action_*/subdistrict/community) แยกจาก `incidents` หลักของหน้านี้ซึ่ง
+  // ตั้งใจ select แบบแคบไว้เพื่อ perf (ดู useEffect ด้านบน) — fetch เฉพาะตอนกดปุ่ม + กรองตาม range/scope ที่ query ได้เลย
+  const [exporting, setExporting] = useState(false)
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const rows = await fetchAllPages('drug_incidents', DRUG_INCIDENT_EXPORT_COLUMNS, {
+        filter: (q) => {
+          let qq = q
+          if (range?.from) qq = qq.gte('received_date', range.from)
+          if (range?.to) qq = qq.lte('received_date', range.to)
+          if (selectedDistrict) qq = qq.eq('district', selectedDistrict)
+          return qq
+        },
+      })
+      const scoped = selectedGroup ? rows.filter((r) => DNAME_TO_GROUP[r.district] === selectedGroup) : rows
+      const base = filterLabel(state)
+      const periodLabel = (range?.from && range?.to) ? `${base} (${formatThaiDate(range.from)} - ${formatThaiDate(range.to)})` : base
+      const scopeLabel = selectedDistrict || selectedGroup || 'ทุกเขต'
+      await exportDrugIncidentReport({
+        incidentRows: scoped,
+        dealerRows: fDealers,
+        periodLabel,
+        filterLabel: `${scopeLabel} · ทุกชนิดยา`,
+        filenamePrefix: 'districts-report',
+      })
+    } catch (err) {
+      console.error('[/districts] export failed:', err)
+    } finally {
+      setExporting(false)
     }
-    const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `districts-${filterLabel(state).replace(/\s+/g, '')}.csv`; a.click()
-    URL.revokeObjectURL(url)
   }
 
   return (
@@ -459,6 +473,7 @@ export default function AllDistricts() {
           lastUpload={formatThaiDate(lastUpload)}
           subtitle={`เหตุการณ์ยาเสพติดรายเขต · ${filterLabel(state)}`}
           onExport={handleExport}
+          exporting={exporting}
         />
 
         {/* control bar */}
@@ -794,7 +809,7 @@ function AnimatedCounter({ value, duration = 800 }) {
 function HeroChip({ icon, children }) {
   return <span className="inline-flex items-center gap-1.5 text-xs text-white/90 bg-white/10 backdrop-blur-md ring-1 ring-white/20 rounded-full px-3 py-1.5">{icon}{children}</span>
 }
-function DistrictHero({ period, lastUpload, subtitle, onExport }) {
+function DistrictHero({ period, lastUpload, subtitle, onExport, exporting }) {
   return (
     <div className="animate-rise relative overflow-hidden rounded-3xl px-8 py-10 text-white bg-gradient-to-br from-violet-600 via-purple-700 to-fuchsia-900 shadow-xl shadow-violet-900/20">
       <div className="orb absolute -top-16 -left-10 w-72 h-72 rounded-full bg-fuchsia-500/30 blur-3xl pointer-events-none" />
@@ -812,9 +827,9 @@ function DistrictHero({ period, lastUpload, subtitle, onExport }) {
             {lastUpload && <HeroChip icon={<Clock size={13} />}>อัปเดต {lastUpload}</HeroChip>}
           </div>
         </div>
-        <button onClick={onExport}
-          className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-white/10 backdrop-blur-md ring-1 ring-white/20 text-sm font-medium text-white hover:bg-white/20 transition">
-          <Download size={15} /> Export CSV
+        <button onClick={onExport} disabled={exporting}
+          className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-white/10 backdrop-blur-md ring-1 ring-white/20 text-sm font-medium text-white hover:bg-white/20 transition disabled:opacity-50 disabled:cursor-wait">
+          <Download size={15} /> {exporting ? 'กำลังสร้างไฟล์...' : 'Export Excel'}
         </button>
       </div>
     </div>

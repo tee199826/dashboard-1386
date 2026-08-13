@@ -16,6 +16,7 @@ import BknDrugStats from '../components/BknDrugStats'
 import BknExecutiveHeader from '../components/BknExecutiveHeader'
 import BknExecutiveSummary from '../components/BknExecutiveSummary'
 import { formatThaiDate as fmtHeroDate } from '../utils/heroMeta'
+import { exportDrugIncidentReport } from '../utils/exportReport'
 
 export default function BknPage() {
   const { isPresentation } = usePresentation()
@@ -27,6 +28,7 @@ export default function BknPage() {
   const [viewMode, setViewMode] = useState('choropleth')
   const [lastUpload115B, setLastUpload115B] = useState(undefined)
   const [bannerPeriod, setBannerPeriod] = useState(null)
+  const [dealerRows, setDealerRows] = useState([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -39,6 +41,7 @@ export default function BknPage() {
     } finally {
       setLoading(false)
     }
+    fetchAllPages('substance_users', 'dealer_locations, surveyed_at').then(setDealerRows).catch(() => setDealerRows([]))
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -77,6 +80,17 @@ export default function BknPage() {
     return selectedBkn ? pts.filter(r => getBknByDistrict(r.district) === selectedBkn) : pts
   }, [incidents, selectedBkn])
   const getColor = useCallback(p => BKN_COLORS[getBknByDistrict(p.district)] || '#9ca3af', [])
+
+  const handleExport = useCallback(() => {
+    const scoped = selectedBkn ? incidents.filter(r => getBknByDistrict(r.district) === selectedBkn) : incidents
+    exportDrugIncidentReport({
+      incidentRows: scoped,
+      dealerRows,
+      periodLabel: bannerPeriod || 'ปีงบ 2569',
+      filterLabel: `${selectedBkn || 'ทุก บก.น.'} · ทุกชนิดยา`,
+      filenamePrefix: 'bkn-report',
+    }).catch(err => console.error('[/bkn] export failed:', err))
+  }, [incidents, selectedBkn, dealerRows, bannerPeriod])
 
   // ── CHOROPLETH: จำนวนเหตุการณ์รายเขต (slate sequential) — Phase 4 ──
   const normDist = d => {
@@ -152,6 +166,7 @@ export default function BknPage() {
           lastUpload={fmtHeroDate(lastUpload115B)}
           onRefresh={load}
           refreshing={loading}
+          onExport={handleExport}
         />
       )}
 

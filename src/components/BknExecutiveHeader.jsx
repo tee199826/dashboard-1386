@@ -1,4 +1,4 @@
-import { RefreshCw, Maximize2, ChevronDown } from 'lucide-react'
+import { RefreshCw, Maximize2, ChevronDown, Download } from 'lucide-react'
 import { usePresentation } from '../context/PresentationContext'
 
 // Editorial header สำหรับ /bkn — แทน UnifiedHero + DateFilter + control bar (รวมเป็นแถบเดียว)
@@ -19,7 +19,7 @@ const fyOf = period => {
 
 const ICON_BTN = 'p-2 rounded-md ring-1 ring-slate-200 bg-white text-slate-400 hover:text-blue-700 hover:ring-slate-300 transition'
 
-export default function BknExecutiveHeader({ period, lastUpload, onRefresh, refreshing = false }) {
+export default function BknExecutiveHeader({ period, lastUpload, onRefresh, refreshing = false, onExport }) {
   const { enter } = usePresentation()
   const fy = fyOf(period)
 
@@ -48,6 +48,11 @@ export default function BknExecutiveHeader({ period, lastUpload, onRefresh, refr
             <span className="font-semibold tabular-nums">{fy || '—'}</span>
             <ChevronDown size={14} className="text-slate-300" />
           </div>
+          {onExport && (
+            <button onClick={onExport} title="Export Excel" className={ICON_BTN}>
+              <Download size={15} />
+            </button>
+          )}
           <button onClick={onRefresh} disabled={refreshing} title="โหลดข้อมูลใหม่"
             className={`${ICON_BTN} disabled:opacity-40`}>
             <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />

@@ -1,11 +1,14 @@
 import { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { MapPin, ArrowLeft, Search, Menu, AlertTriangle, Plus, X, SlidersHorizontal, Lightbulb, Info, BarChart3, Printer } from 'lucide-react'
+import { MapPin, ArrowLeft, Search, Menu, AlertTriangle, Plus, X, SlidersHorizontal, Lightbulb, Info, BarChart3, Printer, Download } from 'lucide-react'
 import { ComposedChart, Area, ReferenceDot, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, Legend } from 'recharts'
 import { THAI_MONTHS, DNAME_TO_GROUP } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
 import { enrichDrugRow } from '../utils/drugWide'
 import { thaiDateRange } from '../utils/formatDate'
+import { exportDrugIncidentReport } from '../utils/exportReport'
+import { getFiscalYearRange, getMonthRange } from '../utils/fiscalYear'
+import { formatThaiDate } from '../utils/heroMeta'
 import PeriodBadge from '../components/PeriodBadge'
 import IncidentMap from '../components/IncidentMap'
 import { usePresentation } from '../context/PresentationContext'
@@ -191,6 +194,7 @@ export default function SubstanceRadar() {
   const [controlOpen, setControlOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 768 : true)
   const [insightOpen, setInsightOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 768 : true)
   const [fsDrugDetail, setFsDrugDetail] = useState(false)
+  const [dealerRows, setDealerRows] = useState([])
 
   // เลือกกลุ่มเขต → ถ้า 'all' reset displayMode (แทน effect เพื่อเลี่ยง set-state-in-effect)
   const pickGroup = (v) => { setGroupFilter(v); if (v === 'all') setGroupDisplayMode('all') }
@@ -211,6 +215,7 @@ export default function SubstanceRadar() {
       }
     }
     load()
+    fetchAllPages('substance_users', 'dealer_locations, surveyed_at').then(setDealerRows).catch(() => setDealerRows([]))
   }, [retryCount])
 
   const cfg = category === 'all' ? ALL_VIEW_CFG : DRUG_CATEGORIES[category]
@@ -268,6 +273,37 @@ export default function SubstanceRadar() {
     if (!r.primary_drug) return false
     return targetDrugs.includes(r.primary_drug)
   }), [filteredIncidents, targetDrugs])
+
+  // export ใช้ filteredIncidents (ปี/เดือน/เขต/แขวง) + กรองชนิดยาซ้ำถ้าเลือก category — ไม่บังคับต้องมี lat/lng เหมือน points
+  const exportRows = useMemo(() => {
+    if (category === 'all') return filteredIncidents
+    return filteredIncidents.filter(r => r.primary_drug && targetDrugs.includes(r.primary_drug))
+  }, [filteredIncidents, category, targetDrugs])
+
+  const handleExport = () => {
+    let periodLabel = 'ทั้งหมด'
+    if (year !== 'all') {
+      const fy = parseInt(year)
+      if (month !== 'all') {
+        const mo = parseInt(month)
+        const range = getMonthRange(fy, mo)
+        periodLabel = `${THAI_MONTHS.find(m => m.v === mo)?.l || ''} ${fy} (${formatThaiDate(range.from)} - ${formatThaiDate(range.to)})`
+      } else {
+        const range = getFiscalYearRange(fy)
+        periodLabel = `ปีงบ ${fy} (${formatThaiDate(range.from)} - ${formatThaiDate(range.to)})`
+      }
+    }
+    const scopeParts = [selectedDistrict !== 'all' ? selectedDistrict : 'ทุกเขต']
+    if (selectedKhwaeng !== 'all') scopeParts.push(selectedKhwaeng)
+    scopeParts.push(category !== 'all' ? category : 'ทุกชนิดยา')
+    exportDrugIncidentReport({
+      incidentRows: exportRows,
+      dealerRows,
+      periodLabel,
+      filterLabel: scopeParts.join(' · '),
+      filenamePrefix: 'radar-report',
+    }).catch(err => console.error('[/radar] export failed:', err))
+  }
 
   const drugCounts = useMemo(() => {
     const m = {}
@@ -794,6 +830,10 @@ export default function SubstanceRadar() {
         {!isPresentation && (
           <div className="absolute top-4 right-4 z-[1000] flex items-center gap-2">
             <PresentationEnterButton />
+            <button onClick={handleExport}
+              className="bg-white hover:bg-slate-50 rounded-lg shadow-lg px-4 py-2 border border-slate-200 flex items-center gap-2 text-sm font-medium text-slate-700 transition">
+              <Download size={16} /> Export Excel
+            </button>
             <a href="/"
               className="bg-white hover:bg-slate-50 rounded-lg shadow-lg px-4 py-2 border border-slate-200 flex items-center gap-2 text-sm font-medium text-slate-700 transition">
               <ArrowLeft size={16} /> กลับหน้าหลัก
