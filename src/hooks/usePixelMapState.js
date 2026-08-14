@@ -58,7 +58,7 @@ export function usePixelMapState() {
 
   const [style, setStyleState] = useState({
     showBorders: true,
-    background: 'light',
+    background: 'map',   // 'map' (ขาว/ขอบน้ำเงิน บนพื้นนอกเขตเทาเข้ม เหมือนหน้าแผนที่ยาเสพติด) | 'light' | 'dark'
     title: '',
     caption: '',
     displayMode: 'dot',  // ใช้กับ data overlay layer (2+) เท่านั้น — 'dot' | 'fill'
@@ -67,7 +67,7 @@ export function usePixelMapState() {
     shape: 'circle',
     autoFitOnSelection: true,
     showZoomControls: true,
-    tileSource: '',    // '' | 'carto' | 'osm' — ภาพแผนที่พื้นหลัง, '' = ไม่ใช้
+    tileSource: 'carto', // ภาพแผนที่พื้นหลัง — carto light_all = ชุดเดียวกับหน้าแผนที่ยาเสพติด (IncidentMap) | 'osm' | '' (ไม่ใช้)
     focusSelection: false,
   })
   const updateStyle = useCallback((patch) => setStyleState(s => ({ ...s, ...patch })), [])

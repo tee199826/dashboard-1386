@@ -457,9 +457,10 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
               {visibleDistrictPaths.map(f => <path key={f.dcode} d={f.d} />)}
             </g>
           )}
-          {/* เขตที่ติ๊ก — กรอบสีของ layer + ระบายจางในโหมดโฟกัส (ใช้กติกาเดียวกันทั้ง multi-select และ compare) */}
+          {/* เขตที่ติ๊ก — ระบายสีจาง+ กรอบสี ให้ "เขตที่เลือก = เขตที่เป็นสี" เสมอ (ทั้งบนแผนที่เต็มและโหมดโฟกัส)
+              คู่กับ autoFitOnSelection ที่ซูมเข้าไปที่เขตนั้น จึงได้ไฮไลต์+ซูม แบบหน้าแผนที่ยาเสพติด (IncidentMap) */}
           {districtLayer.visible && (
-            <g fill={focusActive ? districtLayer.color : 'none'} fillOpacity={FOCUS_DISTRICT_FILL_OPACITY}
+            <g fill={districtLayer.color} fillOpacity={FOCUS_DISTRICT_FILL_OPACITY}
               stroke={districtLayer.color} strokeWidth={3 / t.k} strokeLinejoin="round"
               opacity={districtLayer.opacity / 100} pointerEvents="none">
               {visibleDistrictPaths.map(f => (checkedDistricts.has(f.dname) ? <path key={f.dcode} d={f.d} /> : null))}

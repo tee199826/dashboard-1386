@@ -3,7 +3,7 @@
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon'
 import { point } from '@turf/helpers'
 
-export const BKK_BBOX = { minLng: 100.328, maxLng: 100.939, minLat: 13.494, maxLat: 13.955 }
+export const BKK_BBOX = { minLng: 100.328, maxLng: 100.939, minLat: 13.484, maxLat: 13.955 } // ครอบขอบเขต BMA_ADMIN_DISTRICT พอดี (ปลายบางขุนเทียนลงถึง ~13.485)
 
 const GEOJSON_URL = '/bangkok-districts.geojson'
 let _geoPromise = null

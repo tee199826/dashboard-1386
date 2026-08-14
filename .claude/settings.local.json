@@ -94,7 +94,14 @@
       "Bash(npm remove *)",
       "Bash(git status *)",
       "mcp__ide__getDiagnostics",
-      "Bash(./node_modules/.bin/jiti _tmp_test_export.mjs)"
+      "Bash(./node_modules/.bin/jiti _tmp_test_export.mjs)",
+      "Bash(curl -s -m 5 -o /dev/null -w \"%{http_code}\" http://localhost:5173/pixel-map)",
+      "Bash(node scripts/import-bma-boundaries.mjs \"C:/Users/music/Downloads/ADMINISTRATION\")",
+      "Read(//c/Users/music/OneDrive/Documents/**)",
+      "Bash(unzip -l C:/Users/music/OneDrive/Documents/pixel-map.zip)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\('public/bangkok-districts.geojson','utf8'\\); const j=JSON.parse\\(d\\); console.log\\('features:',j.features.length\\); console.log\\('props:',JSON.stringify\\(j.features[0].properties\\)\\);\")",
+      "Bash(node scripts/import-bma-districts.mjs \"C:/Users/music/Downloads/ADMINISTRATION\")"
     ]
   }
 }
