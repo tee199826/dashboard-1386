@@ -98,7 +98,16 @@ export function usePixelMapState() {
     setCompareSlots(slots => slots.map(s => (s.id === slotId ? { ...s, zoom: transform } : s)))
   }, [])
 
-  const toggleDistrict = useCallback((dname) => setCheckedDistricts(s => flip(s, dname)), [])
+  // ติ๊กเขตออก → ล้างแขวง/ชุมชนในเขตนั้นตามไปด้วย (สอดคล้องกับกติกาที่ต้องติ๊กเขตก่อน)
+  const toggleDistrict = useCallback((dname) => {
+    setCheckedDistricts(s => {
+      if (s.has(dname)) {
+        setCheckedSubdistricts(subs => new Set([...subs].filter(k => k.split('|')[0] !== dname)))
+        setCheckedCommunities(coms => new Set([...coms].filter(k => k.split('|')[0] !== dname)))
+      }
+      return flip(s, dname)
+    })
+  }, [])
   const toggleSubdistrict = useCallback((district, subdistrict) => setCheckedSubdistricts(s => flip(s, subKey(district, subdistrict))), [])
   const toggleCommunity = useCallback((district, subdistrict, community) => setCheckedCommunities(s => flip(s, communityKey(district, subdistrict, community))), [])
   const toggleExpanded = useCallback((dname) => setExpandedDistricts(s => flip(s, dname)), [])

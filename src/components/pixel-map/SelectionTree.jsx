@@ -48,7 +48,7 @@ export default function SelectionTree({
   const totalChecked = checkedDistricts.size + checkedSubdistricts.size + checkedCommunities.size
 
   return (
-    <div className="w-full xl:w-[280px] shrink-0 bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-4 space-y-3.5">
+    <div className={`w-full shrink-0 bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-4 space-y-3.5 ${mode === 'compare' ? 'lg:w-[190px]' : 'xl:w-[280px]'}`}>
       <div className="space-y-2">
         <div className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">Mode</div>
         <Seg options={[['multi', 'Multi-select'], ['compare', 'Compare']]} value={mode} onChange={setMode} />
@@ -98,7 +98,7 @@ export default function SelectionTree({
                 return (
                   <div key={dname}>
                     <div className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50">
-                      <input type="checkbox" checked={districtOn} onChange={() => toggleDistrict(dname)}
+                      <input type="checkbox" checked={checkedDistricts.has(dname)} onChange={() => toggleDistrict(dname)}
                         className="accent-violet-600 shrink-0" />
                       <span className="flex-1 min-w-0 text-sm text-slate-700 truncate">{dname}</span>
                       {subCount > 0 && (

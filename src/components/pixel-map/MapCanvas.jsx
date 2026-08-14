@@ -3,7 +3,7 @@ import { select } from 'd3-selection'
 import { zoom as d3zoom, zoomIdentity } from 'd3-zoom'
 import {
   districtPathD, buildDotGrid, BKK_BBOX, makeProjection,
-  subdistrictOutlineRing, ringPathD, featurePathD, lookupSubdistrict, lookupCommunity, communityCellRing, circleRing,
+  ringPathD, featurePathD, lookupSubdistrict, lookupCommunity, communityCellRing,
 } from '../../utils/pixelMapGeometry'
 import { interpolateHex, getContrastText } from '../../utils/pixelMapStyle'
 import { nodeMetricValue } from '../../utils/pixelMapData'
@@ -235,6 +235,16 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
 
   // แขวงที่ติ๊กเท่านั้น (ไม่รับ zoom-out fallback — ต่างจากชุมชนโดยตั้งใจ)
   // กรอบใช้ขอบเขตแขวงจริงจาก bangkok-subdistricts.geojson ถ้าหาเจอ — ไม่เจอค่อยตกไปใช้ค่าประมาณจากจุดในแขวง
+  // เขต (ขอบเขต BMA) index ตามชื่อ — ใช้เป็น "กรอบ" ตัดพื้นที่แขวง/ชุมชนที่ไม่มี polygon จริง ให้ได้พื้นที่จริงไม่ใช่วงกลม
+  const districtFeatureByName = useMemo(() => {
+    const m = new Map()
+    if (geojson) for (const f of geojson.features) m.set(f.properties.dname, f)
+    return m
+  }, [geojson])
+
+  const firstRingPts = (feature, proj) =>
+    (feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates : [feature.geometry.coordinates]).flat()[0].map(proj)
+
   const subdistrictShapes = useMemo(() => {
     const out = []
     for (const key of checkedSubdistricts) {
@@ -242,28 +252,30 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
       const node = hierarchy[district]?.subdistricts?.[sub]
       if (!node) continue
       const feature = lookupSubdistrict(subdistrictIndex, district, sub)
-      let d, cx, cy, bottom
+      let d, pts, approx = false
       if (feature) {
         d = featurePathD(feature, project)
-        const pts = (feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates : [feature.geometry.coordinates])
-          .flat()[0].map(c => project(c))
-        const xs = pts.map(p => p[0]); const ys = pts.map(p => p[1])
-        cx = (Math.min(...xs) + Math.max(...xs)) / 2; cy = (Math.min(...ys) + Math.max(...ys)) / 2
-        bottom = Math.max(...ys)
-      } else if (node.centroid) {
-        const ring = subdistrictOutlineRing(node)
-        d = ringPathD(ring, project)
-        const pts = (ring ?? []).map(c => project(c))
-        ;[cx, cy] = project([node.centroid.lng, node.centroid.lat])
-        bottom = pts.length ? Math.max(...pts.map(p => p[1])) : cy
-      } else continue
+        pts = firstRingPts(feature, project)
+      } else {
+        // ไม่มี polygon แขวงจริง → แบ่งพื้นที่ "เขต" ตามจุดกึ่งกลางแขวงที่ใกล้ที่สุด (Voronoi ตัดในขอบเขตเขต) = พื้นที่จริง ไม่ใช่วงกลม
+        const distFeature = districtFeatureByName.get(district)
+        const sibs = Object.entries(hierarchy[district]?.subdistricts ?? {})
+          .filter(([n, v]) => n !== sub && v.centroid).map(([, v]) => v.centroid)
+        const ring = (distFeature && node.centroid) ? communityCellRing(distFeature, node.centroid, sibs) : null
+        if (ring) { d = ringPathD(ring, project); pts = ring.map(project) }
+        else if (distFeature) { d = featurePathD(distFeature, project); pts = firstRingPts(distFeature, project) }
+        else continue
+        approx = true
+      }
+      const xs = pts.map(p => p[0]); const ys = pts.map(p => p[1])
       out.push({
         key, dname: district, text: sub, value: nodeMetricValue(node.meta, labelsConfig.metric),
-        x: cx, y: cy, bottom, d, approx: !feature,
+        x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2,
+        bottom: Math.max(...ys), d, approx,
       })
     }
     return out
-  }, [checkedSubdistricts, hierarchy, subdistrictIndex, labelsConfig.metric, project])
+  }, [checkedSubdistricts, hierarchy, subdistrictIndex, districtFeatureByName, labelsConfig.metric, project])
 
   // zoom-out: เขตที่ติ๊กแต่ไม่ได้ drill-in แขวงไหนเลย → รวมทุกแขวงของเขตนั้นเข้า scope ชุมชนด้วย (ระดับแขวงไม่รับ fallback นี้)
   const communitySubKeys = useMemo(() => {
@@ -346,13 +358,15 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
         pts = (feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates : [feature.geometry.coordinates])
           .flat()[0].map(pt => project(pt))
       } else {
-        // ไม่มีขอบเขตชุมชนในไฟล์ → แบ่งพื้นที่แขวงตามชุมชนที่ใกล้ที่สุด (ถ้าไม่มีขอบเขตแขวงอีก ใช้วงกลมรอบจุด)
+        // ไม่มี polygon ชุมชนในไฟล์ → แบ่งพื้นที่ "แขวง" (หรือ "เขต" ถ้าแขวงก็ไม่มี) ตามชุมชนที่ใกล้ที่สุด = พื้นที่จริง ไม่ใช่วงกลม
         const subFeature = lookupSubdistrict(subdistrictIndex, district, sub)
+        const bound = subFeature ?? districtFeatureByName.get(district)
         const siblings = Object.entries(hierarchy[district]?.subdistricts?.[sub]?.communities ?? {})
           .filter(([n]) => n !== name).map(([, v]) => v)
-        const ring = communityCellRing(subFeature, c, siblings) ?? circleRing(c)
-        d = ringPathD(ring, project)
-        pts = ring.map(pt => project(pt))
+        const ring = bound ? communityCellRing(bound, c, siblings) : null
+        if (ring) { d = ringPathD(ring, project); pts = ring.map(pt => project(pt)) }
+        else if (bound) { d = featurePathD(bound, project); pts = firstRingPts(bound, project) }
+        else continue
         approx = true
       }
       const xs = pts.map(p => p[0]); const ys = pts.map(p => p[1])
@@ -362,7 +376,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
       out.push({ key, dname: district, text: name, x, y, bottom, d, approx, value: nodeMetricValue(c, labelsConfig.metric) })
     }
     return out
-  }, [checkedCommunities, hierarchy, communityIndex, subdistrictIndex, project, labelsConfig.metric])
+  }, [checkedCommunities, hierarchy, communityIndex, subdistrictIndex, districtFeatureByName, project, labelsConfig.metric])
 
   // ชื่อชุมชน = ที่ติ๊ก (collide=false — เลือกเองต้องเห็นครบ) + ที่เหลือใน scope เมื่อซูมลึกพอและเปิด level ชุมชน
   const placedCommunityNames = useMemo(() => {
@@ -486,25 +500,19 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
           })}
           </g>
 
-          {/* Layer 2: แขวง — กรอบพื้นที่โดยประมาณ (ชุดข้อมูลไม่มี polygon ระดับแขวง ดู subdistrictOutlineRing) */}
+          {/* Layer 2: แขวง — ระบายทึบเต็มพื้นที่ตามรูปอ้างอิง (พื้นที่จริงจากไฟล์ BMA / Voronoi ถ้าไม่มี) */}
           {subdistrictLayer.visible && subdistrictShapes.length > 0 && (
-            <g fill={focusActive ? subdistrictLayer.color : 'none'} stroke={subdistrictLayer.color}
-              strokeWidth={1.8 / t.k} strokeLinejoin="round"
+            <g fill={subdistrictLayer.color} stroke={subdistrictLayer.color}
+              strokeWidth={1.2 / t.k} strokeLinejoin="round"
               opacity={subdistrictLayer.opacity / 100} pointerEvents="none">
-              {subdistrictShapes.map(s => (s.d
-                // เส้นประ = กรอบประมาณ (ไม่พบแขวงนี้ในไฟล์ขอบเขต), เส้นทึบ = ขอบเขตแขวงจริง
-                ? <path key={s.key} d={s.d} strokeDasharray={s.approx ? `${6 / t.k} ${4 / t.k}` : undefined} />
-                : null))}
+              {subdistrictShapes.map(s => (s.d ? <path key={s.key} d={s.d} /> : null))}
             </g>
           )}
 
-          {/* ชุมชนที่ติ๊ก — ระบายพื้นที่ถ้ามีขอบเขตจริง ไม่งั้นเป็นหมุดที่ตำแหน่งเหตุการณ์ */}
+          {/* ชุมชนที่ติ๊ก — ระบายทึบเต็มพื้นที่ตามรูปอ้างอิง (พื้นที่จริงจากไฟล์ / Voronoi ถ้าไม่มี) */}
           {checkedCommunityPoints.length > 0 && (
-            <g fill={ROSE_DEFAULT} stroke={ROSE_DEFAULT} strokeWidth={1.4 / t.k} strokeLinejoin="round" pointerEvents="none">
-              {checkedCommunityPoints.map(p => (
-                <path key={p.key} d={p.d} fillOpacity={p.approx ? 0.45 : 0.85}
-                  strokeDasharray={p.approx ? `${5 / t.k} ${3 / t.k}` : undefined} />
-              ))}
+            <g fill={ROSE_DEFAULT} stroke={ROSE_DEFAULT} strokeWidth={1.2 / t.k} strokeLinejoin="round" pointerEvents="none">
+              {checkedCommunityPoints.map(p => (p.d ? <path key={p.key} d={p.d} /> : null))}
             </g>
           )}
 

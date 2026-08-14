@@ -5,7 +5,7 @@ import DistrictPicker from './DistrictPicker'
 
 const PANEL_ASPECT = 1.29
 const PANEL_GAP = 16
-const PANEL_MIN_W = 260
+const PANEL_MIN_W = 220 // ต่ำกว่านี้ header (สี+dropdown) เริ่มอึดอัด → ยุบเหลือ 1 คอลัมน์แทน
 
 // layers (สี/opacity ของ เขต/แขวง/data) แชร์ทุก panel — ยกเว้นสี fill ของเขตที่ override เป็น slot.color ต่อ panel (แยกแยะ panel ด้วยตา)
 // zoom: ปกติแต่ละ panel อิสระ (slot.zoom ของตัวเอง) — ถ้า syncZoom เปิด ทุก panel ใช้ sharedCompareZoom ตัวเดียวกันแทน
@@ -18,10 +18,11 @@ export default function CompareGrid({
   toggleCompareSlotDistrict, setCompareSlotDistricts, setCompareSlotColor, addComparePanel, removeComparePanel,
   exporting = false,
 }) {
-  const cols = compareSlots.length <= 2 ? compareSlots.length : 2
   const slotLabel = (districts) => (districts.length === 1 ? districts[0] : districts.length > 1 ? `${districts.length} เขต` : null)
-  // ขนาด panel คิดจากพื้นที่จริงที่มี ไม่ fix 420x340 — กรอบจะได้พอดีคอลัมน์ ไม่ล้นออกนอกกล่อง
-  const panelW = Math.max(PANEL_MIN_W, Math.floor((availableWidth - PANEL_GAP * (cols - 1) - 2) / cols))
+  // ขนาด panel + จำนวนคอลัมน์คิดจากพื้นที่จริง — ถ้ากว้างไม่พอสำหรับ 2 คอลัมน์ที่ความกว้างขั้นต่ำ ให้ยุบเหลือ 1 คอลัมน์ (ไม่ล้น/ไม่ต้องเลื่อน)
+  const desiredCols = compareSlots.length <= 2 ? compareSlots.length : 2
+  const cols = availableWidth >= desiredCols * PANEL_MIN_W + (desiredCols - 1) * PANEL_GAP ? desiredCols : 1
+  const panelW = Math.max(200, Math.floor((availableWidth - PANEL_GAP * (cols - 1)) / cols))
   const panelH = Math.round(panelW / PANEL_ASPECT)
   const inDistricts = (keys, names) => new Set(names.length ? [...keys].filter(k => names.includes(k.split('|')[0])) : [])
 
