@@ -48,7 +48,7 @@ export default function DistrictPicker({
       </button>
 
       {open && (
-        <div className="absolute z-30 top-9 left-0 right-0 min-w-[230px] bg-white rounded-lg ring-1 ring-slate-200 shadow-xl">
+        <div className="absolute z-30 top-9 left-0 right-0 min-w-57.5 bg-white rounded-lg ring-1 ring-slate-200 shadow-xl">
           <div className="relative p-1.5 border-b border-slate-100">
             <Search size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="ค้นหาเขต/แขวง/ชุมชน..."
@@ -59,7 +59,7 @@ export default function DistrictPicker({
             {rows.length === 0 && <p className="px-3 py-3 text-[11px] text-slate-400 text-center">ไม่พบพื้นที่ที่ตรงกับคำค้น</p>}
             {rows.map(({ dname, subs, autoExpand }) => {
               const isOpen = autoExpand || expanded.has(dname)
-              const districtOn = selected.includes(dname) // ต้องติ๊กเขตก่อน ถึงจะติ๊กแขวง/ชุมชนในเขตนั้นได้
+              const districtOn = selected.includes(dname) 
               return (
                 <div key={dname}>
                   <div className="flex items-center gap-2 px-2.5 py-1 hover:bg-violet-50">
