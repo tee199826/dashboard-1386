@@ -63,7 +63,7 @@ export default function DistrictPicker({
               return (
                 <div key={dname}>
                   <div className="flex items-center gap-2 px-2.5 py-1 hover:bg-violet-50">
-                    <input type="checkbox" checked={districtOn} onChange={() => onToggle(dname)}
+                    <input type="checkbox" checked={selected.includes(dname)} onChange={() => onToggle(dname)}
                       className="accent-violet-600 shrink-0" />
                     <span className="flex-1 min-w-0 text-xs text-slate-700 truncate">{dname}</span>
                     {subs.length > 0 && (

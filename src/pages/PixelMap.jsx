@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import { Layers as LayersIcon } from 'lucide-react'
-import { loadDistrictGeoJSON } from '../utils/pixelMapGeometry'
+import { loadDistrictGeoJSON, loadSubdistrictIndex, loadCommunityIndex } from '../utils/pixelMapGeometry'
 import { getDistrictCounts, getCommunityHierarchy, getAvailableFiscalYears, getLevelMaxes } from '../utils/pixelMapData'
 import { exportSvg, exportPng, copyEmbedHtml } from '../utils/pixelMapExport'
 import { usePixelMapState } from '../hooks/usePixelMapState'
@@ -18,6 +18,25 @@ const IDENTITY = { x: 0, y: 0, k: 1 }
 export default function PixelMap() {
   const canvasAreaRef = useRef(null) // wrapper div — PNG export (html-to-image) จับทั้งก้อน (เดี่ยวหรือ compare grid)
   const svgRef = useRef(null)        // <svg> เดี่ยว หรือ panel แรกใน compare grid — export SVG/คัดลอก HTML
+
+  // วัดความกว้างจริงของกล่องแผนที่ → ส่งให้ CompareGrid ปรับขนาด panel ให้พอดี ไม่ล้นจนต้องเลื่อนแนวนอน
+  // วัดทุก render (useLayoutEffect ไม่มี deps) + ตอน resize — จับได้ทั้งตอนแผงข้างโหลดเสร็จ/สลับโหมด โดยไม่พึ่ง ResizeObserver
+  // guard >2px กันวนลูป (panel พอดีกล่องเสมอจึงไม่มี scrollbar มาป้อนกลับ)
+  const [areaWidth, setAreaWidth] = useState(CANVAS_W)
+  const measureArea = useCallback(() => {
+    const el = canvasAreaRef.current
+    if (!el) return
+    const cs = getComputedStyle(el)
+    const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
+    const w = Math.max(280, Math.round(el.clientWidth - pad - 2))
+    setAreaWidth(prev => (Math.abs(prev - w) > 2 ? w : prev))
+  }, [])
+  useLayoutEffect(measureArea) // ทุก render
+  useEffect(() => {
+    const raf = requestAnimationFrame(measureArea)
+    window.addEventListener('resize', measureArea)
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', measureArea) }
+  }, [measureArea])
 
   const [geojson, setGeojson] = useState(null)
   useEffect(() => {
@@ -43,9 +62,13 @@ export default function PixelMap() {
     zoomTransform, setZoomTransform, syncZoom, setSyncZoom, sharedCompareZoom, setSharedCompareZoom, setCompareSlotZoom,
   } = usePixelMapState()
 
-  // ยังไม่มีไฟล์ขอบเขตแขวง/ชุมชนจริงใน public/ — lookupSubdistrict/lookupCommunity คืน undefined เสมอ แล้ว fallback ไปใช้รูปทรงประมาณ
-  const subdistrictIndex = null
-  const communityIndex = null
+  // โหลด index ขอบเขตแขวง/ชุมชนจริง (BMA) — lookup จะได้ polygon จริง ไม่ตกไปใช้พื้นที่ประมาณ
+  const [subdistrictIndex, setSubdistrictIndex] = useState(null)
+  const [communityIndex, setCommunityIndex] = useState(null)
+  useEffect(() => {
+    loadSubdistrictIndex().then(setSubdistrictIndex).catch(err => console.warn('[pixel-map] subdistrict geojson unavailable:', err))
+    loadCommunityIndex().then(setCommunityIndex).catch(err => console.warn('[pixel-map] community geojson unavailable:', err))
+  }, [])
 
   const dataLayers = useMemo(() => layers.filter(l => l.type === 'data'), [layers])
 
@@ -120,7 +143,7 @@ export default function PixelMap() {
         </p>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-5 items-start relative">
+      <div className="flex flex-col lg:flex-row gap-4 items-start relative">
         <SelectionTree
           districtOptions={districtOptions} hierarchy={hierarchy}
           mode={mode} setMode={setMode}
@@ -131,13 +154,13 @@ export default function PixelMap() {
           selectDistricts={selectDistricts} clearSelection={clearSelection}
         />
 
-        <div ref={canvasAreaRef} className="flex-1 min-w-0 bg-white rounded-xl shadow-lg ring-1 ring-slate-200 p-4 overflow-auto">
+        <div ref={canvasAreaRef} className="flex-1 min-w-0 bg-white rounded-xl shadow-lg ring-1 ring-slate-200 p-3 overflow-auto">
           {mode === 'compare' ? (
             <CompareGrid
               compareSlots={compareSlots} layers={layers} layerCounts={layerCounts}
               geojson={geojson} hierarchy={hierarchy} subdistrictIndex={subdistrictIndex} communityIndex={communityIndex}
               levelMaxes={levelMaxes} labelsConfig={labelsConfig}
-              style={style} svgRef={svgRef} districtOptions={districtOptions}
+              style={style} svgRef={svgRef} districtOptions={districtOptions} availableWidth={areaWidth}
               checkedSubdistricts={checkedSubdistricts} checkedCommunities={checkedCommunities}
               toggleSubdistrict={toggleSubdistrict} toggleCommunity={toggleCommunity}
               syncZoom={syncZoom} setSyncZoom={setSyncZoom} sharedCompareZoom={sharedCompareZoom}
@@ -159,7 +182,7 @@ export default function PixelMap() {
           )}
         </div>
 
-        <div className="w-full lg:w-[300px] shrink-0 space-y-4">
+        <div className="w-full lg:w-[260px] shrink-0 space-y-4">
           <AccordionSection title="Layers" icon={<LayersIcon size={14} className="text-slate-400" />} defaultOpen>
             <LayerPanel
               layers={layers} updateLayer={updateLayer} toggleLayerVisible={toggleLayerVisible}
