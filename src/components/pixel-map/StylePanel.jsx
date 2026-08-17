@@ -76,13 +76,13 @@ export default function StylePanel({
             value={style.tileSource} onChange={v => updateStyle({ tileSource: v })} />
         </Field>
         <Field label="พื้นหลัง">
-          <Seg options={[['map', 'แผนที่'], ['light', 'Light'], ['dark', 'Dark']]}
+          <Seg options={[['map', 'แผนที่'], ['light', 'Light'], ['dark', 'Dark'], ['clear', 'ใส']]}
             value={style.background} onChange={v => updateStyle({ background: v })} />
         </Field>
 
         {!compareActive && zoomTransform && (
           <Field label={`Zoom level ${Math.round(zoomTransform.k * 100)}%`}>
-            <input type="range" min={1} max={8} step={0.1} value={zoomTransform.k}
+            <input type="range" min={1} max={24} step={0.1} value={zoomTransform.k}
               onChange={e => onZoomChange?.({ ...zoomTransform, k: Number(e.target.value) })}
               className="w-full h-1 accent-violet-600" />
           </Field>

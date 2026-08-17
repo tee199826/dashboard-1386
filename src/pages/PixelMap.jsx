@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Layers as LayersIcon } from 'lucide-react'
 import { loadDistrictGeoJSON, loadSubdistrictIndex, loadCommunityIndex } from '../utils/pixelMapGeometry'
 import { getDistrictCounts, getCommunityHierarchy, getAvailableFiscalYears, getLevelMaxes } from '../utils/pixelMapData'
@@ -18,25 +18,6 @@ const IDENTITY = { x: 0, y: 0, k: 1 }
 export default function PixelMap() {
   const canvasAreaRef = useRef(null) // wrapper div — PNG export (html-to-image) จับทั้งก้อน (เดี่ยวหรือ compare grid)
   const svgRef = useRef(null)        // <svg> เดี่ยว หรือ panel แรกใน compare grid — export SVG/คัดลอก HTML
-
-  // วัดความกว้างจริงของกล่องแผนที่ → ส่งให้ CompareGrid ปรับขนาด panel ให้พอดี ไม่ล้นจนต้องเลื่อนแนวนอน
-  // วัดทุก render (useLayoutEffect ไม่มี deps) + ตอน resize — จับได้ทั้งตอนแผงข้างโหลดเสร็จ/สลับโหมด โดยไม่พึ่ง ResizeObserver
-  // guard >2px กันวนลูป (panel พอดีกล่องเสมอจึงไม่มี scrollbar มาป้อนกลับ)
-  const [areaWidth, setAreaWidth] = useState(CANVAS_W)
-  const measureArea = useCallback(() => {
-    const el = canvasAreaRef.current
-    if (!el) return
-    const cs = getComputedStyle(el)
-    const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
-    const w = Math.max(280, Math.round(el.clientWidth - pad - 2))
-    setAreaWidth(prev => (Math.abs(prev - w) > 2 ? w : prev))
-  }, [])
-  useLayoutEffect(measureArea) // ทุก render
-  useEffect(() => {
-    const raf = requestAnimationFrame(measureArea)
-    window.addEventListener('resize', measureArea)
-    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', measureArea) }
-  }, [measureArea])
 
   const [geojson, setGeojson] = useState(null)
   useEffect(() => {
@@ -70,6 +51,25 @@ export default function PixelMap() {
     loadCommunityIndex().then(setCommunityIndex).catch(err => console.warn('[pixel-map] community geojson unavailable:', err))
   }, [])
 
+  // วัดความกว้างจริงของกล่องแผนที่ → ส่งให้ CompareGrid ปรับขนาด panel ให้พอดี ไม่ล้นจนต้องเลื่อนแนวนอน
+  // วัด "เฉพาะตอน layout เปลี่ยน" (mount/resize/สลับโหมด/เพิ่ม-ลบ panel/ข้อมูลโหลด) — ไม่วัดทุก render
+  // สำคัญ: วัดทุก render จะวนลูปไม่จบ (เลือกเขต → scrollbar แนวตั้งโผล่/หาย → clientWidth แกว่ง → areaWidth แกว่ง) จนแอปแครช
+  // ใช้ offsetWidth (ไม่ขึ้นกับ scrollbar แนวตั้ง) + เผื่อ 18px กัน panel ล้นเวลามี scrollbar
+  const [areaWidth, setAreaWidth] = useState(CANVAS_W)
+  const measureArea = useCallback(() => {
+    const el = canvasAreaRef.current
+    if (!el) return
+    const cs = getComputedStyle(el)
+    const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
+    const w = Math.max(280, Math.round(el.offsetWidth - pad - 18))
+    setAreaWidth(prev => (Math.abs(prev - w) > 3 ? w : prev))
+  }, [])
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => requestAnimationFrame(measureArea))
+    window.addEventListener('resize', measureArea)
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', measureArea) }
+  }, [measureArea, mode, compareSlots.length, geojson, hierarchy])
+
   const dataLayers = useMemo(() => layers.filter(l => l.type === 'data'), [layers])
 
   // ── data overlay fetch — key เฉพาะ field ที่กระทบ query จริง กัน refetch ตอนแก้แค่สี/opacity ──
@@ -100,6 +100,15 @@ export default function PixelMap() {
 
   const [exportFullMap, setExportFullMap] = useState(false)
 
+  // โหมด export ของ compare — ซ่อนแถบเครื่องมือด้านบน (Sync zoom / Add panel) + ปุ่มบน panel ให้ภาพสะอาด (ดู CompareGrid)
+  const [exporting, setExporting] = useState(false)
+  const withCompareExport = useCallback(async (fn) => {
+    if (mode !== 'compare') return fn()
+    setExporting(true)
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+    try { await fn() } finally { setExporting(false) }
+  }, [mode])
+
   // ถ้า export "เต็มแผนที่" — reset zoom ทุกจุดเป็น identity ชั่วคราว รอ 2 เฟรมให้ d3-zoom sync กลับเข้า DOM จริง แล้วค่อย capture, restore ทีหลัง
   const withFullMapIfNeeded = useCallback(async (fn) => {
     if (!exportFullMap) return fn()
@@ -121,9 +130,9 @@ export default function PixelMap() {
 
   const handleExportPng = useCallback((scale) => {
     if (!canvasAreaRef.current) return
-    withFullMapIfNeeded(() => exportPng(canvasAreaRef.current, scale, `pixel-map-${scale}x.png`))
+    withCompareExport(() => withFullMapIfNeeded(() => exportPng(canvasAreaRef.current, scale, `pixel-map-${scale}x.png`)))
       .catch(err => console.error('[pixel-map] PNG export failed:', err))
-  }, [withFullMapIfNeeded])
+  }, [withCompareExport, withFullMapIfNeeded])
   const handleExportSvg = useCallback(() => {
     if (!svgRef.current) return
     withFullMapIfNeeded(() => { exportSvg(svgRef.current, 'pixel-map.svg') })
@@ -168,6 +177,7 @@ export default function PixelMap() {
               toggleCompareSlotDistrict={toggleCompareSlotDistrict} setCompareSlotDistricts={setCompareSlotDistricts}
               setCompareSlotColor={setCompareSlotColor}
               addComparePanel={addComparePanel} removeComparePanel={removeComparePanel}
+              exporting={exporting}
             />
           ) : (
             <MapCanvas

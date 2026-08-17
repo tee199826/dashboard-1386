@@ -13,16 +13,17 @@ import { TILE_SOURCES, visibleTiles } from '../../utils/pixelMapTiles'
 import ZoomControls from './ZoomControls'
 
 const FONT = "Inter, 'Noto Sans Thai', sans-serif"
-const SCALE_EXTENT = [1, 8]
+const SCALE_EXTENT = [1, 24] // ซูมเข้าได้ลึกถึงระดับถนน (tile รองรับถึง z18)
 const IDENTITY = { x: 0, y: 0, k: 1 }
 const LABEL_DEBOUNCE_MS = 150
 const EMPTY_SET = new Set()
 
 // ธีมพื้นแผนที่ — 'map' เลียนแบบหน้าแผนที่จริง (IncidentMap): นอกเขตเทาเข้มแบบ outer mask, ตัวเขตขาว, เส้นขอบน้ำเงินกรม
 const THEMES = {
-  map: { bg: '#4b5563', land: '#ffffff', border: '#1e3a8a', borderWidth: 1.8, title: '#f8fafc', caption: '#e2e8f0' },
-  light: { bg: '#ffffff', land: null, border: '#cbd5e1', borderWidth: 1, title: '#0f172a', caption: '#64748b' },
-  dark: { bg: '#0f172a', land: null, border: '#334155', borderWidth: 1, title: '#f8fafc', caption: '#94a3b8' },
+  map: { bg: '#4b5563', land: '#ffffff', border: '#1e3a8a', borderWidth: 2.4, title: '#f8fafc', caption: '#e2e8f0' },
+  light: { bg: '#ffffff', land: null, border: '#94a3b8', borderWidth: 1.4, title: '#0f172a', caption: '#64748b' },
+  dark: { bg: '#0f172a', land: null, border: '#475569', borderWidth: 1.4, title: '#f8fafc', caption: '#94a3b8' },
+  clear: { bg: 'transparent', land: null, border: '#1e3a8a', borderWidth: 2.4, title: '#0f172a', caption: '#64748b' }, // พื้นหลังใส เหลือแต่เส้นขอบทึบ
 }
 // hover: ฟ้าอ่อน + ขอบน้ำเงินสด ตามพฤติกรรม mouseover ของ IncidentMap
 const HOVER_FILL = '#3b82f6'
@@ -101,7 +102,11 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
 }, ref) {
   const theme = THEMES[style.background] ?? THEMES.map
   const bg = theme.bg
-  const land = (style.tileSource && TILE_SOURCES[style.tileSource] ? '#ffffff' : theme.land) ?? theme.bg
+  // ธีม 'clear' (พื้นหลังใส) — ปิดภาพแผนที่เสมอ ให้พื้นหลังโปร่งจริง เหลือแต่เส้นขอบ
+  const tilesEnabled = !!TILE_SOURCES[style.tileSource] && style.background !== 'clear'
+  // land = ฐานเทียบ contrast + สี halo ของชื่อพื้นที่ (ไม่ใช่สีพื้นที่วาดจริง ซึ่งใช้ theme.land) —
+  // พื้นหลังใสยังต้องอ่านชื่อออก จึงเทียบกับขาว (ตัวอักษรเข้ม + halo ขาว) แทนโปร่งใส
+  const land = (tilesEnabled ? '#ffffff' : theme.land) ?? (bg === 'transparent' ? '#ffffff' : bg)
   // land = สีพื้นของ "ตัวเขต" ใช้เป็นสี halo/ตัวเทียบ contrast ของชื่อพื้นที่ — เปิดภาพแผนที่แล้วพื้นในเขตสว่าง จึงเทียบกับขาว
   const borderStroke = theme.border
   const titleFill = theme.title
@@ -193,10 +198,13 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
   }, [geojson, checkedDistricts, checkedSubdistricts, checkedCommunities, hierarchy, project, width, height, applyTransform])
 
   // auto-fit เมื่อเปลี่ยนพื้นที่ที่ติ๊ก (ถ้าเปิด toggle)
+  // ผูก effect กับ "ค่า" ของ selection (string) ไม่ใช่ reference ของ Set — โหมด compare สร้าง Set ใหม่ทุก render
+  // ถ้าผูกกับ Set ตรงๆ effect จะรันทุก render → auto-fit → zoom เปลี่ยน → re-render → วนไม่จบ (Maximum update depth)
+  const selectionKey = [...checkedDistricts].sort().join(',') + '~' + [...checkedSubdistricts].sort().join(',') + '~' + [...checkedCommunities].sort().join(',')
   useEffect(() => {
     if (style.autoFitOnSelection) centerOnSelected()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checkedDistricts, checkedSubdistricts, checkedCommunities])
+  }, [selectionKey, style.autoFitOnSelection])
 
   // path string ของทุกเขตคำนวณครั้งเดียว ใช้ซ้ำทั้ง border pass / fill pass (เดิมคำนวณซ้ำ 2 รอบ)
   const districtPaths = useMemo(() => {
@@ -270,6 +278,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
       const xs = pts.map(p => p[0]); const ys = pts.map(p => p[1])
       out.push({
         key, dname: district, text: sub, value: nodeMetricValue(node.meta, labelsConfig.metric),
+        count: nodeMetricValue(node.meta, 'count'),
         x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2,
         bottom: Math.max(...ys), d, approx,
       })
@@ -373,7 +382,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
       const x = pts.length ? (Math.min(...xs) + Math.max(...xs)) / 2 : px
       const y = pts.length ? (Math.min(...ys) + Math.max(...ys)) / 2 : py
       const bottom = pts.length ? Math.max(...ys) : py
-      out.push({ key, dname: district, text: name, x, y, bottom, d, approx, value: nodeMetricValue(c, labelsConfig.metric) })
+      out.push({ key, dname: district, text: name, x, y, bottom, d, approx, value: nodeMetricValue(c, labelsConfig.metric), count: nodeMetricValue(c, 'count') })
     }
     return out
   }, [checkedCommunities, hierarchy, communityIndex, subdistrictIndex, districtFeatureByName, project, labelsConfig.metric])
@@ -402,11 +411,11 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
 
   // ── basemap: tile ของ OpenStreetMap ตามกรอบที่มองเห็น + ระดับซูมปัจจุบัน (ใช้ debouncedT กันโหลดรัวตอนลาก) ──
   const tileLayer = useMemo(() => {
-    const src = TILE_SOURCES[style.tileSource]
+    const src = tilesEnabled ? TILE_SOURCES[style.tileSource] : null
     if (!src) return null
     const { tiles } = visibleTiles({ project, unproject, width, height, transform: debouncedT })
     return tiles.length === 0 ? null : { tiles, url: src.url, attribution: src.attribution }
-  }, [style.tileSource, project, unproject, width, height, debouncedT])
+  }, [tilesEnabled, style.tileSource, project, unproject, width, height, debouncedT])
 
   // mask นอกเขต กทม. — สี่เหลี่ยมใหญ่เจาะรูด้วย ring ของทุกเขต (evenodd) เทียบเท่า buildOuterMask ของแผนที่ leaflet
   const outerMaskD = useMemo(() => {
@@ -417,11 +426,26 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
 
   // hover เขต — ตำแหน่ง tooltip คำนวณจาก bounding rect ของ svg (offsetX/Y ของ path ใน SVG เชื่อถือไม่ได้ข้ามเบราว์เซอร์)
   const districtPathById = useMemo(() => Object.fromEntries(districtPaths.map(f => [f.dname, f.d])), [districtPaths])
-  const handleHoverMove = useCallback((dname) => (e) => {
+  // จำนวนเคสของเขต = ผลรวมของ data overlay ที่เปิดอยู่ (ถ้ามี) ไม่งั้นใช้จำนวนเหตุการณ์ทั้งหมดจาก hierarchy
+  const hoverCountOf = useCallback((dname) => {
+    const activeLayer = dataLayers.find(l => l.visible && layerCounts[l.id]?.counts)
+    if (activeLayer) return layerCounts[activeLayer.id].counts[dname] ?? 0
+    return nodeMetricValue(hierarchy[dname]?.meta, 'count')
+  }, [dataLayers, layerCounts, hierarchy])
+
+  // hover ทั่วไป — level = 'district' | 'subdistrict' | 'community' ; dname ใช้ไฮไลต์เขต, label = ชื่อที่โชว์
+  const posOf = useCallback((e) => {
     const rect = svgInternalRef.current?.getBoundingClientRect()
-    if (!rect) return
-    setHover({ dname, x: e.clientX - rect.left, y: e.clientY - rect.top })
+    return rect ? { x: e.clientX - rect.left, y: e.clientY - rect.top } : null
   }, [])
+  const handleHoverMove = useCallback((dname) => (e) => {
+    const pos = posOf(e); if (!pos) return
+    setHover({ level: 'district', dname, label: dname, count: hoverCountOf(dname), ...pos })
+  }, [posOf, hoverCountOf])
+  const handleAreaHover = useCallback((level, dname, label, count) => (e) => {
+    const pos = posOf(e); if (!pos) return
+    setHover({ level, dname, label, count, ...pos })
+  }, [posOf])
 
 
   // พื้นหลังใต้ตัวอักษร = สีพื้นที่จริงที่ตัวอักษรทับอยู่ (ใช้เทียบ contrast + สี halo)
@@ -465,11 +489,17 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
             )}
           </g>
 
-          {/* Layer 1: เขต — เส้นขอบ (โหมดโฟกัสวาดเฉพาะเขตที่เลือก) */}
+          {/* Layer 1: เขต — เส้นขอบแบ่งเขต (โหมดโฟกัสวาดเฉพาะเขตที่เลือก)
+              วาด 2 ชั้น: halo ขาวรองใต้ + เส้นสีทับ ให้เส้นแบ่งตัดกับภาพแผนที่ชัดเจน (cased line แบบแผนที่มาตรฐาน) */}
           {style.showBorders && (
-            <g fill="none" stroke={borderStroke} strokeWidth={theme.borderWidth / t.k} strokeLinejoin="round">
-              {visibleDistrictPaths.map(f => <path key={f.dcode} d={f.d} />)}
-            </g>
+            <>
+              <g fill="none" stroke="#ffffff" strokeWidth={(theme.borderWidth + 2.5) / t.k} strokeLinejoin="round" strokeOpacity={0.75}>
+                {visibleDistrictPaths.map(f => <path key={f.dcode} d={f.d} />)}
+              </g>
+              <g fill="none" stroke={borderStroke} strokeWidth={theme.borderWidth / t.k} strokeLinejoin="round">
+                {visibleDistrictPaths.map(f => <path key={f.dcode} d={f.d} />)}
+              </g>
+            </>
           )}
           {/* เขตที่ติ๊ก — ระบายสีจาง+ กรอบสี ให้ "เขตที่เลือก = เขตที่เป็นสี" เสมอ (ทั้งบนแผนที่เต็มและโหมดโฟกัส)
               คู่กับ autoFitOnSelection ที่ซูมเข้าไปที่เขตนั้น จึงได้ไฮไลต์+ซูม แบบหน้าแผนที่ยาเสพติด (IncidentMap) */}
@@ -500,18 +530,18 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
           })}
           </g>
 
-          {/* Layer 2: แขวง — ระบายทึบเต็มพื้นที่ตามรูปอ้างอิง (พื้นที่จริงจากไฟล์ BMA / Voronoi ถ้าไม่มี) */}
+          {/* Layer 2: แขวง — ระบายทึบเต็มพื้นที่ + เส้นขอบขาว ให้แต่ละแขวงแบ่งกันชัด */}
           {subdistrictLayer.visible && subdistrictShapes.length > 0 && (
-            <g fill={subdistrictLayer.color} stroke={subdistrictLayer.color}
-              strokeWidth={1.2 / t.k} strokeLinejoin="round"
+            <g fill={subdistrictLayer.color} stroke="#ffffff"
+              strokeWidth={1.8 / t.k} strokeLinejoin="round"
               opacity={subdistrictLayer.opacity / 100} pointerEvents="none">
               {subdistrictShapes.map(s => (s.d ? <path key={s.key} d={s.d} /> : null))}
             </g>
           )}
 
-          {/* ชุมชนที่ติ๊ก — ระบายทึบเต็มพื้นที่ตามรูปอ้างอิง (พื้นที่จริงจากไฟล์ / Voronoi ถ้าไม่มี) */}
+          {/* ชุมชนที่ติ๊ก — ระบายทึบเต็มพื้นที่ (สีจาก labelsConfig.communityColor) + เส้นขอบขาว ให้แต่ละชุมชนแบ่งกันชัด */}
           {checkedCommunityPoints.length > 0 && (
-            <g fill={ROSE_DEFAULT} stroke={ROSE_DEFAULT} strokeWidth={1.2 / t.k} strokeLinejoin="round" pointerEvents="none">
+            <g fill={labelsConfig.communityColor ?? ROSE_DEFAULT} stroke="#ffffff" strokeWidth={1.6 / t.k} strokeLinejoin="round" pointerEvents="none">
               {checkedCommunityPoints.map(p => (p.d ? <path key={p.key} d={p.d} /> : null))}
             </g>
           )}
@@ -525,6 +555,18 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
             {visibleDistrictPaths.map(f => (
               <path key={f.dcode} d={f.d} onMouseMove={handleHoverMove(f.dname)} onMouseLeave={() => setHover(null)} />
             ))}
+          </g>
+
+          {/* โซนรับ event ระดับแขวง แล้วชุมชน — วางทับโซนเขต ให้พื้นที่ย่อยที่ระบายไว้ตอบ hover ก่อน (ชุมชนอยู่บนสุด = ละเอียดสุด) */}
+          <g fill="transparent" stroke="none">
+            {subdistrictShapes.map(s => (s.d
+              ? <path key={s.key} d={s.d} onMouseMove={handleAreaHover('subdistrict', s.dname, s.text, s.count)} onMouseLeave={() => setHover(null)} />
+              : null))}
+          </g>
+          <g fill="transparent" stroke="none">
+            {checkedCommunityPoints.map(p => (p.d
+              ? <path key={p.key} d={p.d} onMouseMove={handleAreaHover('community', p.dname, p.text, p.count)} onMouseLeave={() => setHover(null)} />
+              : null))}
           </g>
 
           {/* ชื่อพื้นที่ เขต/แขวง/ชุมชน — วาดบนสุด */}
@@ -557,12 +599,19 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
           </g>
         )}
       </svg>
-      {/* tooltip ชื่อเขตตามเมาส์ — พิลดำหางล่าง เหมือน .district-tooltip ของแผนที่ leaflet */}
+      {/* tooltip ชื่อเขต + จำนวนเคสตามเมาส์ — พิลดำหางล่าง เหมือน .district-tooltip ของแผนที่ leaflet */}
       {hover && (
         <div className="absolute pointer-events-none z-10 -translate-x-1/2 -translate-y-full"
           style={{ left: hover.x, top: hover.y - 10 }}>
-          <div className="rounded-md bg-slate-900/90 px-2 py-1 text-xs font-semibold text-white whitespace-nowrap shadow-lg">
-            {hover.dname}
+          <div className="rounded-md bg-slate-900/90 px-2.5 py-1 text-white whitespace-nowrap shadow-lg text-center">
+            <div className="text-xs font-semibold">
+              {hover.level === 'subdistrict' && <span className="text-slate-400 font-normal">แขวง </span>}
+              {hover.level === 'community' && <span className="text-slate-400 font-normal">ชุมชน </span>}
+              {hover.level === 'district' ? hover.label : hover.label.replace(/^(แขวง|ชุมชน)\s*/, '')}
+            </div>
+            <div className="text-[11px] text-slate-200">
+              <span className="font-bold text-amber-300 tabular-nums">{(hover.count ?? 0).toLocaleString()}</span> เรื่อง
+            </div>
           </div>
           <div className="mx-auto h-0 w-0 border-x-4 border-t-4 border-x-transparent border-t-slate-900/90" />
         </div>
