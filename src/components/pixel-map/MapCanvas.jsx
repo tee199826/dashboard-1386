@@ -30,6 +30,7 @@ const HOVER_FILL = '#3b82f6'
 const HOVER_STROKE = '#1d4ed8'
 const FOCUS_LAND = '#e2e8f0' // สีพื้นของเขตในโหมดโฟกัสเมื่อไม่ได้เปิดภาพแผนที่
 const FOCUS_DISTRICT_FILL_OPACITY = 0.22 // ระบายเขตที่เลือกแบบจางๆ ให้ยังเห็นภาพแผนที่/แขวงที่ทับอยู่ข้างบน
+const AREA_FILL_OPACITY = 0.28 // แขวง/ชุมชน — ข้างในใสจางๆ (เห็นแผนที่ทะลุ) ขอบทึบสีเข้ม
 const DISTRICT_NAME_SIZE = { sm: 10, md: 13, lg: 16 }
 const SUBDISTRICT_NAME_SIZE = { sm: 9.5, md: 12, lg: 14.5 }
 const COMMUNITY_NAME_SIZE = { sm: 9, md: 11, lg: 13 }
@@ -530,18 +531,19 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
           })}
           </g>
 
-          {/* Layer 2: แขวง — ระบายทึบเต็มพื้นที่ + เส้นขอบขาว ให้แต่ละแขวงแบ่งกันชัด */}
+          {/* Layer 2: แขวง — ข้างในใส (โปร่งเห็นแผนที่) + ขอบทึบสีเข้ม */}
           {subdistrictLayer.visible && subdistrictShapes.length > 0 && (
-            <g fill={subdistrictLayer.color} stroke="#ffffff"
-              strokeWidth={1.8 / t.k} strokeLinejoin="round"
+            <g fill={subdistrictLayer.color} fillOpacity={AREA_FILL_OPACITY} stroke={subdistrictLayer.color}
+              strokeWidth={2.4 / t.k} strokeLinejoin="round"
               opacity={subdistrictLayer.opacity / 100} pointerEvents="none">
               {subdistrictShapes.map(s => (s.d ? <path key={s.key} d={s.d} /> : null))}
             </g>
           )}
 
-          {/* ชุมชนที่ติ๊ก — ระบายทึบเต็มพื้นที่ (สีจาก labelsConfig.communityColor) + เส้นขอบขาว ให้แต่ละชุมชนแบ่งกันชัด */}
+          {/* ชุมชนที่ติ๊ก — ข้างในใส + ขอบทึบสีเข้ม (สีจาก labelsConfig.communityColor) */}
           {checkedCommunityPoints.length > 0 && (
-            <g fill={labelsConfig.communityColor ?? ROSE_DEFAULT} stroke="#ffffff" strokeWidth={1.6 / t.k} strokeLinejoin="round" pointerEvents="none">
+            <g fill={labelsConfig.communityColor ?? ROSE_DEFAULT} fillOpacity={AREA_FILL_OPACITY}
+              stroke={labelsConfig.communityColor ?? ROSE_DEFAULT} strokeWidth={2.2 / t.k} strokeLinejoin="round" pointerEvents="none">
               {checkedCommunityPoints.map(p => (p.d ? <path key={p.key} d={p.d} /> : null))}
             </g>
           )}
