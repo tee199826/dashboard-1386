@@ -9,6 +9,7 @@ import LayerPanel from '../components/pixel-map/LayerPanel'
 import StylePanel from '../components/pixel-map/StylePanel'
 import MapCanvas from '../components/pixel-map/MapCanvas'
 import CompareGrid from '../components/pixel-map/CompareGrid'
+import YearPicker from '../components/pixel-map/YearPicker'
 import AccordionSection from '../components/pixel-map/AccordionSection'
 
 const CANVAS_W = 900
@@ -24,11 +25,22 @@ export default function PixelMap() {
     loadDistrictGeoJSON().then(setGeojson).catch(err => console.error('[pixel-map] geojson load failed:', err))
   }, [])
 
-  // hierarchy เดียว: เขต→แขวง→ชุมชน (meta/centroid/count) — ฐานของ tree และตัวเลขทุกระดับ
+  // ปีงบประมาณที่เลือก (ติ๊กได้หลายปี) — ว่าง = ทุกปี ; กรอง hierarchy (นับเคสทุกระดับ) ทั้งหน้า
+  const [years, setYears] = useState(() => new Set())
+  const [yearOptions, setYearOptions] = useState([])
+  useEffect(() => {
+    getAvailableFiscalYears('drug_incidents').then(setYearOptions).catch(() => {})
+  }, [])
+  const toggleYear = useCallback((y) => setYears(s => { const n = new Set(s); n.has(y) ? n.delete(y) : n.add(y); return n }), [])
+  const clearYears = useCallback(() => setYears(new Set()), [])
+  const yearsKey = [...years].sort().join(',') // key คงที่สำหรับ effect (Set เปลี่ยน identity ทุก render)
+
+  // hierarchy เดียว: เขต→แขวง→ชุมชน (meta/centroid/count) — ฐานของ tree และตัวเลขทุกระดับ ; โหลดใหม่เมื่อเปลี่ยนปีที่ติ๊ก
   const [hierarchy, setHierarchy] = useState({})
   useEffect(() => {
-    getCommunityHierarchy().then(setHierarchy).catch(err => console.error('[pixel-map] hierarchy load failed:', err))
-  }, [])
+    getCommunityHierarchy(years).then(setHierarchy).catch(err => console.error('[pixel-map] hierarchy load failed:', err))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yearsKey])
 
   const {
     mode, setMode,
@@ -145,11 +157,15 @@ export default function PixelMap() {
 
   return (
     <div className="min-h-full bg-slate-50 p-4 lg:p-6">
-      <div className="mb-5">
-        <h1 className="text-xl font-bold text-slate-900">Pixel Map Generator · กทม.</h1>
-        <p className="text-sm text-slate-500">
-          เลือกเขต → แขวง → เปิดตัวเลขที่ต้องการ ซูม/แพนสำรวจ ซ้อน data overlay เปรียบเทียบแบบ compare — export PNG/SVG ใช้ในงานนำเสนอ
-        </p>
+      <div className="mb-5 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Pixel Map Generator · กทม.</h1>
+          <p className="text-sm text-slate-500">
+            เลือกเขต → แขวง → เปิดตัวเลขที่ต้องการ ซูม/แพนสำรวจ ซ้อน data overlay เปรียบเทียบแบบ compare — export PNG/SVG ใช้ในงานนำเสนอ
+          </p>
+        </div>
+        {/* เลือกปีงบประมาณ (ติ๊กได้หลายปี) — กรองจำนวนเคสทุกระดับ (tree/label/hover) ตามปีที่เลือก */}
+        <YearPicker options={yearOptions} selected={years} onToggle={toggleYear} onClear={clearYears} />
       </div>
 
       <div className="flex flex-col lg:flex-row gap-4 items-start relative">

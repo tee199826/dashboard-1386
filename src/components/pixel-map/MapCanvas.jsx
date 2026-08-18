@@ -15,7 +15,6 @@ import ZoomControls from './ZoomControls'
 const FONT = "Inter, 'Noto Sans Thai', sans-serif"
 const SCALE_EXTENT = [1, 24] // ซูมเข้าได้ลึกถึงระดับถนน (tile รองรับถึง z18)
 const IDENTITY = { x: 0, y: 0, k: 1 }
-const LABEL_DEBOUNCE_MS = 150
 const EMPTY_SET = new Set()
 
 // ธีมพื้นแผนที่ — 'map' เลียนแบบหน้าแผนที่จริง (IncidentMap): นอกเขตเทาเข้มแบบ outer mask, ตัวเขตขาว, เส้นขอบน้ำเงินกรม
@@ -156,11 +155,14 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
 
   const [hover, setHover] = useState(null) // { dname, x, y } — x/y เป็น px ในกรอบ svg สำหรับวาง tooltip
 
-  // debounce เฉพาะ input ของ label placement (viewport cull + collision) — <g transform> ของแผนที่เองยังใช้ t สดเพื่อความลื่น
+  // throttle ด้วย requestAnimationFrame แทน debounce 150ms — label placement (cull + collision) อัปเดต
+  // "ทุกเฟรม" ระหว่างซูม/แพน จึงตามการเคลื่อนไหวแบบเรียลไทม์ ลื่นขึ้น (เดิมรอ 150ms หลังหยุดถึงค่อยขยับ = หน่วง/กระตุก)
   const [debouncedT, setDebouncedT] = useState(t)
+  const labelRafRef = useRef(0)
   useEffect(() => {
-    const id = setTimeout(() => setDebouncedT(t), LABEL_DEBOUNCE_MS)
-    return () => clearTimeout(id)
+    cancelAnimationFrame(labelRafRef.current)
+    labelRafRef.current = requestAnimationFrame(() => setDebouncedT(t))
+    return () => cancelAnimationFrame(labelRafRef.current)
   }, [t.x, t.y, t.k]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const applyTransform = useCallback((next) => {

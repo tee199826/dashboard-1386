@@ -126,12 +126,15 @@ function bumpFlags(target, r) {
 // key แขวง/ชุมชน เป็น composite เสมอ (district อยู่ใน object แม่อยู่แล้ว) — กันชื่อแขวงซ้ำข้ามเขต (พบจริง 59 ชื่อ)
 // ไม่รับ filter — ใช้เป็น "ฐาน" ของ tree/label ทั้งหมด นับแบบ all-time (ตาม query ตัวอย่างใน spec)
 // complaints/bkn_summary ไม่มี lat/lng รายแถว จึงทำ hierarchy ได้จาก drug_incidents เท่านั้น
-export async function getCommunityHierarchy() {
-  const select = ['district', 'subdistrict', 'community', 'lat', 'lng', ...HIERARCHY_FLAG_COLS].join(', ')
+// years: 'all' (ทุกปี) หรือ Set/array ของปีงบประมาณที่เลือก (ติ๊กได้หลายปี) — ว่าง = ทุกปี
+export async function getCommunityHierarchy(years = 'all') {
+  const yearSet = (years === 'all' || !years || (years.size ?? years.length) === 0) ? null : new Set([...years].map(String))
+  const select = ['district', 'subdistrict', 'community', 'lat', 'lng', 'fiscal_year', ...HIERARCHY_FLAG_COLS].join(', ')
   const rows = await fetchAllPages('drug_incidents', select)
 
   const tree = {}
   for (const r of rows) {
+    if (yearSet && !yearSet.has(String(r.fiscal_year))) continue // กรองตามปีงบประมาณที่ติ๊กไว้ (union ของปีที่เลือก)
     const d = r.district
     if (!isBangkokDistrict(d) || !r.subdistrict) continue
     const district = (tree[d] ||= { meta: makeMeta(), subdistricts: {} })
