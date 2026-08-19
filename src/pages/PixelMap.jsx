@@ -112,14 +112,13 @@ export default function PixelMap() {
 
   const [exportFullMap, setExportFullMap] = useState(false)
 
-  // โหมด export ของ compare — ซ่อนแถบเครื่องมือด้านบน (Sync zoom / Add panel) + ปุ่มบน panel ให้ภาพสะอาด (ดู CompareGrid)
+  // โหมด export — ใช้ทั้ง multi และ compare: compare ซ่อนแถบเครื่องมือ, ทุกโหมดโชว์ตัวเลขจำนวนเคสของพื้นที่ที่เลือกในรูป
   const [exporting, setExporting] = useState(false)
-  const withCompareExport = useCallback(async (fn) => {
-    if (mode !== 'compare') return fn()
+  const withExportMode = useCallback(async (fn) => {
     setExporting(true)
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
     try { await fn() } finally { setExporting(false) }
-  }, [mode])
+  }, [])
 
   // ถ้า export "เต็มแผนที่" — reset zoom ทุกจุดเป็น identity ชั่วคราว รอ 2 เฟรมให้ d3-zoom sync กลับเข้า DOM จริง แล้วค่อย capture, restore ทีหลัง
   const withFullMapIfNeeded = useCallback(async (fn) => {
@@ -142,14 +141,14 @@ export default function PixelMap() {
 
   const handleExportPng = useCallback((scale) => {
     if (!canvasAreaRef.current) return
-    withCompareExport(() => withFullMapIfNeeded(() => exportPng(canvasAreaRef.current, scale, `pixel-map-${scale}x.png`)))
+    withExportMode(() => withFullMapIfNeeded(() => exportPng(canvasAreaRef.current, scale, `pixel-map-${scale}x.png`)))
       .catch(err => console.error('[pixel-map] PNG export failed:', err))
-  }, [withCompareExport, withFullMapIfNeeded])
+  }, [withExportMode, withFullMapIfNeeded])
   const handleExportSvg = useCallback(() => {
     if (!svgRef.current) return
-    withFullMapIfNeeded(() => { exportSvg(svgRef.current, 'pixel-map.svg') })
+    withExportMode(() => withFullMapIfNeeded(() => { exportSvg(svgRef.current, 'pixel-map.svg') }))
       .catch(err => console.error('[pixel-map] SVG export failed:', err))
-  }, [withFullMapIfNeeded])
+  }, [withExportMode, withFullMapIfNeeded])
   const handleCopyEmbed = useCallback(() => {
     if (!svgRef.current) return
     copyEmbedHtml(svgRef.current).catch(err => console.error('[pixel-map] copy embed failed:', err))
@@ -202,7 +201,7 @@ export default function PixelMap() {
               geojson={geojson} hierarchy={hierarchy} subdistrictIndex={subdistrictIndex} communityIndex={communityIndex}
               checkedDistricts={checkedDistricts} checkedSubdistricts={checkedSubdistricts} checkedCommunities={checkedCommunities}
               layers={layers} layerCounts={layerCounts} levelMaxes={levelMaxes} labelsConfig={labelsConfig}
-              style={style}
+              style={style} exporting={exporting}
               zoomTransform={zoomTransform} onZoomChange={setZoomTransform}
             />
           )}

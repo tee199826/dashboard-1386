@@ -91,7 +91,7 @@ export default function CompareGrid({
                 width={panelW} height={panelH}
                 geojson={geojson} hierarchy={hierarchy} subdistrictIndex={subdistrictIndex} communityIndex={communityIndex}
                 checkedDistricts={checkedDistricts} checkedSubdistricts={panelSubs} checkedCommunities={panelCommunities}
-                layers={panelLayers} layerCounts={layerCounts} labelsConfig={labelsConfig} style={style}
+                layers={panelLayers} layerCounts={layerCounts} labelsConfig={labelsConfig} style={style} exporting={exporting}
                 panelLabel={exporting ? '' : label}
                 zoomTransform={syncZoom ? sharedCompareZoom : slot.zoom}
                 onZoomChange={syncZoom ? setSharedCompareZoom : (t) => setCompareSlotZoom(slot.id, t)}

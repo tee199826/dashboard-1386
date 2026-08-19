@@ -31,16 +31,23 @@ function finalize(counts, meta = {}) {
 }
 
 // ปีงบที่มีข้อมูลจริง — ใช้เติม dropdown ปีงบ (bkn_summary ไม่มีปีงบ คืน [])
-export async function getAvailableFiscalYears(source) {
-  if (source === 'drug_incidents') {
-    const rows = await fetchAllPages('drug_incidents', 'fiscal_year')
-    return [...new Set(rows.map(r => r.fiscal_year).filter(Boolean))].sort((a, b) => b - a)
-  }
-  if (source === 'complaints') {
-    const rows = await fetchAllPages('complaints', 'received_date')
-    return [...new Set(rows.map(r => dateToFiscalYear(r.received_date)).filter(Boolean))].sort((a, b) => b - a)
-  }
-  return []
+// cache ต่อ source (ถูกเรียกหลายที่บน mount) + ดึงแบบขนาน — กันสแกนตารางซ้ำโดยเปล่าประโยชน์
+const _fiscalYearsCache = {}
+export function getAvailableFiscalYears(source) {
+  if (_fiscalYearsCache[source]) return _fiscalYearsCache[source]
+  const compute = (async () => {
+    if (source === 'drug_incidents') {
+      const rows = await fetchAllPages('drug_incidents', 'fiscal_year', { parallel: true })
+      return [...new Set(rows.map(r => r.fiscal_year).filter(Boolean))].sort((a, b) => b - a)
+    }
+    if (source === 'complaints') {
+      const rows = await fetchAllPages('complaints', 'received_date', { parallel: true })
+      return [...new Set(rows.map(r => dateToFiscalYear(r.received_date)).filter(Boolean))].sort((a, b) => b - a)
+    }
+    return []
+  })().catch(err => { delete _fiscalYearsCache[source]; throw err }) // ล้มเหลว → ให้ลองใหม่ได้
+  _fiscalYearsCache[source] = compute
+  return compute
 }
 
 async function getIncidentCounts({ substance, behavior, fiscalYear, bkn }) {
@@ -120,17 +127,29 @@ function bumpFlags(target, r) {
   for (const [col] of ACTION_FLAGS) if (r[col]) target.byAction[col] = (target.byAction[col] || 0) + 1
 }
 
+// แถวดิบสำหรับสร้าง hierarchy — ดึงจาก Supabase ครั้งเดียวต่อ session แล้ว cache ไว้
+// เปลี่ยนปีที่เลือกไม่ต้อง fetch ใหม่ (ข้อมูลดิบชุดเดิม กรอง/นับในหน่วยความจำ = เร็วมาก ไม่หน่วง)
+let _hierarchyRowsPromise = null
+function fetchHierarchyRows() {
+  if (!_hierarchyRowsPromise) {
+    const select = ['district', 'subdistrict', 'community', 'lat', 'lng', 'fiscal_year', ...HIERARCHY_FLAG_COLS].join(', ')
+    _hierarchyRowsPromise = fetchAllPages('drug_incidents', select, { parallel: true }).catch(err => {
+      _hierarchyRowsPromise = null // ล้มเหลว → ให้ครั้งหน้าลองใหม่ ไม่ค้าง promise ที่ reject
+      throw err
+    })
+  }
+  return _hierarchyRowsPromise
+}
+
 // hierarchy เดียวจบ: เขต (meta: count/bySubstance/byAction รวมทั้งเขต)
 //   → แขวง (centroid จาก "ทุกแถวที่มี lat/lng" ของแขวงนั้น ไม่ใช่แค่แถวมีชุมชน — centroid แม่นกว่า, + meta รวมทั้งแขวง)
 //     → ชุมชน (centroid+count เฉพาะแถวที่มี community, มักมีแค่ ~28% ของข้อมูล — shape เดียวกับ meta คือ {count,bySubstance,byAction})
 // key แขวง/ชุมชน เป็น composite เสมอ (district อยู่ใน object แม่อยู่แล้ว) — กันชื่อแขวงซ้ำข้ามเขต (พบจริง 59 ชื่อ)
-// ไม่รับ filter — ใช้เป็น "ฐาน" ของ tree/label ทั้งหมด นับแบบ all-time (ตาม query ตัวอย่างใน spec)
 // complaints/bkn_summary ไม่มี lat/lng รายแถว จึงทำ hierarchy ได้จาก drug_incidents เท่านั้น
 // years: 'all' (ทุกปี) หรือ Set/array ของปีงบประมาณที่เลือก (ติ๊กได้หลายปี) — ว่าง = ทุกปี
 export async function getCommunityHierarchy(years = 'all') {
   const yearSet = (years === 'all' || !years || (years.size ?? years.length) === 0) ? null : new Set([...years].map(String))
-  const select = ['district', 'subdistrict', 'community', 'lat', 'lng', 'fiscal_year', ...HIERARCHY_FLAG_COLS].join(', ')
-  const rows = await fetchAllPages('drug_incidents', select)
+  const rows = await fetchHierarchyRows()
 
   const tree = {}
   for (const r of rows) {
