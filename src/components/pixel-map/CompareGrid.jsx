@@ -16,7 +16,7 @@ export default function CompareGrid({
   districtOptions, availableWidth = 900, checkedSubdistricts, checkedCommunities, toggleSubdistrict, toggleCommunity,
   syncZoom, setSyncZoom, sharedCompareZoom, setSharedCompareZoom, setCompareSlotZoom,
   toggleCompareSlotDistrict, setCompareSlotDistricts, setCompareSlotColor, addComparePanel, removeComparePanel,
-  exporting = false,
+  exporting = false, showExportNumbers = true,
 }) {
   const slotLabel = (districts) => (districts.length === 1 ? districts[0] : districts.length > 1 ? `${districts.length} เขต` : null)
   // ขนาด panel + จำนวนคอลัมน์คิดจากพื้นที่จริง — ถ้ากว้างไม่พอสำหรับ 2 คอลัมน์ที่ความกว้างขั้นต่ำ ให้ยุบเหลือ 1 คอลัมน์ (ไม่ล้น/ไม่ต้องเลื่อน)
@@ -92,6 +92,7 @@ export default function CompareGrid({
                 geojson={geojson} hierarchy={hierarchy} subdistrictIndex={subdistrictIndex} communityIndex={communityIndex}
                 checkedDistricts={checkedDistricts} checkedSubdistricts={panelSubs} checkedCommunities={panelCommunities}
                 layers={panelLayers} layerCounts={layerCounts} labelsConfig={labelsConfig} style={style} exporting={exporting}
+                showExportNumbers={showExportNumbers}
                 panelLabel={exporting ? '' : label}
                 zoomTransform={syncZoom ? sharedCompareZoom : slot.zoom}
                 onZoomChange={syncZoom ? setSharedCompareZoom : (t) => setCompareSlotZoom(slot.id, t)}

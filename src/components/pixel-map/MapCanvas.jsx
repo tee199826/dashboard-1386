@@ -97,7 +97,7 @@ const PlaceNameLabel = memo(function PlaceNameLabel({ x, y, text, fontSize, fill
 const PixelMapCanvas = forwardRef(function PixelMapCanvas({
   width, height, geojson, hierarchy, subdistrictIndex, communityIndex,
   checkedDistricts, checkedSubdistricts, checkedCommunities = EMPTY_SET,
-  layers, layerCounts, labelsConfig, style, panelLabel, exporting = false,
+  layers, layerCounts, labelsConfig, style, panelLabel, exporting = false, showExportNumbers = true,
   zoomTransform, onZoomChange,
 }, ref) {
   const theme = THEMES[style.background] ?? THEMES.map
@@ -420,7 +420,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
   // ── ตัวเลขจำนวนเคสของ "พื้นที่ที่เลือก" — โชว์เฉพาะตอน export ให้ติดไปในรูป (ชุมชน > แขวง > เขต ตามระดับที่ลึกสุดที่ติ๊ก)
   // ระดับที่ลึกกว่าอยู่บนสุด ; ตำแหน่งอิงจากรูปทรง/centroid เดียวกับป้ายชื่อ ; ค่า = จำนวนเคส (metric 'count')
   const exportNumbers = useMemo(() => {
-    if (!exporting) return []
+    if (!exporting || !showExportNumbers) return []
     const out = []
     for (const dname of checkedDistricts) {
       const pos = districtCentroids[dname]
@@ -429,7 +429,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
     for (const s of subdistrictShapes) out.push({ key: `n:s:${s.key}`, x: s.x, y: s.y, label: s.text, count: s.count })
     for (const c of checkedCommunityPoints) out.push({ key: `n:c:${c.key}`, x: c.x, y: c.y, label: c.text, count: c.count })
     return out
-  }, [exporting, checkedDistricts, districtCentroids, hierarchy, subdistrictShapes, checkedCommunityPoints])
+  }, [exporting, showExportNumbers, checkedDistricts, districtCentroids, hierarchy, subdistrictShapes, checkedCommunityPoints])
 
   // จัดตำแหน่งป้าย export ในพิกัด "จอ" + กันชน — ถ้าจุดฐานทับกัน เลื่อนขึ้น/ลงทีละก้อนจนไม่ทับ (โชว์ครบทุกอันไม่ให้ซ่อนกัน)
   const placedExportNumbers = useMemo(() => {

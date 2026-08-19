@@ -38,6 +38,7 @@ export default function StylePanel({
   onExportSvg, onExportPng, onCopyEmbed, compareActive,
   zoomTransform, onZoomChange,
   exportFullMap, setExportFullMap,
+  showExportNumbers, setShowExportNumbers,
 }) {
   return (
     <>
@@ -197,6 +198,10 @@ export default function StylePanel({
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={exportFullMap} onChange={e => setExportFullMap(e.target.checked)} className="accent-violet-600" />
           ส่งออกเต็มแผนที่ (รีเซ็ตซูมก่อน) — ปิด = ตามมุมมองที่เห็น
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={showExportNumbers} onChange={e => setShowExportNumbers(e.target.checked)} className="accent-violet-600" />
+          แสดงตัวเลขจำนวนเรื่องของพื้นที่ที่เลือก
         </label>
         <div className="grid grid-cols-3 gap-1.5">
           <button type="button" onClick={() => onExportPng(1)} className="h-9 rounded-lg ring-1 ring-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50">PNG 1x</button>
