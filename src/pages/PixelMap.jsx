@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Layers as LayersIcon } from 'lucide-react'
 import { loadDistrictGeoJSON, loadSubdistrictIndex, loadCommunityIndex } from '../utils/pixelMapGeometry'
 import { getDistrictCounts, getCommunityHierarchy, getAvailableFiscalYears, getLevelMaxes } from '../utils/pixelMapData'
@@ -9,6 +9,7 @@ import LayerPanel from '../components/pixel-map/LayerPanel'
 import StylePanel from '../components/pixel-map/StylePanel'
 import MapCanvas from '../components/pixel-map/MapCanvas'
 import CompareGrid from '../components/pixel-map/CompareGrid'
+import YearPicker from '../components/pixel-map/YearPicker'
 import AccordionSection from '../components/pixel-map/AccordionSection'
 
 const CANVAS_W = 900
@@ -19,35 +20,27 @@ export default function PixelMap() {
   const canvasAreaRef = useRef(null) // wrapper div — PNG export (html-to-image) จับทั้งก้อน (เดี่ยวหรือ compare grid)
   const svgRef = useRef(null)        // <svg> เดี่ยว หรือ panel แรกใน compare grid — export SVG/คัดลอก HTML
 
-  // วัดความกว้างจริงของกล่องแผนที่ → ส่งให้ CompareGrid ปรับขนาด panel ให้พอดี ไม่ล้นจนต้องเลื่อนแนวนอน
-  // วัดทุก render (useLayoutEffect ไม่มี deps) + ตอน resize — จับได้ทั้งตอนแผงข้างโหลดเสร็จ/สลับโหมด โดยไม่พึ่ง ResizeObserver
-  // guard >2px กันวนลูป (panel พอดีกล่องเสมอจึงไม่มี scrollbar มาป้อนกลับ)
-  const [areaWidth, setAreaWidth] = useState(CANVAS_W)
-  const measureArea = useCallback(() => {
-    const el = canvasAreaRef.current
-    if (!el) return
-    const cs = getComputedStyle(el)
-    const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
-    const w = Math.max(280, Math.round(el.clientWidth - pad - 2))
-    setAreaWidth(prev => (Math.abs(prev - w) > 2 ? w : prev))
-  }, [])
-  useLayoutEffect(measureArea) // ทุก render
-  useEffect(() => {
-    const raf = requestAnimationFrame(measureArea)
-    window.addEventListener('resize', measureArea)
-    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', measureArea) }
-  }, [measureArea])
-
   const [geojson, setGeojson] = useState(null)
   useEffect(() => {
     loadDistrictGeoJSON().then(setGeojson).catch(err => console.error('[pixel-map] geojson load failed:', err))
   }, [])
 
-  // hierarchy เดียว: เขต→แขวง→ชุมชน (meta/centroid/count) — ฐานของ tree และตัวเลขทุกระดับ
+  // ปีงบประมาณที่เลือก (ติ๊กได้หลายปี) — ว่าง = ทุกปี ; กรอง hierarchy (นับเคสทุกระดับ) ทั้งหน้า
+  const [years, setYears] = useState(() => new Set())
+  const [yearOptions, setYearOptions] = useState([])
+  useEffect(() => {
+    getAvailableFiscalYears('drug_incidents').then(setYearOptions).catch(() => {})
+  }, [])
+  const toggleYear = useCallback((y) => setYears(s => { const n = new Set(s); n.has(y) ? n.delete(y) : n.add(y); return n }), [])
+  const clearYears = useCallback(() => setYears(new Set()), [])
+  const yearsKey = [...years].sort().join(',') // key คงที่สำหรับ effect (Set เปลี่ยน identity ทุก render)
+
+  // hierarchy เดียว: เขต→แขวง→ชุมชน (meta/centroid/count) — ฐานของ tree และตัวเลขทุกระดับ ; โหลดใหม่เมื่อเปลี่ยนปีที่ติ๊ก
   const [hierarchy, setHierarchy] = useState({})
   useEffect(() => {
-    getCommunityHierarchy().then(setHierarchy).catch(err => console.error('[pixel-map] hierarchy load failed:', err))
-  }, [])
+    getCommunityHierarchy(years).then(setHierarchy).catch(err => console.error('[pixel-map] hierarchy load failed:', err))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yearsKey])
 
   const {
     mode, setMode,
@@ -69,6 +62,25 @@ export default function PixelMap() {
     loadSubdistrictIndex().then(setSubdistrictIndex).catch(err => console.warn('[pixel-map] subdistrict geojson unavailable:', err))
     loadCommunityIndex().then(setCommunityIndex).catch(err => console.warn('[pixel-map] community geojson unavailable:', err))
   }, [])
+
+  // วัดความกว้างจริงของกล่องแผนที่ → ส่งให้ CompareGrid ปรับขนาด panel ให้พอดี ไม่ล้นจนต้องเลื่อนแนวนอน
+  // วัด "เฉพาะตอน layout เปลี่ยน" (mount/resize/สลับโหมด/เพิ่ม-ลบ panel/ข้อมูลโหลด) — ไม่วัดทุก render
+  // สำคัญ: วัดทุก render จะวนลูปไม่จบ (เลือกเขต → scrollbar แนวตั้งโผล่/หาย → clientWidth แกว่ง → areaWidth แกว่ง) จนแอปแครช
+  // ใช้ offsetWidth (ไม่ขึ้นกับ scrollbar แนวตั้ง) + เผื่อ 18px กัน panel ล้นเวลามี scrollbar
+  const [areaWidth, setAreaWidth] = useState(CANVAS_W)
+  const measureArea = useCallback(() => {
+    const el = canvasAreaRef.current
+    if (!el) return
+    const cs = getComputedStyle(el)
+    const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
+    const w = Math.max(280, Math.round(el.offsetWidth - pad - 18))
+    setAreaWidth(prev => (Math.abs(prev - w) > 3 ? w : prev))
+  }, [])
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => requestAnimationFrame(measureArea))
+    window.addEventListener('resize', measureArea)
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', measureArea) }
+  }, [measureArea, mode, compareSlots.length, geojson, hierarchy])
 
   const dataLayers = useMemo(() => layers.filter(l => l.type === 'data'), [layers])
 
@@ -100,6 +112,14 @@ export default function PixelMap() {
 
   const [exportFullMap, setExportFullMap] = useState(false)
 
+  // โหมด export — ใช้ทั้ง multi และ compare: compare ซ่อนแถบเครื่องมือ, ทุกโหมดโชว์ตัวเลขจำนวนเคสของพื้นที่ที่เลือกในรูป
+  const [exporting, setExporting] = useState(false)
+  const withExportMode = useCallback(async (fn) => {
+    setExporting(true)
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+    try { await fn() } finally { setExporting(false) }
+  }, [])
+
   // ถ้า export "เต็มแผนที่" — reset zoom ทุกจุดเป็น identity ชั่วคราว รอ 2 เฟรมให้ d3-zoom sync กลับเข้า DOM จริง แล้วค่อย capture, restore ทีหลัง
   const withFullMapIfNeeded = useCallback(async (fn) => {
     if (!exportFullMap) return fn()
@@ -121,14 +141,14 @@ export default function PixelMap() {
 
   const handleExportPng = useCallback((scale) => {
     if (!canvasAreaRef.current) return
-    withFullMapIfNeeded(() => exportPng(canvasAreaRef.current, scale, `pixel-map-${scale}x.png`))
+    withExportMode(() => withFullMapIfNeeded(() => exportPng(canvasAreaRef.current, scale, `pixel-map-${scale}x.png`)))
       .catch(err => console.error('[pixel-map] PNG export failed:', err))
-  }, [withFullMapIfNeeded])
+  }, [withExportMode, withFullMapIfNeeded])
   const handleExportSvg = useCallback(() => {
     if (!svgRef.current) return
-    withFullMapIfNeeded(() => { exportSvg(svgRef.current, 'pixel-map.svg') })
+    withExportMode(() => withFullMapIfNeeded(() => { exportSvg(svgRef.current, 'pixel-map.svg') }))
       .catch(err => console.error('[pixel-map] SVG export failed:', err))
-  }, [withFullMapIfNeeded])
+  }, [withExportMode, withFullMapIfNeeded])
   const handleCopyEmbed = useCallback(() => {
     if (!svgRef.current) return
     copyEmbedHtml(svgRef.current).catch(err => console.error('[pixel-map] copy embed failed:', err))
@@ -136,11 +156,15 @@ export default function PixelMap() {
 
   return (
     <div className="min-h-full bg-slate-50 p-4 lg:p-6">
-      <div className="mb-5">
-        <h1 className="text-xl font-bold text-slate-900">Pixel Map Generator · กทม.</h1>
-        <p className="text-sm text-slate-500">
-          เลือกเขต → แขวง → เปิดตัวเลขที่ต้องการ ซูม/แพนสำรวจ ซ้อน data overlay เปรียบเทียบแบบ compare — export PNG/SVG ใช้ในงานนำเสนอ
-        </p>
+      <div className="mb-5 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Pixel Map Generator · กทม.</h1>
+          <p className="text-sm text-slate-500">
+            เลือกเขต → แขวง → เปิดตัวเลขที่ต้องการ ซูม/แพนสำรวจ ซ้อน data overlay เปรียบเทียบแบบ compare — export PNG/SVG ใช้ในงานนำเสนอ
+          </p>
+        </div>
+        {/* เลือกปีงบประมาณ (ติ๊กได้หลายปี) — กรองจำนวนเคสทุกระดับ (tree/label/hover) ตามปีที่เลือก */}
+        <YearPicker options={yearOptions} selected={years} onToggle={toggleYear} onClear={clearYears} />
       </div>
 
       <div className="flex flex-col lg:flex-row gap-4 items-start relative">
@@ -168,6 +192,7 @@ export default function PixelMap() {
               toggleCompareSlotDistrict={toggleCompareSlotDistrict} setCompareSlotDistricts={setCompareSlotDistricts}
               setCompareSlotColor={setCompareSlotColor}
               addComparePanel={addComparePanel} removeComparePanel={removeComparePanel}
+              exporting={exporting}
             />
           ) : (
             <MapCanvas
@@ -176,7 +201,7 @@ export default function PixelMap() {
               geojson={geojson} hierarchy={hierarchy} subdistrictIndex={subdistrictIndex} communityIndex={communityIndex}
               checkedDistricts={checkedDistricts} checkedSubdistricts={checkedSubdistricts} checkedCommunities={checkedCommunities}
               layers={layers} layerCounts={layerCounts} levelMaxes={levelMaxes} labelsConfig={labelsConfig}
-              style={style}
+              style={style} exporting={exporting}
               zoomTransform={zoomTransform} onZoomChange={setZoomTransform}
             />
           )}

@@ -73,7 +73,7 @@ export default function CompareGrid({
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-slate-100">
-                  <ColorSwatch value={slot.color} onChange={v => setCompareSlotColor(slot.id, v)} title={slot.label} />
+                  <ColorSwatch value={slot.color} onChange={v => setCompareSlotColor(slot.id, v)} title={slot.label} align="left" />
                   <DistrictPicker districtOptions={districtOptions} hierarchy={hierarchy} selected={districts}
                     checkedSubdistricts={checkedSubdistricts} checkedCommunities={checkedCommunities}
                     toggleSubdistrict={toggleSubdistrict} toggleCommunity={toggleCommunity}
@@ -91,7 +91,7 @@ export default function CompareGrid({
                 width={panelW} height={panelH}
                 geojson={geojson} hierarchy={hierarchy} subdistrictIndex={subdistrictIndex} communityIndex={communityIndex}
                 checkedDistricts={checkedDistricts} checkedSubdistricts={panelSubs} checkedCommunities={panelCommunities}
-                layers={panelLayers} layerCounts={layerCounts} labelsConfig={labelsConfig} style={style}
+                layers={panelLayers} layerCounts={layerCounts} labelsConfig={labelsConfig} style={style} exporting={exporting}
                 panelLabel={exporting ? '' : label}
                 zoomTransform={syncZoom ? sharedCompareZoom : slot.zoom}
                 onZoomChange={syncZoom ? setSharedCompareZoom : (t) => setCompareSlotZoom(slot.id, t)}

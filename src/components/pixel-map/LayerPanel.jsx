@@ -47,19 +47,18 @@ function LayerRow({ layer, draggable, dragOver, onDragStart, onDragOver, onDrop,
   )
 }
 
-// ชุมชนไม่มีรูปทรงของตัวเอง (มีแต่หมุด+ชื่อ) — แถวนี้จึงเป็น "หน้าต่างมองเข้าไปใน labelsConfig" ไม่ใช่ layer จริงใน layers[]
-// eye = toggle 'community' ใน labelsConfig.levels, swatch = labelsConfig.textColor (แสดง rose-500 เมื่อยังเป็น auto), opacity = labelsConfig.opacity
+// ชุมชนไม่มี layer จริงใน layers[] — แถวนี้เป็น "หน้าต่างมองเข้าไปใน labelsConfig"
+// eye = toggle 'community' ใน labelsConfig.levels, swatch = สีพื้นที่ระบายของชุมชน (labelsConfig.communityColor), opacity = labelsConfig.opacity
 function CommunityLabelsRow({ labelsConfig, toggleLabelsLevel, updateLabelsConfig }) {
   const isOn = labelsConfig.levels.has('community')
-  const color = labelsConfig.textColor === 'auto' ? ROSE_DEFAULT : labelsConfig.textColor
   return (
     <div className="rounded-lg p-2.5 space-y-2 ring-1 ring-slate-200">
       <div className="flex items-center gap-2">
         <button type="button" onClick={() => toggleLabelsLevel('community')} className="text-slate-500 shrink-0">
           {isOn ? <Eye size={14} /> : <EyeOff size={14} className="text-slate-300" />}
         </button>
-        <span className="flex-1 text-xs font-medium text-slate-700 truncate">ชุมชน (ชื่อ)</span>
-        <ColorSwatch value={color} onChange={v => updateLabelsConfig({ textColor: v })} title="สีชื่อพื้นที่" />
+        <span className="flex-1 text-xs font-medium text-slate-700 truncate">ชุมชน</span>
+        <ColorSwatch value={labelsConfig.communityColor ?? ROSE_DEFAULT} onChange={v => updateLabelsConfig({ communityColor: v })} title="สีพื้นที่ชุมชน" />
       </div>
       <div className="flex items-center gap-2 pl-5">
         <input type="range" min={0} max={100} value={labelsConfig.opacity}
