@@ -15,7 +15,7 @@ const DATA_PALETTE = ['#10b981', '#7c3aed', '#d97706', '#db2777'] // emerald ก
 const COMPARE_PALETTE = ['#8b5cf6', '#f59e0b', '#f43f5e', '#10b981'] // violet/amber/rose/emerald — พอดี panel สูงสุด 4
 
 const ZOOM_IDENTITY = { x: 0, y: 0, k: 1 }
-export const ROSE_DEFAULT = '#f43f5e' // สี swatch เริ่มต้นของ "ชุมชน" ใน LAYERS เมื่อ textColor ยังเป็น auto
+export const ROSE_DEFAULT = '#f43f5e' // สีเริ่มต้นของ "ชุมชน" (ทั้งพื้นที่ระบายและ swatch ในแผง LAYERS)
 
 function makeFixedLayers() {
   return [
@@ -58,7 +58,7 @@ export function usePixelMapState() {
 
   const [style, setStyleState] = useState({
     showBorders: true,
-    background: 'light',
+    background: 'map',   // 'map' (ขาว/ขอบน้ำเงิน บนพื้นนอกเขตเทาเข้ม เหมือนหน้าแผนที่ยาเสพติด) | 'light' | 'dark'
     title: '',
     caption: '',
     displayMode: 'dot',  // ใช้กับ data overlay layer (2+) เท่านั้น — 'dot' | 'fill'
@@ -67,7 +67,7 @@ export function usePixelMapState() {
     shape: 'circle',
     autoFitOnSelection: true,
     showZoomControls: true,
-    tileSource: '',    // '' | 'carto' | 'osm' — ภาพแผนที่พื้นหลัง, '' = ไม่ใช้
+    tileSource: 'carto', // ภาพแผนที่พื้นหลัง — carto light_all = ชุดเดียวกับหน้าแผนที่ยาเสพติด (IncidentMap) | 'osm' | '' (ไม่ใช้)
     focusSelection: false,
   })
   const updateStyle = useCallback((patch) => setStyleState(s => ({ ...s, ...patch })), [])
@@ -81,7 +81,8 @@ export function usePixelMapState() {
     districtNameSize: 'md',  // 'sm' | 'md' | 'lg'
     metric: 'count',
     showPill: false,
-    textColor: 'auto',       // 'auto' | hex
+    textColor: 'auto',       // 'auto' | hex — สีตัวอักษรชื่อพื้นที่
+    communityColor: ROSE_DEFAULT, // สีพื้นที่ระบายของ "ชุมชน" (แก้ที่ swatch แถวชุมชนในแผง LAYERS)
     counterScaleLabels: false,
     opacity: 100,
   })
@@ -98,7 +99,16 @@ export function usePixelMapState() {
     setCompareSlots(slots => slots.map(s => (s.id === slotId ? { ...s, zoom: transform } : s)))
   }, [])
 
-  const toggleDistrict = useCallback((dname) => setCheckedDistricts(s => flip(s, dname)), [])
+  // ติ๊กเขตออก → ล้างแขวง/ชุมชนในเขตนั้นตามไปด้วย (สอดคล้องกับกติกาที่ต้องติ๊กเขตก่อน)
+  const toggleDistrict = useCallback((dname) => {
+    setCheckedDistricts(s => {
+      if (s.has(dname)) {
+        setCheckedSubdistricts(subs => new Set([...subs].filter(k => k.split('|')[0] !== dname)))
+        setCheckedCommunities(coms => new Set([...coms].filter(k => k.split('|')[0] !== dname)))
+      }
+      return flip(s, dname)
+    })
+  }, [])
   const toggleSubdistrict = useCallback((district, subdistrict) => setCheckedSubdistricts(s => flip(s, subKey(district, subdistrict))), [])
   const toggleCommunity = useCallback((district, subdistrict, community) => setCheckedCommunities(s => flip(s, communityKey(district, subdistrict, community))), [])
   const toggleExpanded = useCallback((dname) => setExpandedDistricts(s => flip(s, dname)), [])

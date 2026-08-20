@@ -3,15 +3,54 @@
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon'
 import { point } from '@turf/helpers'
 
-export const BKK_BBOX = { minLng: 100.328, maxLng: 100.939, minLat: 13.494, maxLat: 13.955 }
+export const BKK_BBOX = { minLng: 100.328, maxLng: 100.939, minLat: 13.484, maxLat: 13.955 } // ครอบขอบเขต BMA_ADMIN_DISTRICT พอดี (ปลายบางขุนเทียนลงถึง ~13.485)
 
 const GEOJSON_URL = '/bangkok-districts.geojson'
+const SUBDISTRICT_URL = '/bangkok-subdistricts.geojson' // 169 แขวง (BMA) — สร้างด้วย scripts/import-bma-boundaries.mjs
+const COMMUNITY_URL = '/bangkok-communities.geojson'   // 201 ชุมชน (BMA/201ชุมชน)
 let _geoPromise = null
+let _subPromise = null
+let _comPromise = null
 
 // cache ระดับ module — /pixel-map recompute grid บ่อยตาม control ที่เปลี่ยน แต่ geojson โหลดครั้งเดียวพอ
 export function loadDistrictGeoJSON() {
   if (!_geoPromise) _geoPromise = fetch(GEOJSON_URL).then(r => r.json())
   return _geoPromise
+}
+
+export const normalizeSubdistrictName = (name) => String(name || '').replace(/^(แขวง|ตำบล)\s*/, '').replace(/\s+/g, '')
+export const normalizeCommunityName = (name) => String(name || '').replace(/^ชุมชน\s*/, '').replace(/\s+/g, '')
+
+// index ขอบเขตแขวง: "เขต|ชื่อแขวง(normalize)" → feature — ชื่อแขวงซ้ำข้ามเขตได้ จึง key คู่กับเขตเสมอ
+export function loadSubdistrictIndex() {
+  if (!_subPromise) {
+    _subPromise = fetch(SUBDISTRICT_URL)
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then(gj => {
+        const index = new Map()
+        for (const f of gj.features) index.set(`${f.properties.district}|${normalizeSubdistrictName(f.properties.name)}`, f)
+        return index
+      })
+  }
+  return _subPromise
+}
+
+// index ขอบเขตชุมชน: key "เขต|แขวง|ชุมชน" และ key สำรอง "เขต|ชุมชน" (ชื่อแขวงในฐานข้อมูลกับไฟล์ไม่ตรงกันบ้าง)
+export function loadCommunityIndex() {
+  if (!_comPromise) {
+    _comPromise = fetch(COMMUNITY_URL)
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then(gj => {
+        const index = new Map()
+        for (const f of gj.features) {
+          const { district, subdistrict, name } = f.properties
+          index.set(`${district}|${normalizeSubdistrictName(subdistrict)}|${normalizeCommunityName(name)}`, f)
+          index.set(`${district}|${normalizeCommunityName(name)}`, f)
+        }
+        return index
+      })
+  }
+  return _comPromise
 }
 
 // equirectangular projection ครอบเฉพาะ bbox กทม. — cos(lat) แก้สัดส่วนแกน lng, fit-to-canvas พร้อม padding
@@ -62,76 +101,89 @@ export function ringPathD(ring, project) {
   return 'M' + pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join('L') + 'Z'
 }
 
-// index (Map คีย์ "เขต|แขวง" หรือ "เขต|แขวง|ชุมชน") ของขอบเขตจริงจากไฟล์ geojson แยก — ยังไม่มีไฟล์ให้ใน public/
-// (มีแค่ระดับเขต) ฟังก์ชัน lookup จึงคืน undefined เสมอตอนนี้ แล้ว fallback ไปใช้รูปทรงประมาณ — พร้อมใช้ทันทีถ้าเพิ่มไฟล์ทีหลัง
+// ระยะแก้ไข (Levenshtein) ตัดจบเร็วเมื่อเกิน max — เทียบชื่อสั้นๆ ระดับแขวง/ชุมชนให้ทนการสะกดต่าง 1 ตัว
+function editDistanceWithin(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return max + 1
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i]
+    let best = i
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+      best = Math.min(best, cur[j])
+    }
+    if (best > max) return max + 1
+    prev = cur
+  }
+  return prev[b.length]
+}
+
+// หา feature ของแขวง — ตรงเป๊ะก่อน ไม่งั้นยอมสะกดต่างไม่เกิน 1 ตัว "ภายในเขตเดียวกัน" (กันชื่อซ้ำข้ามเขต)
 export function lookupSubdistrict(index, district, sub) {
-  return index ? index.get(`${district}|${sub}`) : undefined
+  if (!index) return undefined
+  const norm = normalizeSubdistrictName(sub)
+  const exact = index.get(`${district}|${norm}`)
+  if (exact) return exact
+  const prefix = `${district}|`
+  for (const key of index.keys()) {
+    if (!key.startsWith(prefix)) continue
+    if (editDistanceWithin(norm, key.slice(prefix.length), 1) <= 1) return index.get(key)
+  }
+  return undefined
 }
+
+// หา feature ของชุมชน — คีย์เต็ม (เขต|แขวง|ชุมชน) → คีย์ไม่ผูกแขวง → ยอมสะกดต่าง 1 ตัวในเขตเดียวกัน
 export function lookupCommunity(index, district, sub, name) {
-  return index ? index.get(`${district}|${sub}|${name}`) : undefined
-}
-
-// วงกลมประมาณ (ในหน่วย lng/lat) รอบจุดศูนย์กลาง — ชดเชย cos(lat) แกน lng เหมือน makeProjection ให้ออกมากลมจริงบนจอ หลัง project()
-function circleRingAt(lat, lng, radiusLatDeg, segments = 24) {
-  const cosLat = Math.cos(lat * Math.PI / 180) || 1
-  const ring = []
-  for (let i = 0; i < segments; i++) {
-    const theta = (i / segments) * Math.PI * 2
-    ring.push([lng + (radiusLatDeg / cosLat) * Math.cos(theta), lat + radiusLatDeg * Math.sin(theta)])
+  if (!index) return undefined
+  const norm = normalizeCommunityName(name)
+  const exact = index.get(`${district}|${normalizeSubdistrictName(sub)}|${norm}`) ?? index.get(`${district}|${norm}`)
+  if (exact) return exact
+  const prefix = `${district}|`
+  for (const key of index.keys()) {
+    const rest = key.slice(prefix.length)
+    if (!key.startsWith(prefix) || rest.includes('|')) continue // เทียบเฉพาะคีย์ชื่อชุมชนล้วน
+    if (editDistanceWithin(norm, rest, 1) <= 1) return index.get(key)
   }
-  return ring
+  return undefined
 }
 
-const SUBDISTRICT_MIN_RADIUS = 0.006 // ~650m
-const SUBDISTRICT_MAX_RADIUS = 0.02  // ~2.2km
-const SUBDISTRICT_DEFAULT_RADIUS = 0.01
-
-// กรอบประมาณของแขวง (ไม่มี polygon จริง) — รัศมีอิงจากระยะเฉลี่ยจาก centroid แขวงไปยังชุมชนของมันเอง (ยิ่งกระจายกว้าง ยิ่งวงใหญ่)
-// ไม่มีชุมชนเลย (แขวงที่ไม่มีจุดพิกัดระดับชุมชน) → ใช้รัศมี default
-export function subdistrictOutlineRing(node) {
-  const { centroid } = node
-  if (!centroid) return null
-  const communities = Object.values(node.communities || {})
-  let radius = SUBDISTRICT_DEFAULT_RADIUS
-  const cosLat = Math.cos(centroid.lat * Math.PI / 180)
-  let sum = 0, n = 0
-  for (const c of communities) {
-    if (!Number.isFinite(c.lat) || !Number.isFinite(c.lng)) continue
-    const dLat = c.lat - centroid.lat
-    const dLng = (c.lng - centroid.lng) * cosLat
-    sum += Math.hypot(dLat, dLng)
-    n++
+// ── เซลล์พื้นที่จริง (ไม่ใช่วงกลม) เมื่อไม่มี polygon ในไฟล์ ──
+// ตัด polygon ของ "กรอบ" (แขวง/เขต) ด้วยเส้นแบ่งครึ่งระหว่างจุดนี้กับจุดพี่น้อง (Sutherland–Hodgman / Voronoi)
+function largestRing(feature) {
+  const polys = feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates : [feature.geometry.coordinates]
+  return polys.map(p => p[0]).reduce((a, b) => (b.length > a.length ? b : a))
+}
+function clipByBisector(poly, mid, dir) {
+  const side = (p) => (p[0] - mid[0]) * dir[0] + (p[1] - mid[1]) * dir[1]
+  const out = []
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length]
+    const sa = side(a), sb = side(b)
+    if (sa <= 0) out.push(a)
+    if ((sa <= 0) !== (sb <= 0)) {
+      const t = sa / (sa - sb)
+      out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])
+    }
   }
-  if (n > 0) radius = Math.min(SUBDISTRICT_MAX_RADIUS, Math.max(SUBDISTRICT_MIN_RADIUS, (sum / n) * 1.6))
-  return circleRingAt(centroid.lat, centroid.lng, radius, 32)
+  return out
 }
 
-const COMMUNITY_MIN_RADIUS = 0.0012 // ~130m
-const COMMUNITY_MAX_RADIUS = 0.006  // ~650m
-const COMMUNITY_DEFAULT_RADIUS = 0.003
-
-// "เซลล์" ประมาณของชุมชน (ไม่มี polygon จริง) — รัศมี = ครึ่งระยะไปชุมชนพี่น้องที่ใกล้ที่สุดในแขวงเดียวกัน กันไม่ให้วงซ้อนกัน
-// (nearest-neighbor half-distance — ประมาณ Voronoi แบบง่าย ไม่ต้อง clip polygon จริง) ไม่มีพี่น้อง → รัศมี default
-export function communityCellRing(subFeature, c, siblings) {
-  if (!Number.isFinite(c?.lat) || !Number.isFinite(c?.lng)) return null
-  let radius = COMMUNITY_DEFAULT_RADIUS
-  const cosLat = Math.cos(c.lat * Math.PI / 180)
-  let minDist = Infinity
-  for (const s of siblings) {
-    if (!Number.isFinite(s.lat) || !Number.isFinite(s.lng)) continue
-    const dLat = s.lat - c.lat
-    const dLng = (s.lng - c.lng) * cosLat
-    const dist = Math.hypot(dLat, dLng)
-    if (dist > 0) minDist = Math.min(minDist, dist)
+// พื้นที่ของ site (แขวง/ชุมชน) = ส่วนของกรอบที่ใกล้ site มากกว่าพี่น้องอื่น — คำนวณในระนาบปรับ cos(lat)
+export function communityCellRing(boundFeature, site, others) {
+  if (!boundFeature || !Number.isFinite(site?.lat) || !Number.isFinite(site?.lng)) return null
+  const cosLat = Math.cos(site.lat * Math.PI / 180) || 1
+  const toPlane = ([lng, lat]) => [lng * cosLat, lat]
+  let poly = largestRing(boundFeature).map(toPlane)
+  const s = toPlane([site.lng, site.lat])
+  for (const o of others) {
+    if (!Number.isFinite(o?.lat) || !Number.isFinite(o?.lng)) continue
+    const p = toPlane([o.lng, o.lat])
+    const dir = [p[0] - s[0], p[1] - s[1]]
+    if (dir[0] === 0 && dir[1] === 0) continue
+    poly = clipByBisector(poly, [(s[0] + p[0]) / 2, (s[1] + p[1]) / 2], dir)
+    if (poly.length < 3) return null
   }
-  if (Number.isFinite(minDist)) radius = Math.min(COMMUNITY_MAX_RADIUS, Math.max(COMMUNITY_MIN_RADIUS, minDist / 2))
-  return circleRingAt(c.lat, c.lng, radius)
-}
-
-// วงกลม fallback สุดท้าย — ใช้เมื่อ communityCellRing คืน null (พิกัดไม่ถูกต้อง)
-export function circleRing(c) {
-  if (!Number.isFinite(c?.lat) || !Number.isFinite(c?.lng)) return []
-  return circleRingAt(c.lat, c.lng, COMMUNITY_DEFAULT_RADIUS)
+  return poly.map(([x, y]) => [x / cosLat, y])
 }
 
 // สร้าง grid จุดทั่ว canvas แล้วเก็บเฉพาะจุดที่ตกอยู่ในเขตใดเขตหนึ่ง (point-in-polygon ด้วย turf)
