@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { flattenSubstanceUserRow } from './importEngine'
+import { clearPixelMapDataCache } from './pixelMapData'
 
 const UPSERT_BATCH = 500
 
@@ -70,6 +71,8 @@ export async function upsertRecords(type, rows, batchInfo) {
     batchLogError = err.message
   }
 
+  if (inserted + updated > 0) clearPixelMapDataCache() // ข้อมูลเปลี่ยน → ล้าง cache /pixel-map ให้ดึงสดครั้งหน้า
+
   return { inserted, updated, failed, error: lastError, batchLogError }
 }
 
@@ -130,6 +133,8 @@ export async function upsertDrugIncidents(rows, batchInfo) {
   } catch (err) {
     batchLogError = err.message
   }
+
+  if (inserted + updated > 0) clearPixelMapDataCache() // ข้อมูลเปลี่ยน → ล้าง cache /pixel-map ให้ดึงสดครั้งหน้า
 
   return { inserted, updated, failed, error: lastError, batchLogError }
 }
