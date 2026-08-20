@@ -434,7 +434,7 @@ export default function AllDistricts() {
   // dateRange (จาก ExportDialog โหมด "กำหนดเอง") ใช้แทน range ปกติของหน้าตอน query — กำหนดเองแล้วต้อง query กว้างกว่าที่ fetch ปกติได้ ไม่ใช่แค่ filter ซ้ำในเครื่อง
   const [exporting, setExporting] = useState(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
-  const handleExportConfirm = async ({ mode, dateRange }) => {
+  const handleExportConfirm = async ({ mode, dateRange, zoneDetail, statusFilter }) => {
     setExporting(true)
     try {
       const qFrom = dateRange?.from ?? range?.from
@@ -457,7 +457,7 @@ export default function AllDistricts() {
       await exportDrugIncidentReport({
         incidentRows: scoped,
         dealerRows: fDealers,
-        mode, dateRange,
+        mode, dateRange, zoneDetail, statusFilter,
         periodLabel,
         filterLabel: `${scopeLabel} · ทุกชนิดยา`,
         filenamePrefix: 'districts-report',

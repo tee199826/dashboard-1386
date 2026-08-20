@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 // Modal — reusable dialog (violet accent ตาม design system)
@@ -39,9 +40,11 @@ export default function Modal({
   if (!open) return null
   const v = VARIANTS[variant] || VARIANTS.default
 
-  return (
+  // createPortal ไปที่ document.body + z-index สูงกว่าทุก overlay ในแอป (กัน bug: บาง element ใช้ transform ร่วมกับ
+  // z-index สูงมาก เช่น sidebar /radar ที่ z-[9995] — transform ทำให้ z-index มีผลทั้งที่ position:static เลยไปทับ modal ถ้า z-index ต่ำกว่า)
+  return createPortal(
     <div
-      className="modal-backdrop fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+      className="modal-backdrop fixed inset-0 z-[10050] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
       onClick={closeOnBackdrop ? onClose : undefined}
       role="dialog"
       aria-modal="true"
@@ -73,6 +76,7 @@ export default function Modal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

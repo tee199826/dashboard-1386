@@ -84,7 +84,7 @@ export default function BknPage() {
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const handleExportConfirm = useCallback(async ({ mode, dateRange }) => {
+  const handleExportConfirm = useCallback(async ({ mode, dateRange, zoneDetail, statusFilter }) => {
     setExporting(true)
     try {
       const scoped = selectedBkn ? incidents.filter(r => getBknByDistrict(r.district) === selectedBkn) : incidents
@@ -94,7 +94,7 @@ export default function BknPage() {
       await exportDrugIncidentReport({
         incidentRows: scoped,
         dealerRows,
-        mode, dateRange,
+        mode, dateRange, zoneDetail, statusFilter,
         periodLabel,
         filterLabel: `${selectedBkn || 'ทุก บก.น.'} · ทุกชนิดยา`,
         filenamePrefix: 'bkn-report',

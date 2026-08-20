@@ -43,6 +43,34 @@ const ZONE_COLORS = {
 }
 
 const deriveStatus = (r) => (DONE_FLAGS.some(f => r[f]) ? 'ดำเนินการแล้ว' : 'ยังไม่ดำเนินการ')
+const ALL_ACTION_KEYS = ACTION_FLAGS_ORDERED.map(([c]) => c)
+// กรองแถวตาม statusFilter จาก ExportDialog — { done, pending, actions } — ใช้ก่อน aggregate ทุก sheet
+// แถว "ดำเนินการแล้ว" ต้องมี action flag ที่ตรงกับ actions ที่เลือกอย่างน้อย 1 ตัว (ไม่ใช่แค่ DONE_FLAGS เพราะ user เลือกได้ทั้ง 5 ผล)
+function filterRowsByStatus(rows, statusFilter) {
+  if (!statusFilter) return rows
+  const { done = true, pending = true, actions = ALL_ACTION_KEYS } = statusFilter
+  return rows.filter((r) => {
+    if (deriveStatus(r) === 'ดำเนินการแล้ว') {
+      if (!done) return false
+      return ACTION_FLAGS_ORDERED.some(([col]) => actions.includes(col) && r[col])
+    }
+    return pending
+  })
+}
+// บรรทัด metadata สรุปตัวกรองสถานะที่ใช้ — แสดงเฉพาะผลการดำเนินการที่เลือก (ถ้าไม่ครบทุกอัน)
+function buildStatusMetaLine(statusFilter) {
+  if (!statusFilter) return null
+  const { done = true, pending = true, actions = ALL_ACTION_KEYS } = statusFilter
+  const parts = []
+  if (done) {
+    const actionLabels = ACTION_FLAGS_ORDERED.filter(([col]) => actions.includes(col)).map(([, label]) => label)
+    parts.push(actionLabels.length === ALL_ACTION_KEYS.length || actionLabels.length === 0
+      ? 'ดำเนินการแล้ว'
+      : `ดำเนินการแล้ว (${actionLabels.join(', ')})`)
+  }
+  if (pending) parts.push('ยังไม่ดำเนินการ')
+  return `สถานะ: ${parts.length ? parts.join(' · ') : 'ไม่มี (ไม่พบข้อมูล)'}`
+}
 // จำนวน "ครั้งตรวจพบยา" ต่อแถว — 1 แถวร้องเรียนอาจพบยาหลายชนิด นับซ้ำได้ (ต่างจาก "ร้องเรียน" ที่นับ 1 แถว = 1)
 const drugInstanceCount = (r) => {
   let n = DRUG_FLAGS.filter(([col]) => r[col]).length
@@ -238,9 +266,9 @@ function buildDetailRowsZone(validRows) {
     }))
 }
 
-// Sheet 2b: Top 3 เขตในแต่ละโซน — โซนเรียงตาม zoneOrder ที่รับมา (มาก→น้อยตามร้องเรียนรวม, คำนวณไว้แล้วจาก buildZoneSummary)
-// ในแต่ละโซนเรียงเขตตามร้องเรียนมาก→น้อยเอง แล้วตัดเหลือ 3 อันดับแรก
-function buildTop3PerZone(validRows, zoneOrder) {
+// Sheet 2b: เขตในแต่ละโซน — โซนเรียงตาม zoneOrder ที่รับมา (มาก→น้อยตามร้องเรียนรวม, คำนวณไว้แล้วจาก buildZoneSummary)
+// ในแต่ละโซนเรียงเขตตามร้องเรียนมาก→น้อยเอง แล้วตัดเหลือ `limit` อันดับแรก (null = ไม่ตัด เอาทุกเขต) — คอลัมน์ "อันดับ" นับใหม่ภายในแต่ละโซน
+function buildDistrictsPerZone(validRows, zoneOrder, limit = 3) {
   return zoneOrder.map((zone) => {
     const districts = Object.keys(DNAME_TO_GROUP).filter((d) => DNAME_TO_GROUP[d] === zone)
     const stats = districts.map((d) => {
@@ -250,7 +278,7 @@ function buildTop3PerZone(validRows, zoneOrder) {
       return { district: d, total, done, notDone: total - done, pct: total ? done / total : 0 }
     })
     stats.sort((a, b) => b.total - a.total)
-    return { zone, rows: stats.slice(0, 3) }
+    return { zone, rows: limit ? stats.slice(0, limit) : stats }
   })
 }
 
@@ -361,9 +389,9 @@ function writeChargeSheet(workbook, metaLines, { mainRows, districtRows }) {
   return ws
 }
 
-// ── Sheet "Top 3 เขตต่อโซน" — layout พิเศษ: merge cell คอลัมน์กลุ่มโซนต่อโซน + สีพื้นหลังแยกโซน + เส้นขอบหนาคั่นโซน ──
-function writeTop3PerZoneSheet(workbook, metaLines, zoneGroups) {
-  const ws = workbook.addWorksheet('Top 3 เขตต่อโซน')
+// ── Sheet "Top 3/ทุกเขตต่อโซน" — layout พิเศษ: merge cell คอลัมน์กลุ่มโซนต่อโซน + สีพื้นหลังแยกโซน + เส้นขอบหนาคั่นโซน ──
+function writeDistrictsPerZoneSheet(workbook, sheetName, metaLines, zoneGroups) {
+  const ws = workbook.addWorksheet(sheetName)
   metaLines.forEach((line) => ws.addRow([line]))
   ws.addRow([])
   const header = ['กลุ่มโซน', 'อันดับ', 'เขต', 'ร้องเรียน', 'ดำเนินการแล้ว', 'ยังไม่ดำเนิน', '% สำเร็จ']
@@ -404,15 +432,17 @@ function writeTop3PerZoneSheet(workbook, metaLines, zoneGroups) {
  *   - incidentRows: drug_incidents rows ที่ filter ตาม view ปัจจุบันแล้ว (ปีงบ/เดือน/เขต/ชนิดยา ฯลฯ) — จะถูกกรองซ้ำเหลือแค่ 50 เขต กทม.
  *   - dealerRows: substance_users rows (dealer_locations) filter ตามช่วงเวลาเดียวกัน — ใส่ [] ถ้าไม่มี
  *   - mode: 'district' (default, 5 sheet ตามเดิม) | 'zone' (4 sheet สรุปตาม 6 กลุ่มโซน แทนรายเขต)
+ *   - zoneDetail: 'top3' (default, 18 แถว) | 'all' (50 แถว ทุกเขตในแต่ละโซน) — ใช้เฉพาะตอน mode = 'zone'
  *   - dateRange: { from, to } (ISO date string, ใส่ฝั่งไหนก็ได้) — override periodLabel ด้วยการกรอง incidentRows
  *     ตาม received_date ที่นี่โดยตรง (centralized ที่เดียว กันแต่ละหน้า implement ซ้ำ) ใส่ null/undefined = ไม่กรอง (ใช้ incidentRows ตามที่ส่งมา)
  *   - periodLabel: ข้อความช่วงเวลา เช่น "ปีงบ 2569 (1 ต.ค. 2568 - 31 พ.ค. 2569)"
  *   - filterLabel: ข้อความตัวกรองที่ใช้อยู่ เช่น "ทุกเขต · ทุกชนิดยา"
+ *   - statusFilter: { done, pending, actions } จาก ExportDialog — กรองก่อน aggregate ทุก sheet, ใส่ null = ไม่กรอง (ทุกสถานะ)
  *   - filenamePrefix: เติมหน้า `-YYYY-MM-DD.xlsx` (default '1386-report') — โหมด zone เติม `-zone` ต่อท้ายให้อัตโนมัติ
  */
 export async function exportDrugIncidentReport({
-  incidentRows = [], dealerRows = [], mode = 'district', dateRange = null,
-  periodLabel = 'ทั้งหมด', filterLabel = 'ทุกเขต · ทุกชนิดยา', filenamePrefix = '1386-report',
+  incidentRows = [], dealerRows = [], mode = 'district', zoneDetail = 'top3', dateRange = null,
+  periodLabel = 'ทั้งหมด', filterLabel = 'ทุกเขต · ทุกชนิดยา', statusFilter = null, filenamePrefix = '1386-report',
 } = {}) {
   const wb = new ExcelJS.Workbook()
   wb.creator = '1386 Dashboard'
@@ -434,43 +464,48 @@ export async function exportDrugIncidentReport({
   ]
   if (dateRange?.from && dateRange?.to) meta.push(`ช่วงข้อมูล: ${formatThaiDate(dateRange.from)} – ${formatThaiDate(dateRange.to)}`)
   if (excludedCount > 0) meta.push(`หมายเหตุ: ไม่รวม ${excludedCount.toLocaleString()} แถวที่ระบุเขตไม่ตรงกับ 50 เขต กทม.`)
+  const statusMetaLine = buildStatusMetaLine(statusFilter)
+  if (statusMetaLine) meta.push(statusMetaLine)
+
+  // rows = validRows (50 เขต กทม.) + กรองสถานะ/ผลการดำเนินการตาม statusFilter — ใช้ aggregate ทุก sheet ด้านล่าง
+  const rows = filterRowsByStatus(validRows, statusFilter)
 
   if (mode === 'zone') {
-    const zoneSummaryRows = buildZoneSummary(validRows)
+    const zoneSummaryRows = buildZoneSummary(rows)
     writeSheet(wb, 'สรุปรายกลุ่มโซน', meta,
       ['กลุ่มโซน', 'จำนวนเขต', 'ร้องเรียน', 'ดำเนินการแล้ว', 'ยังไม่ดำเนิน', '% สำเร็จ', 'เหตุการณ์'], zoneSummaryRows)
 
-    const top3PerZone = buildTop3PerZone(validRows, zoneSummaryRows.map((r) => r.กลุ่มโซน))
-    writeTop3PerZoneSheet(wb, meta, top3PerZone)
+    const districtsPerZone = buildDistrictsPerZone(rows, zoneSummaryRows.map((r) => r.กลุ่มโซน), zoneDetail === 'all' ? null : 3)
+    writeDistrictsPerZoneSheet(wb, zoneDetail === 'all' ? 'เขตทั้งหมดต่อโซน' : 'Top 3 เขตต่อโซน', meta, districtsPerZone)
 
-    const zoneDetailRows = buildDetailRowsZone(validRows)
+    const zoneDetailRows = buildDetailRowsZone(rows)
     writeSheet(wb, 'รายละเอียดเรื่องร้องเรียน', meta,
       ['วันที่', 'กลุ่มโซน', 'แขวง', 'ชุมชน', 'พฤติการณ์', 'ชนิดยา', 'สถานะ', 'ผลการดำเนินการ'], zoneDetailRows)
 
-    const { header: zoneStatusHeader, rows: zoneStatusRows } = buildStatusBreakdownZone(validRows)
+    const { header: zoneStatusHeader, rows: zoneStatusRows } = buildStatusBreakdownZone(rows)
     writeSheet(wb, 'สถานะการดำเนินการ', meta, zoneStatusHeader, zoneStatusRows)
 
     const chargeMeta = [...meta, 'หมายเหตุ: อ้างอิงจากพฤติการณ์ที่บันทึก (ไม่ใช่ข้อหาตามกฎหมาย) — หากต้องการข้อหาจริงตามกฎหมาย ต้อง re-parse ไฟล์ต้นทางเพิ่มคอลัมน์ 52-60']
     const chargeWs = writeSheet(wb, 'ข้อหา', chargeMeta,
-      ['กลุ่มโซน', 'เสพ', 'จำหน่าย', 'เสพและจำหน่าย', 'ผลิต', 'รวม'], buildChargeBreakdownZone(validRows))
+      ['กลุ่มโซน', 'เสพ', 'จำหน่าย', 'เสพและจำหน่าย', 'ผลิต', 'รวม'], buildChargeBreakdownZone(rows))
     chargeWs.getRow(chargeWs.rowCount).eachCell((cell) => { cell.font = { bold: true } }) // แถว "รวม"
   } else {
-    const summaryRows = buildDistrictSummary(validRows, dealerRows)
+    const summaryRows = buildDistrictSummary(rows, dealerRows)
     writeSheet(wb, 'สรุปรายเขต', meta,
       ['เขต', 'กลุ่มโซน', 'ร้องเรียนทั้งหมด', 'ดำเนินการแล้ว', 'ยังไม่ดำเนินการ', '% ดำเนินการ', 'แหล่งซื้อ'], summaryRows)
 
-    const detailRows = buildDetailRows(validRows)
+    const detailRows = buildDetailRows(rows)
     writeSheet(wb, 'รายละเอียดเรื่องร้องเรียน', meta,
       ['วันที่', 'เขต', 'แขวง', 'ชุมชน', 'กลุ่มโซน', 'พฤติการณ์', 'ชนิดยา', 'สถานะ', 'ผลการดำเนินการ'], detailRows)
 
-    const { header: statusHeader, rows: statusRows } = buildStatusBreakdown(validRows)
+    const { header: statusHeader, rows: statusRows } = buildStatusBreakdown(rows)
     writeSheet(wb, 'สถานะการดำเนินการ', meta, statusHeader, statusRows)
 
     const top5Rows = buildTop5(summaryRows)
     writeSheet(wb, 'Top 5 เขตร้องเรียนสูงสุด', meta,
       ['อันดับ', 'เขต', 'กลุ่มโซน', 'จำนวนร้องเรียน', 'ดำเนินการแล้ว', 'ยังไม่ดำเนิน', '% สำเร็จ'], top5Rows)
 
-    writeChargeSheet(wb, meta, buildChargeBreakdown(validRows))
+    writeChargeSheet(wb, meta, buildChargeBreakdown(rows))
   }
 
   const buffer = await wb.xlsx.writeBuffer()

@@ -158,6 +158,7 @@ export default function IncidentMap({
   onZoomChange = () => {},
   scrollWheelZoom = true,
   mini = false,            // mini-map: ปิด interaction (compare modal)
+  permanentDistrictLabels = false,   // true = เปิด tooltip ชื่อเขตค้างไว้ตลอด (ใช้ตอน capture ภาพส่งออก)
   className = 'w-full h-full',
 }) {
   const [districts, setDistricts] = useState(null)
@@ -194,6 +195,7 @@ export default function IncidentMap({
       <TileLayer
         attribution='&copy; OpenStreetMap contributors &copy; CARTO'
         url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+        crossOrigin="anonymous"
       />
       <ZoomTracker onZoom={handleZoom} />
       <FlyController target={flyTarget} />
@@ -207,11 +209,15 @@ export default function IncidentMap({
       )}
 
       {districts && (
-        <GeoJSON key="district-borders" data={districts} pane="districts-pane"
+        <GeoJSON key={`district-borders-${permanentDistrictLabels}`} data={districts} pane="districts-pane"
           style={{ color: '#1e3a8a', weight: 1.8, fillColor: '#3b82f6', fillOpacity: 0.05, opacity: 1 }}
           onEachFeature={(feature, layer) => {
             const name = feature.properties?.dname || 'เขต'
-            layer.bindTooltip(name, { sticky: true, className: 'district-tooltip' })
+            if (permanentDistrictLabels) {
+              layer.bindTooltip(name, { permanent: true, direction: 'center', className: 'district-tooltip-permanent', interactive: false })
+            } else {
+              layer.bindTooltip(name, { sticky: true, className: 'district-tooltip' })
+            }
             layer.on({
               mouseover: e => e.target.setStyle({ fillOpacity: 0.20, weight: 3, color: '#1d4ed8' }),
               mouseout: e => e.target.setStyle({ fillOpacity: 0.05, weight: 1.8, color: '#1e3a8a' }),

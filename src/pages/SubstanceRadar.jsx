@@ -1,13 +1,15 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { MapPin, ArrowLeft, Search, Menu, AlertTriangle, Plus, X, SlidersHorizontal, Lightbulb, Info, BarChart3, Printer, Download } from 'lucide-react'
+import { MapPin, ArrowLeft, Search, Menu, AlertTriangle, Plus, X, SlidersHorizontal, Lightbulb, Info, BarChart3, Printer, Download, Camera } from 'lucide-react'
 import { ComposedChart, Area, ReferenceDot, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, Legend } from 'recharts'
 import { THAI_MONTHS, DNAME_TO_GROUP } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
 import { enrichDrugRow } from '../utils/drugWide'
 import { thaiDateRange } from '../utils/formatDate'
 import { exportDrugIncidentReport } from '../utils/exportReport'
+import { exportMapImage } from '../utils/exportMapImage'
 import ExportDialog from '../components/ExportDialog'
+import MapExportDialog from '../components/MapExportDialog'
 import { getFiscalYearRange, getMonthRange } from '../utils/fiscalYear'
 import { formatThaiDate } from '../utils/heroMeta'
 import PeriodBadge from '../components/PeriodBadge'
@@ -296,7 +298,7 @@ export default function SubstanceRadar() {
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const handleExportConfirm = async ({ mode, dateRange }) => {
+  const handleExportConfirm = async ({ mode, dateRange, zoneDetail, statusFilter }) => {
     setExporting(true)
     try {
       // กำหนดเอง → ข้ามการกรองปี/เดือนของหน้านี้ (ให้ dateRange เป็นตัวกำหนดช่วงแทน) แต่ยังกรองเขต/แขวง/ชนิดยาตามเดิม
@@ -321,7 +323,7 @@ export default function SubstanceRadar() {
       await exportDrugIncidentReport({
         incidentRows: rows,
         dealerRows,
-        mode, dateRange,
+        mode, dateRange, zoneDetail, statusFilter,
         periodLabel,
         filterLabel: scopeParts.join(' · '),
         filenamePrefix: 'radar-report',
@@ -331,6 +333,33 @@ export default function SubstanceRadar() {
       console.error('[/radar] export failed:', err)
     } finally {
       setExporting(false)
+    }
+  }
+
+  // ── Export ภาพแผนที่ (JPG/PNG) — capture mapCaptureRef ด้วย html-to-image ──
+  const mapCaptureRef = useRef(null)
+  const [mapExportDialogOpen, setMapExportDialogOpen] = useState(false)
+  const [mapExporting, setMapExporting] = useState(false)
+  const [mapExportOptions, setMapExportOptions] = useState(null)   // truthy เฉพาะระหว่าง capture — คุม overlay/permanent labels ที่ burn ลงภาพ
+  const handleMapExportConfirm = async (opts) => {
+    setMapExporting(true)
+    setMapExportOptions(opts)
+    try {
+      // รอ 2 เฟรม + delay สั้นๆ ให้ overlay/permanent tooltip render และ Leaflet วาดใหม่ก่อน capture
+      await new Promise((r) => requestAnimationFrame(r))
+      await new Promise((r) => requestAnimationFrame(r))
+      await new Promise((r) => setTimeout(r, 250))
+      const dateStr = new Date().toISOString().slice(0, 10)
+      await exportMapImage(mapCaptureRef.current, {
+        format: opts.format, scale: opts.scale,
+        filename: `bkk-drug-map-${dateStr}.${opts.format}`,
+      })
+      setMapExportDialogOpen(false)
+    } catch (err) {
+      console.error('[/radar] map image export failed:', err)
+    } finally {
+      setMapExportOptions(null)
+      setMapExporting(false)
     }
   }
 
@@ -863,6 +892,10 @@ export default function SubstanceRadar() {
               className="bg-white hover:bg-slate-50 rounded-lg shadow-lg px-4 py-2 border border-slate-200 flex items-center gap-2 text-sm font-medium text-slate-700 transition">
               <Download size={16} /> Export Excel
             </button>
+            <button onClick={() => setMapExportDialogOpen(true)}
+              className="bg-white hover:bg-slate-50 rounded-lg shadow-lg px-4 py-2 border border-slate-200 flex items-center gap-2 text-sm font-medium text-slate-700 transition">
+              <Camera size={16} /> Export ภาพแผนที่
+            </button>
             <a href="/"
               className="bg-white hover:bg-slate-50 rounded-lg shadow-lg px-4 py-2 border border-slate-200 flex items-center gap-2 text-sm font-medium text-slate-700 transition">
               <ArrowLeft size={16} /> กลับหน้าหลัก
@@ -874,6 +907,10 @@ export default function SubstanceRadar() {
           busy={exporting}
           currentPeriodLabel={currentPeriodRange ? `${currentPeriodLabel} (${formatThaiDate(currentPeriodRange.from)} - ${formatThaiDate(currentPeriodRange.to)})` : currentPeriodLabel}
           defaultFrom={currentPeriodRange?.from ?? ''} defaultTo={currentPeriodRange?.to ?? ''}
+        />
+        <MapExportDialog
+          open={mapExportDialogOpen} onClose={() => setMapExportDialogOpen(false)} onConfirm={handleMapExportConfirm}
+          busy={mapExporting}
         />
         <div className="absolute top-4 left-4 z-[1000] bg-slate-900/95 backdrop-blur rounded-2xl shadow-xl px-5 py-4 border border-slate-700 max-w-md">
           <div className="flex items-center gap-3">
@@ -896,24 +933,73 @@ export default function SubstanceRadar() {
           </div>
         </div>
 
-        <IncidentMap
-          className="w-full h-full"
-          points={showPoints || showHeatmap ? points : []}
-          getColor={p => DRUG_COLORS[p.primary_drug] || '#94A3B8'}
-          renderPopup={p => <PointPopupContent p={p} />}
-          tooltipText={p => `${p.primary_drug} · ${p.subdistrict || ''}`}
-          viewMode={showHeatmap ? 'heatmap' : 'point'}
-          flyTarget={flyTarget}
-          searchPopup={searchPopup}
-          onSearchPopupClose={() => setSearchPopup(null)}
-          renderSearchPopup={popup => <SearchPopupContent popup={popup} />}
-          districtLayerKey={districtLayerKey}
-          districtLayerStyle={districtLayerStyle}
-          districtLayerOnEachFeature={districtLayerOnEachFeature}
-          onDistrictClick={setDistrictPanel}
-          highlightDistrict={selectedDistrict === 'all' ? null : selectedDistrict}
-          onZoomChange={setZoom}
-        />
+        <div ref={mapCaptureRef} className="absolute inset-0">
+          <IncidentMap
+            className="w-full h-full"
+            points={showPoints || showHeatmap ? points : []}
+            getColor={p => DRUG_COLORS[p.primary_drug] || '#94A3B8'}
+            renderPopup={p => <PointPopupContent p={p} />}
+            tooltipText={p => `${p.primary_drug} · ${p.subdistrict || ''}`}
+            viewMode={showHeatmap ? 'heatmap' : 'point'}
+            flyTarget={flyTarget}
+            searchPopup={searchPopup}
+            onSearchPopupClose={() => setSearchPopup(null)}
+            renderSearchPopup={popup => <SearchPopupContent popup={popup} />}
+            districtLayerKey={districtLayerKey}
+            districtLayerStyle={districtLayerStyle}
+            districtLayerOnEachFeature={districtLayerOnEachFeature}
+            onDistrictClick={setDistrictPanel}
+            highlightDistrict={selectedDistrict === 'all' ? null : selectedDistrict}
+            onZoomChange={setZoom}
+            permanentDistrictLabels={!!mapExportOptions?.showDistrictNames}
+          />
+
+          {/* overlay burn-in — แสดงเฉพาะระหว่าง capture ภาพส่งออก (mapExportOptions truthy) */}
+          {mapExportOptions?.showTitle && (
+            <div className="absolute top-4 left-4 z-[1050] bg-white/95 rounded-xl shadow-lg px-4 py-3 border border-slate-200 max-w-md">
+              <div className="text-sm font-bold text-slate-900">
+                {viewMode === 'district' ? 'แผนที่กลุ่มเขต กรุงเทพมหานคร' : cfg.title}
+              </div>
+              {pointsPeriod && <div className="text-xs text-slate-500 mt-0.5">{pointsPeriod}</div>}
+              <div className="text-xs text-slate-600 mt-0.5 font-medium">{points.length.toLocaleString()} เรื่อง</div>
+            </div>
+          )}
+          {mapExportOptions?.showLegend && (
+            <div className="absolute bottom-6 left-4 z-[1050] bg-white/95 rounded-xl shadow-lg px-4 py-3 border border-slate-200 max-w-[220px]">
+              {viewMode === 'district' ? (
+                <>
+                  <div className="text-[11px] font-bold text-slate-500 uppercase mb-1.5">กลุ่มเขต</div>
+                  <div className="space-y-1">
+                    {Object.entries(DISTRICT_GROUPS).map(([name, g]) => (
+                      <div key={name} className="flex items-center gap-2 text-xs text-slate-700">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: g.fill, border: `1.5px solid ${g.border}` }} />
+                        {name}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : showHeatmap ? (
+                <>
+                  <div className="text-[11px] font-bold text-slate-500 uppercase mb-1.5">ระดับความเข้มข้น</div>
+                  <div className="rounded overflow-hidden" style={{ height: '10px', width: '160px', background: 'linear-gradient(to right, #fef9c3, #fde047, #fb923c, #ef4444, #b91c1c)' }} />
+                  <div className="flex justify-between text-[10px] text-slate-500 mt-0.5"><span>น้อย</span><span>สูงมาก</span></div>
+                </>
+              ) : (
+                <>
+                  <div className="text-[11px] font-bold text-slate-500 uppercase mb-1.5">ชนิดยา</div>
+                  <div className="space-y-1">
+                    {splitDrugLegend(targetDrugs, drugCounts).shown.slice(0, 10).map(([d, c]) => (
+                      <div key={d} className="flex items-center justify-between gap-3 text-xs text-slate-700">
+                        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: DRUG_COLORS[d] || '#94A3B8' }} />{d}</span>
+                        <span className="font-semibold text-slate-500">{c}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Bug 2: floating detail panel — คลิกเขตบนแผนที่ */}
         {districtPanel && (() => {

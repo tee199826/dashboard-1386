@@ -94,7 +94,13 @@
       "Bash(npm remove *)",
       "Bash(git status *)",
       "mcp__ide__getDiagnostics",
-      "Bash(./node_modules/.bin/jiti _tmp_test_export.mjs)"
+      "Bash(./node_modules/.bin/jiti _tmp_test_export.mjs)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //F //PID 1456)",
+      "Bash(nohup npm run dev)",
+      "Bash(echo \"started PID $!\")",
+      "Bash(npx playwright *)",
+      "Bash(taskkill //F //IM node.exe)"
     ]
   }
 }
