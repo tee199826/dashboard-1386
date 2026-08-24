@@ -446,7 +446,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
     const items = exportNumbers.map(p => {
       const countText = `${p.count.toLocaleString()} เรื่อง`
       const w = Math.max(visualLen(p.label), visualLen(countText) + 1) * 7.2 + 18
-      return { ...p, sx: p.x * t.k + t.x, sy: p.y * t.k + t.y, w, h: H }
+      return { ...p, sx: p.x * t.k + t.x, sy: p.y * t.k + t.y, w }
     })
     const boxes = []
     const boxAt = (it, y) => ({ left: it.sx - it.w / 2, right: it.sx + it.w / 2, top: y - H / 2, bottom: y + H / 2 })
