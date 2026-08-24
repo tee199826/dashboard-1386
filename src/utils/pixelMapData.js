@@ -37,11 +37,11 @@ export function getAvailableFiscalYears(source) {
   if (_fiscalYearsCache[source]) return _fiscalYearsCache[source]
   const compute = (async () => {
     if (source === 'drug_incidents') {
-      const rows = await fetchAllPages('drug_incidents', 'fiscal_year', { parallel: true })
+      const rows = await fetchAllPages('drug_incidents', 'fiscal_year', { parallel: true, orderBy: 'id' })
       return [...new Set(rows.map(r => r.fiscal_year).filter(Boolean))].sort((a, b) => b - a)
     }
     if (source === 'complaints') {
-      const rows = await fetchAllPages('complaints', 'received_date', { parallel: true })
+      const rows = await fetchAllPages('complaints', 'received_date', { parallel: true, orderBy: 'record_uid' })
       return [...new Set(rows.map(r => dateToFiscalYear(r.received_date)).filter(Boolean))].sort((a, b) => b - a)
     }
     return []
@@ -133,12 +133,19 @@ let _hierarchyRowsPromise = null
 function fetchHierarchyRows() {
   if (!_hierarchyRowsPromise) {
     const select = ['district', 'subdistrict', 'community', 'lat', 'lng', 'fiscal_year', ...HIERARCHY_FLAG_COLS].join(', ')
-    _hierarchyRowsPromise = fetchAllPages('drug_incidents', select, { parallel: true }).catch(err => {
+    _hierarchyRowsPromise = fetchAllPages('drug_incidents', select, { parallel: true, orderBy: 'id' }).catch(err => {
       _hierarchyRowsPromise = null // ล้มเหลว → ให้ครั้งหน้าลองใหม่ ไม่ค้าง promise ที่ reject
       throw err
     })
   }
   return _hierarchyRowsPromise
+}
+
+// ล้าง cache ข้อมูลดิบ (hierarchy + ปีงบ) — เรียกหลังอัปโหลด/นำเข้าข้อมูล drug_incidents/complaints สำเร็จ
+// ให้ครั้งต่อไปที่เปิด /pixel-map ดึงข้อมูลสดจาก Supabase แทนชุดเดิมที่ค้างไว้ทั้ง session (กันตัวเลข/รายการปีเก่า)
+export function clearPixelMapDataCache() {
+  _hierarchyRowsPromise = null
+  for (const key of Object.keys(_fiscalYearsCache)) delete _fiscalYearsCache[key]
 }
 
 // hierarchy เดียวจบ: เขต (meta: count/bySubstance/byAction รวมทั้งเขต)
