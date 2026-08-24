@@ -105,9 +105,9 @@ export default function ArrestSection({ rows: arrestRows, total, allRows, cascad
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Panel>
-          <SectionHead title="เก่า / ใหม่" sub="ยังไม่มี field นี้ใน drug_incidents" />
-          <PlaceholderCard title="เก่า/ใหม่" note="ยังไม่มี field นี้ใน drug_incidents" />
+        <Panel className="flex flex-col">
+          <SectionHead title="รายเก่า / รายใหม่" />
+          <PlaceholderCard note="ยังไม่มี field นี้ใน drug_incidents — จะแสดงเมื่อโหลดไฟล์จับกุมรายบุคคล" />
         </Panel>
         <Panel>
           <SectionHead title="เขตจับกุมสูงสุด" sub="Top 3 · % จากจำนวนคดีทั้งหมดในช่วงที่เลือก" />

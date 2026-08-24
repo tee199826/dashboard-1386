@@ -7,7 +7,6 @@ import { useAreaCascade } from '../hooks/useAreaCascade'
 import { useFilter } from '../context/FilterContext'
 import DateFilter from '../components/DateFilter'
 import AreaCascadeBar from '../components/AreaCascadeBar'
-import FilterPill from '../components/FilterPill'
 import { filterByDateColumn } from '../utils/filterRows'
 import ArrestSection from '../components/situation/ArrestSection'
 import TreatmentSection from '../components/situation/TreatmentSection'
@@ -37,8 +36,8 @@ export default function SituationPage() {
 
   if (isLoading) {
     return (
-      <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto">
-        <div className="rounded-lg bg-white ring-1 ring-slate-200 p-8 h-64 animate-pulse" />
+      <div className="p-4 md:p-6 lg:p-8 max-w-[1280px] mx-auto">
+        <div className="rounded-xl border border-slate-200 bg-white p-8 h-64 animate-pulse" />
       </div>
     )
   }
@@ -59,7 +58,7 @@ export default function SituationPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-8 bg-[#fafaf9] min-h-screen">
+    <div className="p-4 md:p-6 lg:p-8 max-w-[1280px] mx-auto space-y-7 bg-[#f6f7f9] min-h-screen">
       <header className="border-b border-slate-200 pb-6">
         <div className="flex items-end justify-between gap-6 flex-wrap">
           <div className="min-w-0">
@@ -69,9 +68,19 @@ export default function SituationPage() {
               {totals[section].toLocaleString()} {sectionUnit} · {sectionLabel} ในช่วงที่เลือก
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <FilterPill label="เลือกข้อมูล" value={section} onChange={setSection}
-              options={SECTIONS.map(([id, label]) => [id, label])} />
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5" role="tablist" aria-label="เลือกข้อมูล">
+              {SECTIONS.map(([id, label]) => (
+                <button key={id} type="button" role="tab" aria-selected={section === id} onClick={() => setSection(id)}
+                  className={`h-8 px-3.5 rounded-md text-[13px] transition ${
+                    section === id
+                      ? 'bg-white text-[#243aa8] font-semibold shadow-[0_1px_2px_rgba(15,22,38,0.08)]'
+                      : 'text-slate-500 font-medium hover:text-slate-700'
+                  }`}>
+                  {label}
+                </button>
+              ))}
+            </div>
             <DateFilter availableYears={availableYears} />
           </div>
         </div>

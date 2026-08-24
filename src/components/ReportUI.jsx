@@ -1,20 +1,19 @@
-// ReportUI — presentational primitives ใช้ร่วม /complaints /situation (จับกุม/บำบัด/ร้องเรียน)
-// design เข้ม: slate+rose+emerald+amber เท่านั้น · ห้าม gradient/emoji · tabular-nums ทุกตัวเลข
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
-} from 'recharts'
+// ReportUI — presentational primitives ของ /situation (จับกุม/บำบัด/ร้องเรียน)
+// ดีไซน์เรียบ/ทางการ: hairline card + accent น้ำเงินกรมเดียว · bar เป็น CSS (ไม่ใช้ Recharts) · tabular-nums ทุกตัวเลข
 import { Download, Table2, Image as ImageIcon } from 'lucide-react'
-import { COLORS, barTooltipStyle, labelStyle } from '../utils/reportStyle'
+import { COLORS, readableOn } from '../utils/reportStyle'
+
+const CARD = 'rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,22,38,0.05)]'
 
 export function Panel({ children, className = '' }) {
-  return <div className={`bg-white rounded-lg ring-1 ring-slate-200 p-6 md:p-8 ${className}`}>{children}</div>
+  return <div className={`${CARD} p-5 md:p-6 ${className}`}>{children}</div>
 }
 
 export function SectionHead({ title, sub }) {
   return (
-    <div className="mb-4">
-      <h3 className="text-lg font-semibold tracking-tight text-slate-900">{title}</h3>
-      {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
+    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+      <h3 className="text-[14.5px] font-semibold tracking-tight text-slate-800">{title}</h3>
+      {sub && <p className="text-[11.5px] text-slate-400">{sub}</p>}
     </div>
   )
 }
@@ -22,122 +21,140 @@ export function SectionHead({ title, sub }) {
 export function Metric({ span, accent = 'text-slate-900', eyebrow, value, unit, sub, divider }) {
   return (
     <div className={`col-span-12 ${span} ${divider ? 'sm:border-l sm:border-slate-200 sm:pl-6' : ''}`}>
-      <div className="text-[11px] font-medium uppercase tracking-widest text-slate-500 leading-tight min-h-[28px]">{eyebrow}</div>
-      <div className="mt-1.5 flex items-baseline gap-1.5">
-        <span className={`text-4xl font-semibold tracking-tight tabular-nums leading-none ${accent}`}>{value}</span>
-        {unit && <span className="text-xs text-slate-400">{unit}</span>}
+      <div className="text-xs font-medium text-slate-500 leading-tight min-h-[18px]">{eyebrow}</div>
+      <div className="mt-2 flex items-baseline gap-1.5">
+        <span className={`text-[38px] font-semibold tracking-tight tabular-nums leading-none ${accent}`}>{value}</span>
+        {unit && <span className="text-sm text-slate-400">{unit}</span>}
       </div>
-      {sub && <div className="mt-2 text-xs text-slate-500 tabular-nums">{sub}</div>}
+      {sub && <div className="mt-2 text-xs text-slate-400 tabular-nums">{sub}</div>}
     </div>
   )
 }
 
-export function RankedBarChart({ data, unit = 'ครั้ง', highlightFirst = true }) {
+// RankedBarChart — แท่งแนวนอนเรียงมาก→น้อย (สี accent, ตัวแรกเข้มสุด) ; width = value/max
+export function RankedBarChart({ data, highlightFirst = true }) {
+  const max = Math.max(1, ...data.map((d) => d.value))
   return (
-    <ResponsiveContainer width="100%" height={Math.max(180, data.length * 40)}>
-      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 36, left: 8, bottom: 4 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-        <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
-        <YAxis type="category" dataKey="name" width={112} tick={{ fontSize: 12, fill: '#475569' }} />
-        <Tooltip contentStyle={barTooltipStyle} formatter={(v) => [v.toLocaleString(), unit]} />
-        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-          {data.map((d, i) => <Cell key={d.name} fill={highlightFirst && i === 0 ? COLORS.amber : COLORS.slateSoft} />)}
-          <LabelList dataKey="value" position="right" formatter={(v) => v.toLocaleString()} style={labelStyle} />
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+    <div className="flex flex-col gap-3.5">
+      {data.map((d, i) => (
+        <div key={d.name} className="grid grid-cols-[92px_1fr_auto] items-center gap-3">
+          <span className="truncate text-[13px] text-slate-500" title={d.name}>{d.name}</span>
+          <span className="h-2 rounded-full overflow-hidden" style={{ background: COLORS.track }}>
+            <span className="block h-full rounded-full" style={{
+              width: `${(d.value / max) * 100}%`,
+              background: COLORS.accent,
+              opacity: highlightFirst && i > 0 ? 0.5 : 1,
+            }} />
+          </span>
+          <span className="text-[13px] font-semibold text-slate-800 tabular-nums text-right min-w-[52px]">{d.value.toLocaleString()}</span>
+        </div>
+      ))}
+    </div>
   )
 }
 
 export function EmptyChart() {
-  return <div className="h-[200px] flex items-center justify-center text-sm text-slate-400">ไม่มีข้อมูลในช่วงที่เลือก</div>
+  return <div className="h-[180px] flex items-center justify-center text-sm text-slate-400">ไม่มีข้อมูลในช่วงที่เลือก</div>
 }
 
-// PlaceholderCard — ใช้กับ dimension ที่ยังไม่มีข้อมูล (เช่น ข้อมูลรายบุคคลของหน้าบำบัด, field ที่ไม่มีใน drug_incidents)
-export function PlaceholderCard({ title, note = 'รอไฟล์บำบัดรายบุคคล (re-export filter กทม. จากระบบ บสต.)' }) {
+// PlaceholderCard — dimension ที่ยังไม่มีข้อมูล : กล่องเส้นประเรียบ ๆ (title/note ไม่บังคับ — ไม่พูดซ้ำหัวข้อ)
+export function PlaceholderCard({ title, note }) {
   return (
-    <div className="rounded-lg ring-1 ring-dashed ring-slate-300 bg-slate-50/60 p-6 flex flex-col items-center justify-center text-center h-full min-h-[160px]">
-      <div className="text-sm font-semibold text-slate-500">{title}</div>
-      <div className="mt-2 text-xs text-slate-400 max-w-[220px]">{note}</div>
+    <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 px-4 py-6 flex flex-1 flex-col items-center justify-center text-center min-h-[124px] gap-1.5">
+      {title && <div className="text-sm font-semibold text-slate-500 leading-tight">{title}</div>}
+      {note && <div className="text-xs text-slate-400 leading-snug max-w-[230px]">{note}</div>}
     </div>
   )
 }
 
-// Top3List — เขต top3 พร้อม % จากยอดรวม (data: [{ name, value, pct }] เรียงมาก→น้อยมาแล้ว)
+// SplitBarChart — แถบเดียวแบ่ง 2 หมวด + legend (เช่น ในชุมชน/นอกชุมชน, ร้ายแรง/ไม่ร้ายแรง)
+export function SplitBarChart({ data, unit = 'ครั้ง', colorFor }) {
+  const total = data.reduce((s, d) => s + d.value, 0) || 1
+  const colorOf = (n) => (colorFor ? colorFor(n) : COLORS.slateSoft)
+  return (
+    <div className="flex flex-col gap-3.5">
+      <div className="flex h-9 rounded-lg overflow-hidden border border-slate-200">
+        {data.map((d) => {
+          const pct = (d.value / total) * 100
+          const bg = colorOf(d.name)
+          return (
+            <div key={d.name} className="flex items-center px-3 text-[13px] font-semibold tabular-nums whitespace-nowrap"
+              style={{ width: `${pct}%`, background: bg, color: readableOn(bg) }}>
+              {pct >= 11 ? `${pct.toFixed(0)}%` : ''}
+            </div>
+          )
+        })}
+      </div>
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-[12.5px] text-slate-500">
+        {data.map((d) => (
+          <span key={d.name} className="inline-flex items-center gap-1.5">
+            <i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: colorOf(d.name) }} />
+            {d.name} · <b className="font-semibold text-slate-700 tabular-nums">{d.value.toLocaleString()}</b> {unit}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Top3List — เขต top3 พร้อมแถบ % (data: [{ name, value, pct }] เรียงมาก→น้อยมาแล้ว)
 export function Top3List({ data }) {
   if (!data.length) return <EmptyChart />
+  const max = Math.max(1, ...data.map((d) => d.pct))
   const sumPct = data.reduce((s, d) => s + d.pct, 0)
   return (
     <div>
-      <ol className="space-y-2.5">
+      <ol className="flex flex-col gap-3.5">
         {data.map((d, i) => (
-          <li key={d.name} className="flex items-center gap-3">
-            <span className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold tabular-nums shrink-0 ${
-              i === 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
-            }`}>{i + 1}</span>
-            <span className="flex-1 text-sm text-slate-700 truncate">{d.name}</span>
-            <span className="text-sm font-semibold text-slate-900 tabular-nums">{d.value.toLocaleString()}</span>
-            <span className="text-xs text-slate-400 tabular-nums w-14 text-right">{d.pct.toFixed(1)}%</span>
+          <li key={d.name} className="grid grid-cols-[24px_1fr_auto] items-center gap-3">
+            <span className="grid place-items-center w-6 h-6 rounded-md text-xs font-semibold tabular-nums shrink-0"
+              style={i === 0
+                ? { background: COLORS.accentSoft, color: COLORS.accentInk }
+                : { background: '#f1f5f9', color: '#64748b' }}>{i + 1}</span>
+            <span className="min-w-0">
+              <span className="block truncate text-[13px] font-medium text-slate-700">{d.name}</span>
+              <span className="mt-1.5 block h-1.5 rounded-full overflow-hidden" style={{ background: COLORS.track }}>
+                <span className="block h-full rounded-full" style={{ width: `${(d.pct / max) * 100}%`, background: COLORS.accent, opacity: i === 0 ? 1 : 0.5 }} />
+              </span>
+            </span>
+            <span className="text-sm font-semibold text-slate-800 tabular-nums min-w-[52px] text-right">{d.pct.toFixed(1)}%</span>
           </li>
         ))}
       </ol>
-      <div className="mt-3 text-xs text-slate-400 tabular-nums">รวม {data.length} เขต = {sumPct.toFixed(1)}% ของทั้งหมด</div>
+      <div className="mt-4 text-xs text-slate-400 tabular-nums">รวม {data.length} เขต = {sumPct.toFixed(1)}% ของทั้งหมด</div>
     </div>
   )
 }
 
-// SplitBarChart — bar แนวนอน 2 หมวด (เช่น ในชุมชน/นอกชุมชน, ร้ายแรง/ไม่ร้ายแรง)
-export function SplitBarChart({ data, unit = 'ครั้ง', colorFor }) {
-  return (
-    <ResponsiveContainer width="100%" height={140}>
-      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 36, left: 8, bottom: 4 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-        <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
-        <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 12, fill: '#475569' }} />
-        <Tooltip contentStyle={barTooltipStyle} formatter={(v) => [v.toLocaleString(), unit]} />
-        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-          {data.map((d) => <Cell key={d.name} fill={colorFor ? colorFor(d.name) : COLORS.slateSoft} />)}
-          <LabelList dataKey="value" position="right" formatter={(v) => v.toLocaleString()} style={labelStyle} />
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
-  )
-}
-
-// ActionBar — ดูตาราง/Export Excel/Infographic(placeholder) ใช้ร่วมทุก section ของ /situation
+// ActionBar — ดูตาราง/Export Excel/Infographic(placeholder) ใช้ร่วมทุก section
 export function ActionBar({ tableOpen, onToggleTable, onExport, exporting }) {
+  const base = 'inline-flex items-center gap-2 h-9 px-3.5 rounded-lg text-sm font-medium transition'
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <button onClick={onToggleTable}
-        className="inline-flex items-center gap-2 h-9 px-3.5 rounded-md ring-1 ring-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
+      <button onClick={onToggleTable} className={`${base} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`}>
         <Table2 size={15} /> {tableOpen ? 'ซ่อนตาราง' : 'ดูตาราง'}
       </button>
       <button onClick={onExport} disabled={exporting}
-        className="inline-flex items-center gap-2 h-9 px-3.5 rounded-md ring-1 ring-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-wait">
+        className={`${base} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-wait`}>
         <Download size={15} /> {exporting ? 'กำลังสร้างไฟล์...' : 'Export Excel'}
       </button>
       <button disabled title="เร็วๆนี้ — ตาม template PDF"
-        className="inline-flex items-center gap-2 h-9 px-3.5 rounded-md ring-1 ring-slate-200 bg-white text-sm font-medium text-slate-400 cursor-not-allowed">
+        className={`${base} border border-slate-200 bg-white text-slate-400 cursor-not-allowed`}>
         <ImageIcon size={15} /> Infographic
       </button>
     </div>
   )
 }
 
-// TablePager — ใช้ร่วมทุกตารางรายละเอียดของ /situation
+// TablePager — ใช้ร่วมทุกตารางรายละเอียด
 export function TablePager({ page, totalPages, total, onPrev, onNext }) {
+  const btn = 'px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition'
   return (
     <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 text-sm text-slate-500">
       <span className="tabular-nums">หน้า {page} / {totalPages} · {total.toLocaleString()} รายการ</span>
       <div className="flex gap-1.5">
-        <button onClick={onPrev} disabled={page === 1}
-          className="px-3 py-1.5 rounded-md ring-1 ring-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
-          ก่อนหน้า
-        </button>
-        <button onClick={onNext} disabled={page === totalPages}
-          className="px-3 py-1.5 rounded-md ring-1 ring-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
-          ถัดไป
-        </button>
+        <button onClick={onPrev} disabled={page === 1} className={btn}>ก่อนหน้า</button>
+        <button onClick={onNext} disabled={page === totalPages} className={btn}>ถัดไป</button>
       </div>
     </div>
   )

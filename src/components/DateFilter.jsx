@@ -49,7 +49,7 @@ function Popover({ availableYears, disabledModes, onClose }) {
   const safeYears = years.length ? years : [currentFY]
 
   return (
-    <div className="absolute top-full left-0 mt-2 z-50 w-72 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-lg p-4">
+    <div className="absolute top-full right-0 mt-2 z-50 w-72 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-lg p-4">
       {/* tab switcher */}
       <div className="flex gap-1 p-1 bg-slate-100 rounded-lg mb-3">
         {MODES.map(m => {
@@ -89,10 +89,10 @@ function Popover({ availableYears, disabledModes, onClose }) {
 
       {state.mode === 'custom' && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <input type="date" className={`${SELECT} flex-1`} value={state.customFrom ?? ''} onChange={e => setCustomFrom(e.target.value || null)} />
-            <span className="text-slate-400 text-sm">→</span>
-            <input type="date" className={`${SELECT} flex-1`} value={state.customTo ?? ''} onChange={e => setCustomTo(e.target.value || null)} />
+          {/* วางแนวตั้ง — input[type=date] มีความกว้างขั้นต่ำ ~157px วางคู่กันใน popover w-72 จะล้น */}
+          <div className="flex flex-col gap-2">
+            <input type="date" aria-label="ตั้งแต่วันที่" className={`${SELECT} w-full`} value={state.customFrom ?? ''} onChange={e => setCustomFrom(e.target.value || null)} />
+            <input type="date" aria-label="ถึงวันที่" className={`${SELECT} w-full`} value={state.customTo ?? ''} onChange={e => setCustomTo(e.target.value || null)} />
           </div>
           <div className="flex flex-wrap gap-1.5">
             {presets.map(p => (
