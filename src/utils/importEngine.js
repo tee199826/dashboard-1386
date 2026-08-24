@@ -400,6 +400,15 @@ const DETECT_RULES = {
     fileKw:  ['substance', 'user', 'ผู้เสพ', 'แบบเก็บ'],
     headers: ['ประทับเวลา', 'อายุ (ปี)', 'first_use_age', 'dealer_1_lat', 'record_no', 'ยาเสพติดหลักที่ใช้เป็นประจำ'],
   },
+  arrest_summary: {
+    fileKw:  ['จับกุม', 'โซน', 'crimes', 'template', 'arrest'],
+    // header จริงมี suffix "(คน)" ติดมาด้วย — เก็บทั้งแบบเต็มและแบบสั้น (เผื่อไฟล์อื่นตัด suffix)
+    headers: ['จำนวนคดี', 'จำนวนผู้ต้องหา(คน)', 'จำนวนผู้ต้องหา', 'ปริมาณของกลาง'],
+  },
+  treatment_summary: {
+    fileKw:  ['บำบัด', 'บสต', 'treatment'],
+    headers: ['จำนวนผู้เข้าบำบัด(คน)', 'จำนวนผู้เข้าบำบัด', 'จำนวนผู้เข้าบำบัดที่รักษาอาการทางจิตร่วม(คน)', 'รายเก่า', 'รายใหม่'],
+  },
 }
 // ตารางแบบ matrix/title — ตรวจจาก detectType (เนื้อหา) แล้วบวก filename
 const CONTENT_RULES = {

@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { BarChart3, MapPin, LogIn, Database, ScrollText, Users, FileSpreadsheet, Map, Upload, Shield, UserSearch, Palette } from 'lucide-react'
+import { BarChart3, MapPin, LogIn, Database, ScrollText, Users, FileSpreadsheet, Map, Upload, Shield, UserSearch, Palette, FileWarning, Activity } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
@@ -12,6 +12,8 @@ export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
   const publicMenus = [
     { to: '/', icon: <BarChart3 size={18} />, label: 'ภาพรวม' },
     { to: '/districts', icon: <MapPin size={18} />, label: 'รายเขต' },
+    { to: '/complaints', icon: <FileWarning size={18} />, label: 'เรื่องร้องเรียน' },
+    { to: '/situation', icon: <Activity size={18} />, label: 'สถานการณ์ยาเสพติด' },
     { to: '/bkn', icon: <Shield size={18} />, label: 'สถิติ บก.น.' },
     { to: '/radar', icon: <Map size={18} />, label: 'แผนที่ยาเสพติด' },
     { to: '/pixel-map', icon: <Palette size={18} />, label: 'สร้างแผนที่' },

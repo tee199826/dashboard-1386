@@ -4,11 +4,12 @@ import {
   Upload, FileText, AlertTriangle, CheckCircle2,
   X, ChevronDown, RefreshCw, Info, LayoutDashboard,
   BookOpen, Sparkles, BarChart3, MapPin, Shield, Map as MapIcon, TrendingUp, Users, ExternalLink,
-  Circle, Copy, Clock,
+  Circle, Copy, Clock, Siren, HeartPulse,
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import { parseFile, detectType, detectTypeScored, mapColumns, buildBatch, validateRows, parse115B, parse114, flattenSubstanceUserRow, assignDrugIncidentDistricts, parseDrugIncidents } from '../utils/importEngine'
-import { upsertRecords, upsertBknSummary, upsertRpt114, upsertSubstanceUsers, upsertDrugIncidents } from '../utils/uploadService'
+import { parseArrestFile, parseTreatmentFile } from '../utils/parseArrestTreatment'
+import { upsertRecords, upsertBknSummary, upsertRpt114, upsertSubstanceUsers, upsertDrugIncidents, upsertArrestSummary, upsertTreatmentSummary } from '../utils/uploadService'
 import { useData } from '../context/DataContext'
 import { supabase } from '../lib/supabase'
 import { getLastUploadDate } from '../utils/heroMeta'
@@ -23,6 +24,8 @@ const TYPE_LABELS = {
   bkn_summary:    '📊 สรุป บก.น. 1–9 (RPT_115_B)',
   report_114:     '📑 รายงาน RPT_114 (การดำเนินการตามร้องเรียน)',
   substance_users:'🧑 แบบเก็บข้อมูลผู้เสพ (substance_users)',
+  // arrest_summary/treatment_summary ไม่อยู่ใน TYPE_LABELS โดยตั้งใจ — dropdown นี้ป้อน "manual mode"
+  // (โหมดเดิม ใช้ mapColumns/computePreview ทั่วไป ไม่รองรับ pivot parser) เลือกได้แค่ผ่าน Guided mode (TABLES)
 }
 
 // Reverse mapping: ประเภทข้อมูล (ตาราง) → หน้าเว็บที่ได้รับผลกระทบเมื่ออัปไฟล์นี้
@@ -50,6 +53,13 @@ const TABLE_TO_PAGES = {
     { name: 'รายเขต', route: '/districts', icon: MapPin },
     { name: 'ผลเก็บข้อมูลผู้เสพ', route: '/substance-users', icon: Users },
   ],
+  // หน้า Situation Dashboard (จับกุม/บำบัด) ยังไม่สร้าง (Phase 2) — ชี้ไปภาพรวมไปก่อน
+  arrest_summary: [
+    { name: 'ภาพรวม', route: '/', icon: BarChart3 },
+  ],
+  treatment_summary: [
+    { name: 'ภาพรวม', route: '/', icon: BarChart3 },
+  ],
 }
 
 const COL_LABELS = {
@@ -75,6 +85,8 @@ const TABLES = [
   { id: 'substance_users', emoji: '🧑', name: 'แบบเก็บข้อมูลผู้เสพ',     icon: Users,      grad: 'from-emerald-500 to-teal-600',   shadow: 'shadow-emerald-500/30' },
   { id: 'bkn_summary',     emoji: '📊', name: 'สรุป บก.น. (RPT 115_B)',  icon: Shield,     grad: 'from-amber-500 to-orange-600',   shadow: 'shadow-amber-500/30' },
   { id: 'report_114',      emoji: '📑', name: 'รายงาน RPT_114',          icon: TrendingUp, grad: 'from-rose-500 to-pink-600',       shadow: 'shadow-rose-500/30' },
+  { id: 'arrest_summary',    emoji: '🚔', name: 'สถิติการจับกุม',        icon: Siren,      grad: 'from-red-500 to-orange-600',     shadow: 'shadow-red-500/30' },
+  { id: 'treatment_summary', emoji: '🏥', name: 'สถิติการบำบัด',         icon: HeartPulse, grad: 'from-cyan-500 to-sky-600',       shadow: 'shadow-cyan-500/30' },
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -129,6 +141,16 @@ async function uploadParsedFor(table, raw, wb, fileName) {
     const result = await upsertSubstanceUsers(raw, { batchId, fileName })
     return { total: raw.length, result }
   }
+  if (table === 'arrest_summary') {
+    const { rows } = parseArrestFile(wb)
+    const result = await upsertArrestSummary(rows, { batchId, fileName })
+    return { total: rows.length, result }
+  }
+  if (table === 'treatment_summary') {
+    const { rows } = parseTreatmentFile(wb)
+    const result = await upsertTreatmentSummary(rows, { batchId, fileName })
+    return { total: rows.length, result }
+  }
   const { batch } = computePreview(raw, table, fileName, wb)
   // drug_incidents: เติม district อัตโนมัติจาก lat/lng ก่อน upsert (กัน district = NULL) → upsert ด้วย content_hash
   if (table === 'drug_incidents') {
@@ -154,6 +176,8 @@ function previewCount(table, raw, wb) {
     if (table === 'bkn_summary') return parse115B(wb).length
     if (table === 'report_114') return parse114(wb).length
     if (table === 'drug_incidents') return parseDrugIncidents(wb).rows.length
+    if (table === 'arrest_summary') return parseArrestFile(wb).rows.length
+    if (table === 'treatment_summary') return parseTreatmentFile(wb).rows.length
   } catch { return null }
   return raw.length   // complaints / substance_users
 }

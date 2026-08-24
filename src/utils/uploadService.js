@@ -135,6 +135,123 @@ export async function upsertDrugIncidents(rows, batchInfo) {
 }
 
 /**
+ * Upsert สถิติการจับกุมเข้าตาราง arrest_summary
+ * rows = output จาก parseArrestFile (คอลัมน์ตรง schema + content_hash)
+ * natural key = content_hash (จาก fiscal_year+district — ไม่รวมค่าตัวเลข)
+ *   → อัปไฟล์เดิมซ้ำที่แก้ยอด = UPDATE ทับ ไม่ append (ต้องมี unique constraint บน content_hash)
+ */
+export async function upsertArrestSummary(rows, batchInfo) {
+  if (!rows || rows.length === 0) return { inserted: 0, updated: 0, failed: 0, error: null }
+
+  const byHash = new Map()
+  const noHash = []
+  for (const r of rows) {
+    if (r.content_hash) byHash.set(r.content_hash, r)
+    else noHash.push(r)
+  }
+  const clean = [...byHash.values(), ...noHash]
+
+  let inserted = 0, updated = 0, failed = 0, lastError = null
+  for (let i = 0; i < clean.length; i += UPSERT_BATCH) {
+    const batch = clean.slice(i, i + UPSERT_BATCH)
+    try {
+      const hashes = batch.map(r => r.content_hash).filter(Boolean)
+      const { data: existing } = await supabase
+        .from('arrest_summary')
+        .select('content_hash')
+        .in('content_hash', hashes)
+      const existingSet = new Set((existing || []).map(r => r.content_hash))
+
+      const { error } = await supabase
+        .from('arrest_summary')
+        .upsert(batch, { onConflict: 'content_hash', ignoreDuplicates: false })
+      if (error) throw error
+
+      inserted += batch.filter(r => !existingSet.has(r.content_hash)).length
+      updated  += batch.filter(r =>  existingSet.has(r.content_hash)).length
+    } catch (err) {
+      failed += batch.length
+      lastError = err.message
+    }
+  }
+
+  let batchLogError = null
+  try {
+    const { error: logErr } = await supabase.from('upload_batches').insert([{
+      batch_id:     batchInfo.batchId,
+      target_table: 'arrest_summary',
+      file_name:    batchInfo.fileName,
+      row_count:    clean.length,
+      status:       failed === 0 ? 'completed' : failed === clean.length ? 'failed' : 'partial',
+      uploaded_at:  new Date().toISOString(),
+    }])
+    if (logErr) batchLogError = logErr.message
+  } catch (err) {
+    batchLogError = err.message
+  }
+
+  return { inserted, updated, failed, error: lastError, batchLogError }
+}
+
+/**
+ * Upsert สถิติผู้เข้าบำบัดเข้าตาราง treatment_summary
+ * rows = output จาก parseTreatmentFile (คอลัมน์ตรง schema + content_hash)
+ * natural key = content_hash (จาก fiscal_year+district+dimension+dim_value)
+ */
+export async function upsertTreatmentSummary(rows, batchInfo) {
+  if (!rows || rows.length === 0) return { inserted: 0, updated: 0, failed: 0, error: null }
+
+  const byHash = new Map()
+  const noHash = []
+  for (const r of rows) {
+    if (r.content_hash) byHash.set(r.content_hash, r)
+    else noHash.push(r)
+  }
+  const clean = [...byHash.values(), ...noHash]
+
+  let inserted = 0, updated = 0, failed = 0, lastError = null
+  for (let i = 0; i < clean.length; i += UPSERT_BATCH) {
+    const batch = clean.slice(i, i + UPSERT_BATCH)
+    try {
+      const hashes = batch.map(r => r.content_hash).filter(Boolean)
+      const { data: existing } = await supabase
+        .from('treatment_summary')
+        .select('content_hash')
+        .in('content_hash', hashes)
+      const existingSet = new Set((existing || []).map(r => r.content_hash))
+
+      const { error } = await supabase
+        .from('treatment_summary')
+        .upsert(batch, { onConflict: 'content_hash', ignoreDuplicates: false })
+      if (error) throw error
+
+      inserted += batch.filter(r => !existingSet.has(r.content_hash)).length
+      updated  += batch.filter(r =>  existingSet.has(r.content_hash)).length
+    } catch (err) {
+      failed += batch.length
+      lastError = err.message
+    }
+  }
+
+  let batchLogError = null
+  try {
+    const { error: logErr } = await supabase.from('upload_batches').insert([{
+      batch_id:     batchInfo.batchId,
+      target_table: 'treatment_summary',
+      file_name:    batchInfo.fileName,
+      row_count:    clean.length,
+      status:       failed === 0 ? 'completed' : failed === clean.length ? 'failed' : 'partial',
+      uploaded_at:  new Date().toISOString(),
+    }])
+    if (logErr) batchLogError = logErr.message
+  } catch (err) {
+    batchLogError = err.message
+  }
+
+  return { inserted, updated, failed, error: lastError, batchLogError }
+}
+
+/**
  * Upsert รายงาน RPT_115_B เข้าตาราง bkn_summary
  * conflict key: report_id, period, bkn, group_no
  */

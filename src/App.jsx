@@ -19,6 +19,8 @@ import PixelMap from './pages/PixelMap'
 import UploadPage from './pages/UploadPage'
 import BknPage from './pages/BknPage'
 import SubstanceUsers from './pages/SubstanceUsers'
+import ComplaintsPage from './pages/ComplaintsPage'
+import SituationPage from './pages/SituationPage'
 import Admin from './pages/Admin'
 import { Menu } from 'lucide-react'
 
@@ -71,6 +73,8 @@ export default function App() {
             <Route path="/operations" element={<MainLayout><FilterProvider><Operations /></FilterProvider></MainLayout>} />
             <Route path="/bkn" element={<MainLayout><FilterProvider><BknPage /></FilterProvider></MainLayout>} />
             <Route path="/substance-users" element={<MainLayout><FilterProvider><SubstanceUsers /></FilterProvider></MainLayout>} />
+            <Route path="/complaints" element={<MainLayout><FilterProvider><ComplaintsPage /></FilterProvider></MainLayout>} />
+            <Route path="/situation" element={<MainLayout><FilterProvider><SituationPage /></FilterProvider></MainLayout>} />
 
             {/* Admin · Data Health (public ก่อน — auth ทีหลัง) */}
             <Route path="/admin" element={<MainLayout><Admin /></MainLayout>} />
