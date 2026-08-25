@@ -1,6 +1,9 @@
 // useAreaCascade — dropdown ซ้อน กลุ่ม→เขต→แขวง→ชุมชน ใช้ร่วมทุก section ของ /situation
 // รับ rows ที่ date-filter แล้ว, คืน rows ที่กรองพื้นที่ครบ + state/options สำหรับ AreaCascadeBar
-// ⚠️ ตัดอำเภอนอก กทม.ด้วย startsWith('เขต') ตอน build district options (memory: bkn-district-filter)
+// ⚠️ กรอง district ด้วย whitelist 50 เขต กทม. (groupOf) ไม่ใช่แค่ startsWith('เขต') —
+// พบ 6 แถวขยะจากการ import ที่มี prefix "เขต" ติดหน้าชื่ออำเภอต่างจังหวัด (เช่น "เขตอำเภอสนม")
+// ซึ่งผ่าน startsWith('เขต') ได้ ต้องตัดตั้งแต่ก่อนสร้าง options/rows ไม่ใช่แค่ตอน build dropdown
+// (memory: bkn-district-filter)
 import { useState, useMemo } from 'react'
 import { DNAME_TO_GROUP } from '../utils/constants'
 
@@ -16,37 +19,47 @@ export function useAreaCascade(dateFiltered) {
   const [subdistrict, setSubdistrict] = useState('all')
   const [community, setCommunity] = useState('all')
 
+  // ตัดแถวที่ district ไม่อยู่ใน whitelist 50 เขต กทม. ออกตั้งแต่ต้นทาง — ทุกอย่างด้านล่าง
+  // (options, rows, KPI) จึงเห็นเฉพาะข้อมูล กทม.จริงเสมอ
+  const bkkRows = useMemo(() => dateFiltered.filter((r) => !!groupOf(r.district)), [dateFiltered])
+
   const districtOptions = useMemo(() => {
     const s = new Set()
-    dateFiltered.forEach((r) => {
-      if (!r.district || !r.district.startsWith('เขต')) return // ตัดอำเภอนอก กทม.
+    bkkRows.forEach((r) => {
       if (group !== 'all' && groupOf(r.district) !== group) return
       s.add(r.district)
     })
     return [...s].sort((a, b) => a.localeCompare(b, 'th'))
-  }, [dateFiltered, group])
+  }, [bkkRows, group])
 
   const subdistrictOptions = useMemo(() => {
     if (district === 'all') return []
     const s = new Set()
-    dateFiltered.forEach((r) => { if (r.district === district && r.subdistrict) s.add(r.subdistrict) })
+    bkkRows.forEach((r) => { if (r.district === district && r.subdistrict) s.add(r.subdistrict) })
     return [...s].sort((a, b) => a.localeCompare(b, 'th'))
-  }, [dateFiltered, district])
+  }, [bkkRows, district])
 
   const communityOptions = useMemo(() => {
     if (subdistrict === 'all') return []
     const s = new Set()
-    dateFiltered.forEach((r) => { if (r.subdistrict === subdistrict && r.community) s.add(r.community) })
+    bkkRows.forEach((r) => { if (r.subdistrict === subdistrict && r.community) s.add(r.community) })
     return [...s].sort((a, b) => a.localeCompare(b, 'th'))
-  }, [dateFiltered, subdistrict])
+  }, [bkkRows, subdistrict])
 
-  const rows = useMemo(() => dateFiltered.filter((r) => {
+  const rows = useMemo(() => bkkRows.filter((r) => {
     if (group !== 'all' && groupOf(r.district) !== group) return false
     if (district !== 'all' && r.district !== district) return false
     if (subdistrict !== 'all' && r.subdistrict !== subdistrict) return false
     if (community !== 'all' && r.community !== community) return false
     return true
-  }), [dateFiltered, group, district, subdistrict, community])
+  }), [bkkRows, group, district, subdistrict, community])
+
+  // % ของแถว (กทม., ตาม date filter) ที่ระบุชุมชัน — ใช้เตือนก่อนกดกรองชุมชน (ข้อมูลจริงมีแค่ ~28%)
+  const communityCoverage = useMemo(() => {
+    const total = bkkRows.length
+    const withCommunity = bkkRows.filter((r) => r.community).length
+    return { total, withCommunity, pct: total ? (withCommunity / total) * 100 : 0 }
+  }, [bkkRows])
 
   const onGroupChange = (v) => { setGroup(v); setDistrict('all'); setSubdistrict('all'); setCommunity('all') }
   const onDistrictChange = (v) => { setDistrict(v); setSubdistrict('all'); setCommunity('all') }
@@ -64,6 +77,6 @@ export function useAreaCascade(dateFiltered) {
     group, district, subdistrict, community,
     setGroup: onGroupChange, setDistrict: onDistrictChange, setSubdistrict: onSubdistrictChange, setCommunity,
     districtOptions, subdistrictOptions, communityOptions,
-    areaLabel,
+    areaLabel, communityCoverage,
   }
 }

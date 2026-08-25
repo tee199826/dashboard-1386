@@ -1,42 +1,60 @@
-// TreatmentSection — ส่วน "บำบัด" ของหน้า /situation (ยกเนื้อจาก TreatmentPage เดิม)
+// TreatmentSection — ส่วน "บำบัด" ของหน้า /situation
+// ดึงจาก treatment_summary + treatment_dim (สถิติบำบัดจริงจาก บสต. กทม., เขต × ปีงบ) — ไม่ใช่ drug_incidents.action_treatment
+// (แค่เรื่องร้องเรียนที่จบด้วยบำบัด ~201 ราย) ตัวเลขจึงเป็นทางการ (เช่น 5,996 ราย ปีงบ 2569)
 import { useState, useMemo } from 'react'
-import { groupOf } from '../../hooks/useAreaCascade'
-import { formatThaiDate } from '../../utils/heroMeta'
-import { DRUG_FLAGS, drugCounts, rowsWithAnyDrug } from '../../utils/drugFlags'
+import {
+  computeTreatmentYoy, topTreatmentDistricts, dimensionCounts, section113Pct, topWithOther, withDonutColors,
+} from '../../utils/treatmentData'
 import { exportTreatmentReport } from '../../utils/exportSituation'
-import { Panel, SectionHead, Metric, RankedBarChart, EmptyChart, PlaceholderCard, ActionBar, TablePager } from '../ReportUI'
+import { Panel, SectionHead, Metric, DonutChart, RankedBarChart, EmptyChart, PlaceholderCard, Top3List, ActionBar, TablePager } from '../ReportUI'
+import { COLORS } from '../../utils/reportStyle'
 
 const PAGE_SIZE = 50
-// ข้อมูลรายบุคคลที่ระบบยังไม่มีระดับ กทม. — รอ re-export ไฟล์บำบัดพร้อม filter กทม. จากระบบ บสต.
-const PLACEHOLDER_DIMENSIONS = ['เก่า/ใหม่', 'ช่วงอายุ+อายุสูง/ต่ำสุด', 'อาชีพ', 'เพศ', 'สัญชาติ', 'มาตรา 113', 'จิตเวช', 'รักษาจิตร่วม%']
+const NO_DATA_NOTE = 'ยังไม่มีข้อมูลใน DB — รอ import'
 
-export default function TreatmentSection({ rows: treatmentRows, total, range, cascade }) {
-  const withDrug = useMemo(() => rowsWithAnyDrug(treatmentRows).length, [treatmentRows])
-  const drugData = useMemo(() => drugCounts(treatmentRows), [treatmentRows])
+// summaryRows/dimRows: กรองตาม cascade+filterState (ปีงบ) มาแล้วจากหน้า SituationPage
+// allSummaryRows: ยังไม่กรองปี — ใช้กับ YoY (ต้องเห็นทั้งปีปัจจุบัน+ปีก่อน)
+export default function TreatmentSection({ summaryRows, dimRows, total, allSummaryRows, cascade, filterState, isLoading, error, reload }) {
+  const totalOld = useMemo(() => summaryRows.reduce((s, r) => s + (r.old_person || 0), 0), [summaryRows])
+  const totalNew = useMemo(() => summaryRows.reduce((s, r) => s + (r.new_person || 0), 0), [summaryRows])
+  const oldNewSum = totalOld + totalNew
+  const oldNewData = useMemo(() => [
+    { name: 'รายเก่า', value: totalOld, color: COLORS.slateSoft },
+    { name: 'รายใหม่', value: totalNew, color: COLORS.amber },
+  ], [totalOld, totalNew])
 
-  const [areaMode, setAreaMode] = useState('group') // 'group' | 'district'
-  const areaData = useMemo(() => {
-    const m = {}
-    treatmentRows.forEach((r) => {
-      if (!r.district) return
-      const key = areaMode === 'group' ? (groupOf(r.district) || 'ไม่ระบุ') : r.district.replace(/^เขต/, '')
-      m[key] = (m[key] || 0) + 1
-    })
-    return Object.entries(m).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
-  }, [treatmentRows, areaMode])
+  const drugDonutData = useMemo(() => withDonutColors(topWithOther(dimensionCounts(dimRows, 'drug'), 5)), [dimRows])
+  const drugSum = useMemo(() => drugDonutData.reduce((s, d) => s + d.value, 0), [drugDonutData])
+
+  const sexDonutData = useMemo(() => withDonutColors(dimensionCounts(dimRows, 'sex')), [dimRows])
+  const sexSum = useMemo(() => sexDonutData.reduce((s, d) => s + d.value, 0), [sexDonutData])
+
+  const occupationData = useMemo(() => dimensionCounts(dimRows, 'occupation', { top: 8 }), [dimRows])
+  const educationData = useMemo(() => dimensionCounts(dimRows, 'education'), [dimRows])
+  const statusData = useMemo(() => dimensionCounts(dimRows, 'status'), [dimRows])
+  const sectionData = useMemo(() => dimensionCounts(dimRows, 'section'), [dimRows])
+  const section113 = useMemo(() => section113Pct(dimRows), [dimRows])
+
+  const yoy = useMemo(() => computeTreatmentYoy(allSummaryRows, cascade, filterState), [allSummaryRows, cascade, filterState])
+  const yoyView = !yoy ? { value: '—', sub: 'เลือกปีงบเพื่อเปรียบเทียบ' }
+    : yoy.pct == null ? { value: '—', sub: 'ไม่มีข้อมูลปีงบก่อนเพื่อเปรียบเทียบ' }
+    : { value: `${yoy.pct > 0 ? '+' : ''}${yoy.pct.toFixed(1)}%`, sub: `ปีงบ ${yoy.prevFY}: ${yoy.prevTotal.toLocaleString()} ราย` }
+
+  const top3 = useMemo(() => topTreatmentDistricts(summaryRows, total), [summaryRows, total])
 
   const [tableOpen, setTableOpen] = useState(false)
   const [page, setPage] = useState(1)
-  const totalPages = Math.max(1, Math.ceil(treatmentRows.length / PAGE_SIZE))
-  const pageRows = useMemo(() => treatmentRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [treatmentRows, page])
+  const tableRows = useMemo(() => summaryRows.slice().sort((a, b) => b.fiscal_year - a.fiscal_year || b.total_person - a.total_person), [summaryRows])
+  const totalPages = Math.max(1, Math.ceil(tableRows.length / PAGE_SIZE))
+  const pageRows = useMemo(() => tableRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [tableRows, page])
 
   const [exporting, setExporting] = useState(false)
   const handleExport = async () => {
     setExporting(true)
     try {
       await exportTreatmentReport({
-        rows: treatmentRows,
-        periodLabel: range ? `${formatThaiDate(range.from)} - ${formatThaiDate(range.to)}` : 'ทั้งหมด',
+        summaryRows, dimRows,
+        periodLabel: filterState.mode === 'fiscal' && filterState.fiscalYear ? `ปีงบ ${filterState.fiscalYear}` : 'ทุกปีงบ',
         filterLabel: cascade.areaLabel,
         filenamePrefix: 'treatment-report',
       })
@@ -45,44 +63,91 @@ export default function TreatmentSection({ rows: treatmentRows, total, range, ca
     }
   }
 
+  if (isLoading) {
+    return <Panel><div className="h-40 animate-pulse bg-slate-50 rounded-md" /></Panel>
+  }
+  if (error) {
+    return (
+      <Panel>
+        <div className="text-center py-8">
+          <p className="text-sm text-slate-500 mb-4">{error}</p>
+          <button onClick={reload} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-md text-sm font-semibold transition">
+            ลองอีกครั้ง
+          </button>
+        </div>
+      </Panel>
+    )
+  }
+
   return (
     <div className="space-y-8">
       <Panel>
         <div className="grid grid-cols-12 gap-y-6">
-          <Metric span="sm:col-span-12" eyebrow="จำนวนผู้บำบัด" value={total.toLocaleString()} unit="ราย" />
+          <Metric span="sm:col-span-6" eyebrow="จำนวนผู้บำบัด" value={total.toLocaleString()} unit="ราย" />
+          <Metric span="sm:col-span-6" divider eyebrow="เทียบปีงบก่อน" value={yoyView.value} sub={yoyView.sub} />
         </div>
       </Panel>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Panel>
-          <SectionHead title="ตัวยา" sub="1 รายอาจเกี่ยวข้องหลายตัวยาได้ · % คำนวณจากรายที่ระบุตัวยาได้เท่านั้น" />
-          {drugData.length ? (
+          <SectionHead title="ตัวยาหลัก" sub="Top 5 · % คำนวณจากรายที่ระบุตัวยาได้เท่านั้น" />
+          {drugDonutData.length ? (
+            <DonutChart data={drugDonutData} unit="ราย" pctBase={drugSum} centerValue={drugSum} centerLabel="ระบุตัวยาได้" />
+          ) : <EmptyChart />}
+        </Panel>
+        <Panel>
+          <SectionHead title="เพศ" />
+          {sexDonutData.length ? (
+            <DonutChart data={sexDonutData} unit="ราย" pctBase={sexSum} centerValue={sexSum} centerLabel="ระบุเพศได้" />
+          ) : <EmptyChart />}
+        </Panel>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Panel>
+          <SectionHead title="อาชีพ" sub="Top 8" />
+          {occupationData.length ? <RankedBarChart data={occupationData} unit="ราย" /> : <EmptyChart />}
+        </Panel>
+        <Panel>
+          <SectionHead title="มาตรา"
+            sub={section113.total ? `ม.113 = ${section113.pct.toFixed(1)}% ของรายที่ระบุมาตราได้ (${section113.m113.toLocaleString()}/${section113.total.toLocaleString()} ราย)` : undefined} />
+          {sectionData.length ? <RankedBarChart data={sectionData} unit="ราย" /> : <EmptyChart />}
+        </Panel>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Panel>
+          <SectionHead title="การศึกษา" />
+          {educationData.length ? <RankedBarChart data={educationData} unit="ราย" /> : <EmptyChart />}
+        </Panel>
+        <Panel>
+          <SectionHead title="สถานะ" />
+          {statusData.length ? <RankedBarChart data={statusData} unit="ราย" /> : <EmptyChart />}
+        </Panel>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Panel>
+          <SectionHead title="รายเก่า / รายใหม่" sub="ผู้บำบัดจำแนกตามประวัติ" />
+          {oldNewSum ? (
             <>
-              <RankedBarChart data={drugData} unit="ราย" />
-              <div className="mt-3 text-xs text-slate-400 tabular-nums">ระบุตัวยาได้ {withDrug.toLocaleString()} จาก {total.toLocaleString()} ราย</div>
+              <DonutChart data={oldNewData} unit="ราย" pctBase={oldNewSum} centerValue={oldNewSum} centerLabel="ผู้บำบัดที่จำแนกได้" />
+              <div className="mt-3 text-xs text-slate-400 tabular-nums">รวมผู้บำบัดที่จำแนกประวัติได้ {oldNewSum.toLocaleString()} ราย</div>
             </>
           ) : <EmptyChart />}
         </Panel>
         <Panel>
-          <div className="flex items-center justify-between mb-4">
-            <SectionHead title="พื้นที่" />
-            <div className="flex gap-1 p-0.5 rounded-md ring-1 ring-slate-200 bg-slate-50 -mt-4">
-              {[['group', 'รายกลุ่ม'], ['district', 'รายเขต']].map(([m, l]) => (
-                <button key={m} onClick={() => setAreaMode(m)}
-                  className={`px-3 py-1.5 rounded text-xs font-semibold transition ${
-                    areaMode === m ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'
-                  }`}>{l}</button>
-              ))}
-            </div>
-          </div>
-          {areaData.length ? <RankedBarChart data={areaData} unit="ราย" /> : <EmptyChart />}
+          <SectionHead title="เขตบำบัดสูงสุด" sub="Top 3 · % จากจำนวนผู้บำบัดทั้งหมดในช่วงที่เลือก" />
+          <Top3List data={top3} />
         </Panel>
       </div>
 
       <div>
-        <SectionHead title="ข้อมูลรายบุคคล" sub="ยังไม่มีในระดับ กทม. — รอ re-export ไฟล์บำบัดพร้อม filter กทม." />
+        <SectionHead title="ข้อมูลรายบุคคล" sub="ยังไม่มีข้อมูลระดับเขตใน DB" />
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {PLACEHOLDER_DIMENSIONS.map((d) => <PlaceholderCard key={d} title={d} />)}
+          <PlaceholderCard title="ช่วงอายุ / อายุสูงสุด-ต่ำสุด" note={NO_DATA_NOTE} />
+          <PlaceholderCard title="จิตเวช (รักษาจิตร่วม)" note={NO_DATA_NOTE} />
+          <PlaceholderCard title="สัญชาติ" note={NO_DATA_NOTE} />
         </div>
       </div>
 
@@ -94,29 +159,27 @@ export default function TreatmentSection({ rows: treatmentRows, total, range, ca
             <table className="w-full text-sm">
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2.5 font-medium">วันที่</th>
                   <th className="px-3 py-2.5 font-medium">เขต</th>
-                  <th className="px-3 py-2.5 font-medium">แขวง</th>
-                  <th className="px-3 py-2.5 font-medium">ชุมชน</th>
-                  <th className="px-3 py-2.5 font-medium">ตัวยา</th>
+                  <th className="px-3 py-2.5 font-medium">ปีงบ</th>
+                  <th className="px-3 py-2.5 font-medium text-right">จำนวนผู้บำบัด</th>
+                  <th className="px-3 py-2.5 font-medium text-right">รายเก่า</th>
+                  <th className="px-3 py-2.5 font-medium text-right">รายใหม่</th>
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-3 py-2.5 text-slate-600 tabular-nums whitespace-nowrap">{formatThaiDate(r.received_date) || '-'}</td>
-                    <td className="px-3 py-2.5 text-slate-700 whitespace-nowrap">{r.district || '-'}</td>
-                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{r.subdistrict || '-'}</td>
-                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{r.community || '-'}</td>
-                    <td className="px-3 py-2.5 text-slate-500">
-                      {[...DRUG_FLAGS.filter(([c]) => r[c]).map(([, l]) => l), ...(Array.isArray(r.drug_others) ? r.drug_others.filter(Boolean) : [])].join(', ') || '-'}
-                    </td>
+                    <td className="px-3 py-2.5 text-slate-700 whitespace-nowrap">{r.district}</td>
+                    <td className="px-3 py-2.5 text-slate-500 tabular-nums whitespace-nowrap">{r.fiscal_year}</td>
+                    <td className="px-3 py-2.5 text-slate-700 tabular-nums text-right">{(r.total_person || 0).toLocaleString()}</td>
+                    <td className="px-3 py-2.5 text-slate-500 tabular-nums text-right">{r.old_person != null ? r.old_person.toLocaleString() : '-'}</td>
+                    <td className="px-3 py-2.5 text-slate-500 tabular-nums text-right">{r.new_person != null ? r.new_person.toLocaleString() : '-'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <TablePager page={page} totalPages={totalPages} total={treatmentRows.length}
+          <TablePager page={page} totalPages={totalPages} total={tableRows.length}
             onPrev={() => setPage((p) => Math.max(1, p - 1))} onNext={() => setPage((p) => Math.min(totalPages, p + 1))} />
         </div>
       )}

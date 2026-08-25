@@ -1,44 +1,13 @@
 // IncidentsSection — ส่วน "ร้องเรียน" ของหน้า /situation (ยกเนื้อจาก IncidentsPage เดิม + เพิ่มตาม infographic template)
 import { useState, useMemo } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
 import { formatThaiDate } from '../../utils/heroMeta'
 import { BEHAVIOR_FLAGS, DRUG_FLAGS, RESULT_FLAGS, drugCounts, countFlag } from '../../utils/drugFlags'
-import { computeYoy, top3Districts, pickComparePair, yearRows } from '../../utils/situationCompare'
+import { computeYoy, top3Districts, pickComparePair } from '../../utils/situationCompare'
 import { exportIncidentsReport } from '../../utils/exportSituation'
 import { Panel, SectionHead, Metric, RankedBarChart, EmptyChart, Top3List, ActionBar, TablePager } from '../ReportUI'
-import { COLORS, barTooltipStyle, labelStyle } from '../../utils/reportStyle'
+import BehaviorCompareChart from './BehaviorCompareChart'
 
 const PAGE_SIZE = 50
-
-function BehaviorYearCompareChart({ allRows, cascade, fyOld, fyNew }) {
-  const rowsOld = useMemo(() => yearRows(allRows, cascade, fyOld), [allRows, cascade, fyOld])
-  const rowsNew = useMemo(() => yearRows(allRows, cascade, fyNew), [allRows, cascade, fyNew])
-  const keyOld = `ปีงบ ${fyOld}`, keyNew = `ปีงบ ${fyNew}`
-  const data = BEHAVIOR_FLAGS.map(([col, label]) => ({
-    name: label, [keyOld]: countFlag(rowsOld, col), [keyNew]: countFlag(rowsNew, col),
-  }))
-
-  return (
-    <>
-      <div className="flex items-center gap-4 mb-3 text-xs text-slate-500">
-        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: COLORS.slateSoft }} /> {keyOld}</span>
-        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: COLORS.amber }} /> {keyNew}</span>
-      </div>
-      <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={data} layout="vertical" margin={{ top: 4, right: 36, left: 8, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-          <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
-          <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 12, fill: '#475569' }} />
-          <Tooltip contentStyle={barTooltipStyle} formatter={(v) => [v.toLocaleString(), 'เรื่อง']} />
-          <Bar dataKey={keyOld} stackId="a" fill={COLORS.slateSoft} />
-          <Bar dataKey={keyNew} stackId="a" fill={COLORS.amber} radius={[0, 4, 4, 0]}>
-            <LabelList dataKey={keyNew} position="right" formatter={(v) => v.toLocaleString()} style={labelStyle} />
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </>
-  )
-}
 
 export default function IncidentsSection({ rows, total, allRows, cascade, filterState, range, availableYears }) {
   const doneCount = useMemo(() => rows.filter((r) => r.result_found || r.action_arrest || r.action_treatment).length, [rows])
@@ -149,7 +118,7 @@ export default function IncidentsSection({ rows, total, allRows, cascade, filter
         <Panel>
           <SectionHead title="พฤติการณ์เทียบ 2 ปีงบ" sub={comparePair ? undefined : 'ยังไม่มีข้อมูลครบ 2 ปีงบสำหรับเปรียบเทียบ'} />
           {comparePair
-            ? <BehaviorYearCompareChart allRows={allRows} cascade={cascade} fyOld={comparePair[1]} fyNew={comparePair[0]} />
+            ? <BehaviorCompareChart allRows={allRows} cascade={cascade} fyOld={comparePair[1]} fyNew={comparePair[0]} />
             : <EmptyChart />}
         </Panel>
       </div>

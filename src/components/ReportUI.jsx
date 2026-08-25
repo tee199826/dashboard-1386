@@ -1,7 +1,7 @@
 // ReportUI — presentational primitives ใช้ร่วม /complaints /situation (จับกุม/บำบัด/ร้องเรียน)
 // design เข้ม: slate+rose+emerald+amber เท่านั้น · ห้าม gradient/emoji · tabular-nums ทุกตัวเลข
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
+  BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from 'recharts'
 import { Download, Table2, Image as ImageIcon } from 'lucide-react'
 import { COLORS, barTooltipStyle, labelStyle } from '../utils/reportStyle'
@@ -46,6 +46,45 @@ export function RankedBarChart({ data, unit = 'ครั้ง', highlightFirst 
         </Bar>
       </BarChart>
     </ResponsiveContainer>
+  )
+}
+
+// DonutChart — โดนัท + legend % ข้างๆ (แทน bar เมื่ออยากได้ฟีล infographic) — data: [{ name, value, color }]
+// pctBase/centerValue: ใช้เมื่อ data ไม่ mutually exclusive (เช่น ตัวยา 1 คดีมีได้หลายตัว รวม value กันแล้วเกินจำนวนคดีจริง)
+// ถ้าไม่ส่งมา ใช้ sum(value) เป็นทั้งฐาน % และเลขกลาง (กรณี mutually exclusive เช่น ข้อหา/ร้ายแรง sum ตรงกับ total อยู่แล้ว)
+export function DonutChart({ data, unit = 'ครั้ง', size = 180, pctBase, centerValue, centerLabel }) {
+  const sum = data.reduce((s, d) => s + d.value, 0)
+  if (!sum) return <EmptyChart />
+  const base = pctBase ?? sum
+  const shownCenter = centerValue ?? sum
+  return (
+    <div className="flex flex-col sm:flex-row items-center gap-5">
+      <div className="relative shrink-0" style={{ width: size, height: size }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%"
+              innerRadius={size * 0.32} outerRadius={size * 0.48} paddingAngle={2} strokeWidth={0}>
+              {data.map((d) => <Cell key={d.name} fill={d.color} />)}
+            </Pie>
+            <Tooltip contentStyle={barTooltipStyle} formatter={(v, n) => [`${v.toLocaleString()} ${unit}`, n]} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <div className="text-xl font-semibold text-slate-900 tabular-nums leading-none">{shownCenter.toLocaleString()}</div>
+          <div className="mt-1 text-[11px] text-slate-400 text-center px-2">{centerLabel || unit}</div>
+        </div>
+      </div>
+      <div className="flex-1 w-full min-w-0 space-y-2">
+        {data.map((d) => (
+          <div key={d.name} className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+            <span className="flex-1 min-w-0 text-sm text-slate-700 truncate">{d.name}</span>
+            <span className="text-sm font-semibold text-slate-900 tabular-nums shrink-0">{d.value.toLocaleString()}</span>
+            <span className="text-xs text-slate-400 tabular-nums w-11 text-right shrink-0">{base ? ((d.value / base) * 100).toFixed(0) : 0}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
