@@ -7,6 +7,7 @@ import { FilterProvider } from './context/FilterContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import Overview from './pages/Overview'
 import AllDistricts from './pages/AllDistricts'
+import BehaviorTable from './pages/BehaviorTable'
 import DataTable from './pages/DataTable'
 import Login from './pages/Login'
 import AuditLogs from './pages/AuditLogs'
@@ -70,6 +71,7 @@ export default function App() {
 
             <Route path="/" element={<MainLayout><FilterProvider><Overview /></FilterProvider></MainLayout>} />
             <Route path="/districts" element={<MainLayout><FilterProvider><AllDistricts /></FilterProvider></MainLayout>} />
+            <Route path="/districts/behavior-table" element={<MainLayout><FilterProvider><BehaviorTable /></FilterProvider></MainLayout>} />
             <Route path="/operations" element={<MainLayout><FilterProvider><Operations /></FilterProvider></MainLayout>} />
             <Route path="/bkn" element={<MainLayout><FilterProvider><BknPage /></FilterProvider></MainLayout>} />
             <Route path="/substance-users" element={<MainLayout><FilterProvider><SubstanceUsers /></FilterProvider></MainLayout>} />

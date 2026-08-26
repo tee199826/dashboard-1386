@@ -660,17 +660,25 @@ export default function AllDistricts() {
             </div>
           </Card>
 
-          <Card title="พฤติการณ์รายเขต (Top 15)" sub="เสพ / ค้า / เสพ-ค้า / ผลิต" icon={<Layers />} loading={!incReady} empty={chartsEmpty}>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={behaviorStack} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                <YAxis type="category" dataKey="district" width={70} tick={{ fontSize: 10, fill: '#475569' }} />
-                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} formatter={(v, n) => [v.toLocaleString(), n]} labelFormatter={(_, p) => p?.[0]?.payload?.full || ''} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                {BEHAVIOR_CATS.map(c => <Bar key={c} dataKey={c} stackId="beh" fill={BEHAVIOR_PALETTE[c]} radius={c === 'ผลิต' ? [0, 4, 4, 0] : 0} />)}
-              </BarChart>
-            </ResponsiveContainer>
+          <Card title="พฤติการณ์รายเขต (Top 15)" sub="เสพ / ค้า / เสพ-ค้า / ผลิต · คลิกกราฟเพื่อดูตารางทั้งหมด" icon={<Layers />} loading={!incReady} empty={chartsEmpty}
+            right={
+              <button onClick={() => navigate('/districts/behavior-table')}
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+                ดูตารางทั้งหมด <ChevronRight size={12} />
+              </button>
+            }>
+            <div onClick={() => navigate('/districts/behavior-table')} className="cursor-pointer">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={behaviorStack} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                  <YAxis type="category" dataKey="district" width={70} tick={{ fontSize: 10, fill: '#475569' }} />
+                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} formatter={(v, n) => [v.toLocaleString(), n]} labelFormatter={(_, p) => p?.[0]?.payload?.full || ''} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {BEHAVIOR_CATS.map(c => <Bar key={c} dataKey={c} stackId="beh" fill={BEHAVIOR_PALETTE[c]} radius={c === 'ผลิต' ? [0, 4, 4, 0] : 0} />)}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </Card>
         </div>
 
