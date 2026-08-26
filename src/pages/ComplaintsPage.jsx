@@ -60,17 +60,20 @@ function Metric({ span, accent = 'text-slate-900', eyebrow, value, unit, sub, di
 const barTooltipStyle = { borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }
 const labelStyle = { fontSize: 11, fill: '#475569', fontWeight: 600 }
 
-function RankedBarChart({ data, unit = 'ครั้ง' }) {
+// percent=true : label บนแท่งเป็น % (ตัวหาร = ผลรวมในกราฟ → รวม 100%) ; bubble (Tooltip) ยังโชว์จำนวนจริง
+function RankedBarChart({ data, unit = 'ครั้ง', percent = true }) {
+  const sum = data.reduce((s, d) => s + d.value, 0) || 1
   return (
     <ResponsiveContainer width="100%" height={Math.max(180, data.length * 40)}>
-      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 36, left: 8, bottom: 4 }}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 44, left: 8, bottom: 4 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
         <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
         <YAxis type="category" dataKey="name" width={112} tick={{ fontSize: 12, fill: '#475569' }} />
         <Tooltip contentStyle={barTooltipStyle} formatter={(v) => [v.toLocaleString(), unit]} />
         <Bar dataKey="value" radius={[0, 4, 4, 0]}>
           {data.map((d, i) => <Cell key={d.name} fill={i === 0 ? COLORS.amber : COLORS.slateSoft} />)}
-          <LabelList dataKey="value" position="right" formatter={(v) => v.toLocaleString()} style={labelStyle} />
+          <LabelList dataKey="value" position="right" style={labelStyle}
+            formatter={(v) => (percent ? `${((v / sum) * 100).toFixed(1)}%` : v.toLocaleString())} />
         </Bar>
       </BarChart>
     </ResponsiveContainer>
@@ -263,7 +266,8 @@ export default function ComplaintsPage() {
                   <Tooltip contentStyle={barTooltipStyle} formatter={(v) => [v.toLocaleString(), 'เรื่อง']} />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                     {statusData.map((d) => <Cell key={d.name} fill={d.done ? COLORS.emerald : COLORS.slateSoft} />)}
-                    <LabelList dataKey="value" position="right" formatter={(v) => v.toLocaleString()} style={labelStyle} />
+                    <LabelList dataKey="value" position="right" style={labelStyle}
+                      formatter={(v) => `${((v / Math.max(1, statusData.reduce((s, d) => s + d.value, 0))) * 100).toFixed(1)}%`} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -292,7 +296,8 @@ export default function ComplaintsPage() {
                 <Tooltip contentStyle={barTooltipStyle} formatter={(v) => [v.toLocaleString(), 'เรื่อง']} />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                   {channelData.map((d, i) => <Cell key={d.name} fill={i === 0 ? COLORS.amber : COLORS.slateSoft} />)}
-                  <LabelList dataKey="value" position="top" formatter={(v) => v.toLocaleString()} style={labelStyle} />
+                  <LabelList dataKey="value" position="top" style={labelStyle}
+                    formatter={(v) => `${((v / Math.max(1, channelData.reduce((s, d) => s + d.value, 0))) * 100).toFixed(1)}%`} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

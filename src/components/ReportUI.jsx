@@ -1,5 +1,6 @@
 // ReportUI — presentational primitives ของ /situation (จับกุม/บำบัด/ร้องเรียน)
 // ดีไซน์เรียบ/ทางการ: hairline card + accent น้ำเงินกรมเดียว · bar เป็น CSS (ไม่ใช้ Recharts) · tabular-nums ทุกตัวเลข
+import { useState, useRef } from 'react'
 import { Download, Table2, Image as ImageIcon } from 'lucide-react'
 import { COLORS, readableOn } from '../utils/reportStyle'
 
@@ -32,12 +33,22 @@ export function Metric({ span, accent = 'text-slate-900', eyebrow, value, unit, 
 }
 
 // RankedBarChart — แท่งแนวนอนเรียงมาก→น้อย (สี accent, ตัวแรกเข้มสุด) ; width = value/max
-export function RankedBarChart({ data, highlightFirst = true }) {
+// percent: true = แสดงเป็น "%" (ตัวหาร = ผลรวมของค่าในกราฟ → รวม 100%) + จำนวนจริงตัวเล็กจางไว้อ้างอิง ; false = แสดงจำนวน
+// hover แท่งไหน → bubble ตามเมาส์บอกชื่อ + จำนวน (+ %)
+export function RankedBarChart({ data, percent = false, highlightFirst = true, unit = '' }) {
   const max = Math.max(1, ...data.map((d) => d.value))
+  const sum = data.reduce((s, d) => s + d.value, 0) || 1
+  const [hover, setHover] = useState(null) // { name, value, x, y }
+  const ref = useRef(null)
+  const onMove = (d) => (e) => {
+    const r = ref.current?.getBoundingClientRect(); if (!r) return
+    setHover({ name: d.name, value: d.value, x: e.clientX - r.left, y: e.clientY - r.top })
+  }
   return (
-    <div className="flex flex-col gap-3.5">
+    <div ref={ref} className="relative flex flex-col gap-3.5" onMouseLeave={() => setHover(null)}>
       {data.map((d, i) => (
-        <div key={d.name} className="grid grid-cols-[92px_1fr_auto] items-center gap-3">
+        <div key={d.name} onMouseMove={onMove(d)}
+          className="grid grid-cols-[92px_1fr_auto] items-center gap-3 cursor-default rounded-md hover:bg-slate-50 -mx-1 px-1 py-0.5 transition-colors">
           <span className="truncate text-[13px] text-slate-500" title={d.name}>{d.name}</span>
           <span className="h-2 rounded-full overflow-hidden" style={{ background: COLORS.track }}>
             <span className="block h-full rounded-full" style={{
@@ -46,9 +57,22 @@ export function RankedBarChart({ data, highlightFirst = true }) {
               opacity: highlightFirst && i > 0 ? 0.5 : 1,
             }} />
           </span>
-          <span className="text-[13px] font-semibold text-slate-800 tabular-nums text-right min-w-[52px]">{d.value.toLocaleString()}</span>
+          <span className="text-right tabular-nums min-w-[56px] text-[13px] font-semibold text-slate-800">
+            {percent ? `${((d.value / sum) * 100).toFixed(1)}%` : d.value.toLocaleString()}
+          </span>
         </div>
       ))}
+      {hover && (
+        <div className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-full" style={{ left: hover.x, top: hover.y - 10 }}>
+          <div className="rounded-lg bg-slate-900/95 text-white px-2.5 py-1.5 shadow-lg whitespace-nowrap text-center">
+            <div className="text-xs font-semibold">{hover.name}</div>
+            <div className="text-[11px] text-slate-300 tabular-nums">
+              <span className="font-bold text-white">{hover.value.toLocaleString()}</span>{unit && ` ${unit}`}
+            </div>
+          </div>
+          <div className="mx-auto h-0 w-0 border-x-4 border-t-4 border-x-transparent border-t-slate-900/95" />
+        </div>
+      )}
     </div>
   )
 }

@@ -80,13 +80,13 @@ export default function ArrestSection({ rows: arrestRows, total, allRows, cascad
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Panel>
           <SectionHead title="ข้อหา" sub="พฤติการณ์ 4 หมวด (แยกจากกัน) — %รวม 100" />
-          {behData.some((d) => d.value > 0) ? <RankedBarChart data={behData} unit="คดี" /> : <EmptyChart />}
+          {behData.some((d) => d.value > 0) ? <RankedBarChart data={behData} percent unit="คดี" /> : <EmptyChart />}
         </Panel>
         <Panel>
-          <SectionHead title="ของกลางตัวยา" sub="1 คดีมีหลายตัวยาได้ · % คำนวณจากคดีที่ระบุตัวยาได้เท่านั้น" />
+          <SectionHead title="ของกลางตัวยา" sub="สัดส่วนตัวยาที่พบ — รวม 100% (1 คดีมีได้หลายตัวยา)" />
           {drugData.length ? (
             <>
-              <RankedBarChart data={drugData} unit="คดี" />
+              <RankedBarChart data={drugData} percent unit="คดี" />
               <div className="mt-3 text-xs text-slate-400 tabular-nums">ระบุตัวยาได้ {withDrug.toLocaleString()} จาก {total.toLocaleString()} คดี</div>
             </>
           ) : <EmptyChart />}
