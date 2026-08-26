@@ -9,17 +9,39 @@ export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
 
   const close = () => setSidebarOpen?.(false)
 
-  const publicMenus = [
-    { to: '/', icon: <BarChart3 size={18} />, label: 'ภาพรวม' },
-    { to: '/districts', icon: <MapPin size={18} />, label: 'รายเขต' },
-    { to: '/complaints', icon: <FileWarning size={18} />, label: 'เรื่องร้องเรียน' },
-    { to: '/situation', icon: <Activity size={18} />, label: 'สถานการณ์ยาเสพติด' },
-    { to: '/bkn', icon: <Shield size={18} />, label: 'สถิติ บก.น.' },
-    { to: '/radar', icon: <Map size={18} />, label: 'แผนที่ยาเสพติด' },
-    { to: '/pixel-map', icon: <Palette size={18} />, label: 'สร้างแผนที่' },
-    { to: '/operations', icon: <FileSpreadsheet size={18} />, label: 'ผลการดำเนินงาน' },
-    { to: '/substance-users', icon: <UserSearch size={18} />, label: 'ผลเก็บข้อมูลจากผู้เสพติด' },
+  // เมนูสาธารณะจัดเป็นหมวด — section=null = ไม่มีหัวข้อ (หน้าแรก)
+  const publicGroups = [
+    { section: null, items: [
+      { to: '/', icon: <BarChart3 size={18} />, label: 'ภาพรวม' },
+    ] },
+    { section: 'สถิติ & รายงาน', items: [
+      { to: '/districts', icon: <MapPin size={18} />, label: 'รายเขต' },
+      { to: '/situation', icon: <Activity size={18} />, label: 'สถานการณ์ยาเสพติด' },
+      { to: '/bkn', icon: <Shield size={18} />, label: 'สถิติ บก.น.' },
+    ] },
+    { section: 'ข้อมูล & บันทึก', items: [
+      { to: '/complaints', icon: <FileWarning size={18} />, label: 'เรื่องร้องเรียน' },
+      { to: '/operations', icon: <FileSpreadsheet size={18} />, label: 'ผลการดำเนินงาน' },
+      { to: '/substance-users', icon: <UserSearch size={18} />, label: 'ผลเก็บข้อมูลจากผู้เสพติด' },
+    ] },
+    { section: 'แผนที่', items: [
+      { to: '/radar', icon: <Map size={18} />, label: 'แผนที่ยาเสพติด' },
+      { to: '/pixel-map', icon: <Palette size={18} />, label: 'สร้างแผนที่' },
+    ] },
   ]
+
+  const renderItem = (m) => (
+    <NavLink key={m.to} to={m.to} end={m.to === '/'} onClick={close}
+      className={({ isActive }) => {
+        const base = 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition '
+        // active state พิเศษเฉพาะ /substance-users (violet glow ตาม theme) — หน้าอื่นคงเดิม
+        if (isActive && m.to === '/substance-users')
+          return base + 'bg-violet-500/30 text-white font-semibold shadow-lg shadow-violet-500/30 border-l-4 border-violet-300'
+        return base + (isActive ? 'bg-white/20 font-semibold' : 'hover:bg-white/10')
+      }}>
+      {m.icon} {m.label}
+    </NavLink>
+  )
 
   const adminMenus = [
     { to: '/admin/data', icon: <Database size={18} />, label: 'จัดการข้อมูล' },
@@ -35,18 +57,13 @@ export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
     }`}>
 
       <nav className="p-3 space-y-1">
-        <div className={`px-3 py-1 text-xs uppercase tracking-wide ${isSubstanceUsers ? 'text-violet-300/70' : 'text-blue-300/70'}`}>เมนูหลัก</div>
-        {publicMenus.map(m => (
-          <NavLink key={m.to} to={m.to} end={m.to === '/'} onClick={close}
-            className={({ isActive }) => {
-              const base = 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition '
-              // active state พิเศษเฉพาะ /substance-users (violet glow ตาม theme) — หน้าอื่นคงเดิม
-              if (isActive && m.to === '/substance-users')
-                return base + 'bg-violet-500/30 text-white font-semibold shadow-lg shadow-violet-500/30 border-l-4 border-violet-300'
-              return base + (isActive ? 'bg-white/20 font-semibold' : 'hover:bg-white/10')
-            }}>
-            {m.icon} {m.label}
-          </NavLink>
+        {publicGroups.map((g, gi) => (
+          <div key={g.section ?? 'home'} className={`space-y-1 ${gi > 0 ? 'pt-2' : ''}`}>
+            {g.section && (
+              <div className={`px-3 py-1 text-xs uppercase tracking-wide ${isSubstanceUsers ? 'text-violet-300/70' : 'text-blue-300/70'}`}>{g.section}</div>
+            )}
+            {g.items.map(renderItem)}
+          </div>
         ))}
 
         {isAdmin && (

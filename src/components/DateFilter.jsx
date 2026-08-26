@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Calendar, ChevronDown, RotateCcw } from 'lucide-react'
+import { Calendar, ChevronDown, RotateCcw, Check } from 'lucide-react'
 import { useFilter } from '../context/FilterContext'
 import { getFiscalYearRange, dateToFiscalYear } from '../utils/fiscalYear'
 
@@ -20,10 +20,13 @@ const todayISO = () => new Date().toISOString().slice(0, 10)
 const shiftDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
 
 function summarize(state) {
-  if (state.mode === 'fiscal') return state.fiscalYear ? `ปีงบ ${state.fiscalYear}` : 'ทุกปีงบ'
+  if (state.mode === 'fiscal') {
+    const n = state.fiscalYears?.length || 0
+    return n === 0 ? 'ทุกปี' : n === 1 ? `ปี ${state.fiscalYears[0]}` : `${n} ปีงบ`
+  } 
   if (state.mode === 'month') {
-    if (!state.monthYear) return 'ทุกปีงบ'
-    if (!state.month) return `ปีงบ ${state.monthYear} (ทุกเดือน)`
+    if (!state.monthYear) return 'ทุกปี'
+    if (!state.month) return `ปี ${state.monthYear} (ทุกเดือน)`
     return `${TH[state.month]} ${state.monthYear}`
   }
   // custom
@@ -36,8 +39,8 @@ function summarize(state) {
 }
 
 function Popover({ availableYears, disabledModes, onClose }) {
-  const { state, setMode, setFiscalYear, setMonthYear, setMonth, setCustomFrom, setCustomTo, reset } = useFilter()
-  const years = availableYears.length ? availableYears : (state.fiscalYear ? [state.fiscalYear] : [])
+  const { state, setMode, setFiscalYears, toggleFiscalYear, setMonthYear, setMonth, setCustomFrom, setCustomTo, reset } = useFilter()
+  const years = availableYears.length ? availableYears : (state.fiscalYears?.length ? state.fiscalYears : [])
 
   const presets = [
     { label: '30 วัน', apply: () => { setCustomFrom(shiftDays(-30)); setCustomTo(todayISO()) } },
@@ -68,10 +71,26 @@ function Popover({ availableYears, disabledModes, onClose }) {
       </div>
 
       {state.mode === 'fiscal' && (
-        <select className={`${SELECT} w-full h-9`} value={state.fiscalYear ?? ''} onChange={e => setFiscalYear(e.target.value === '' ? null : Number(e.target.value))}>
-          <option value="">ทั้งหมด</option>
-          {safeYears.map(y => <option key={y} value={y}>ปีงบ {y}</option>)}
-        </select>
+        <div className="rounded-lg ring-1 ring-slate-200 divide-y divide-slate-100 overflow-hidden">
+          {/* เลือกได้หลายปีงบ (ติ๊กหลายอัน) — ว่าง = ทุกปีงบ */}
+          <button type="button" onClick={() => setFiscalYears([])}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-blue-50">
+            <span className={`w-4 shrink-0 ${(state.fiscalYears?.length || 0) === 0 ? 'text-blue-600' : 'text-transparent'}`}><Check size={15} /></span>
+            ทุกปีงบ
+          </button>
+          <div className="max-h-56 overflow-y-auto">
+            {safeYears.map(y => {
+              const on = state.fiscalYears?.includes(y)
+              return (
+                <button key={y} type="button" onClick={() => toggleFiscalYear(y)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-blue-50">
+                  <span className={`w-4 shrink-0 ${on ? 'text-blue-600' : 'text-transparent'}`}><Check size={15} /></span>
+                  ปีงบ {y}
+                </button>
+              )
+            })}
+          </div>
+        </div>
       )}
 
       {state.mode === 'month' && (
@@ -130,9 +149,10 @@ export default function DateFilter({ availableYears = [], compact = false, disab
   useEffect(() => {
     if (didInit.current || !availableYears.length) return
     didInit.current = true
-    if (state.fiscalYear == null) setFiscalYear(availableYears[0])
+    // ตั้ง default เฉพาะตอนยังไม่เลือกปีเลย — ไม่ทับการเลือกหลายปีที่ผู้ใช้ตั้งไว้ (fiscalYears มีค่า → fiscalYear=null)
+    if ((state.fiscalYears?.length || 0) === 0) setFiscalYear(availableYears[0])
     if (state.monthYear == null) setMonthYear(availableYears[0])
-  }, [availableYears, state.fiscalYear, state.monthYear, setFiscalYear, setMonthYear])
+  }, [availableYears, state.fiscalYears, state.monthYear, setFiscalYear, setMonthYear])
 
   // click outside ปิด
   useEffect(() => {

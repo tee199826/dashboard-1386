@@ -91,7 +91,7 @@ export default function ComplaintsPage() {
     return [...s].sort((a, b) => b - a)
   }, [records])
 
-  const dateFiltered = useMemo(() => filterByDateColumn(records, 'date', range), [records, range?.from, range?.to])
+  const dateFiltered = useMemo(() => filterByDateColumn(records, 'date', range), [records, range])
 
   // ── cascading area filter: กลุ่ม → เขต → แขวง → ชุมชน ──
   const [group, setGroup] = useState('all')
@@ -167,6 +167,10 @@ export default function ComplaintsPage() {
     rows.forEach((r) => { const c = r.channel || 'ไม่ระบุ'; m[c] = (m[c] || 0) + 1 })
     return Object.entries(m).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
   }, [rows])
+
+  // ผลรวมสำหรับคิด % บนแท่ง (คำนวณครั้งเดียว — เลี่ยง reduce ซ้ำในทุก label ของ LabelList)
+  const statusSum = statusData.reduce((s, d) => s + d.value, 0) || 1
+  const channelSum = channelData.reduce((s, d) => s + d.value, 0) || 1
 
   // ── table toggle + pagination ──
   const [tableOpen, setTableOpen] = useState(false)
@@ -267,7 +271,7 @@ export default function ComplaintsPage() {
                   <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                     {statusData.map((d) => <Cell key={d.name} fill={d.done ? COLORS.emerald : COLORS.slateSoft} />)}
                     <LabelList dataKey="value" position="right" style={labelStyle}
-                      formatter={(v) => `${((v / Math.max(1, statusData.reduce((s, d) => s + d.value, 0))) * 100).toFixed(1)}%`} />
+                      formatter={(v) => `${((v / statusSum) * 100).toFixed(1)}%`} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -297,7 +301,7 @@ export default function ComplaintsPage() {
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                   {channelData.map((d, i) => <Cell key={d.name} fill={i === 0 ? COLORS.amber : COLORS.slateSoft} />)}
                   <LabelList dataKey="value" position="top" style={labelStyle}
-                    formatter={(v) => `${((v / Math.max(1, channelData.reduce((s, d) => s + d.value, 0))) * 100).toFixed(1)}%`} />
+                    formatter={(v) => `${((v / channelSum) * 100).toFixed(1)}%`} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

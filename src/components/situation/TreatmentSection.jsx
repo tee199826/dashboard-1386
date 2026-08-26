@@ -55,10 +55,10 @@ export default function TreatmentSection({ rows: treatmentRows, total, range, ca
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Panel>
-          <SectionHead title="ตัวยา" sub="1 รายอาจเกี่ยวข้องหลายตัวยาได้ · % คำนวณจากรายที่ระบุตัวยาได้เท่านั้น" />
+          <SectionHead title="ตัวยา" sub="สัดส่วนตัวยาที่พบ — รวม 100% (1 รายมีได้หลายตัวยา)" />
           {drugData.length ? (
             <>
-              <RankedBarChart data={drugData} unit="ราย" />
+              <RankedBarChart data={drugData} percent unit="ราย" />
               <div className="mt-3 text-xs text-slate-400 tabular-nums">ระบุตัวยาได้ {withDrug.toLocaleString()} จาก {total.toLocaleString()} ราย</div>
             </>
           ) : <EmptyChart />}
@@ -75,7 +75,7 @@ export default function TreatmentSection({ rows: treatmentRows, total, range, ca
               ))}
             </div>
           </div>
-          {areaData.length ? <RankedBarChart data={areaData} unit="ราย" /> : <EmptyChart />}
+          {areaData.length ? <RankedBarChart data={areaData} percent unit="ราย" /> : <EmptyChart />}
         </Panel>
       </div>
 

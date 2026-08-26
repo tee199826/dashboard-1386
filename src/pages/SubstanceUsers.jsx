@@ -113,7 +113,7 @@ export default function SubstanceUsers() {
   }, [rows])
   const filteredRows = useMemo(
     () => filterByDateColumn(rows, 'surveyed_at', range),
-    [rows, range?.from, range?.to],
+    [rows, range],
   )
 
   // ── ช่วงวันที่สำรวจจริง (footer pill) — min/max ของ surveyed_at จาก filtered ──

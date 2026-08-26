@@ -122,22 +122,22 @@ export default function IncidentsSection({ rows, total, allRows, cascade, filter
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Panel>
           <SectionHead title="พฤติการณ์" sub="4 หมวด (แยกจากกัน) — %รวม 100" />
-          {behData.some((d) => d.value > 0) ? <RankedBarChart data={behData} unit="เรื่อง" /> : <EmptyChart />}
+          {behData.some((d) => d.value > 0) ? <RankedBarChart data={behData} percent unit="เรื่อง" /> : <EmptyChart />}
         </Panel>
         <Panel>
           <SectionHead title="ตัวยา" sub="Top 10 · 1 เรื่องอาจพบหลายชนิด" />
-          {drugData.length ? <RankedBarChart data={drugData} unit="เรื่อง" /> : <EmptyChart />}
+          {drugData.length ? <RankedBarChart data={drugData} percent unit="เรื่อง" /> : <EmptyChart />}
         </Panel>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Panel>
           <SectionHead title="ผลตรวจสอบ" />
-          {resultData.some((d) => d.value > 0) ? <RankedBarChart data={resultData} unit="เรื่อง" /> : <EmptyChart />}
+          {resultData.some((d) => d.value > 0) ? <RankedBarChart data={resultData} percent unit="เรื่อง" /> : <EmptyChart />}
         </Panel>
         <Panel>
           <SectionHead title="พบแล้วผลเป็นอะไร" sub={`ใน ${foundOutcome.total.toLocaleString()} เรื่องที่พบพฤติการณ์`} />
-          {foundOutcome.total ? <RankedBarChart data={foundOutcome.data} unit="เรื่อง" /> : <EmptyChart />}
+          {foundOutcome.total ? <RankedBarChart data={foundOutcome.data} percent unit="เรื่อง" /> : <EmptyChart />}
         </Panel>
       </div>
 

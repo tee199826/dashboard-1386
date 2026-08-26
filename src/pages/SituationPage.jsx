@@ -24,7 +24,7 @@ export default function SituationPage() {
   const range = getDateRange()
   const [section, setSection] = useState('arrest')
 
-  const dateFiltered = useMemo(() => filterByDateColumn(allRows, 'received_date', range), [allRows, range?.from, range?.to])
+  const dateFiltered = useMemo(() => filterByDateColumn(allRows, 'received_date', range), [allRows, range])
   const cascade = useAreaCascade(dateFiltered)
 
   const arrestRows = useMemo(() => cascade.rows.filter((r) => r.action_arrest), [cascade.rows])

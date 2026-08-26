@@ -190,7 +190,7 @@ export default function AllDistricts() {
 
   const { getDateRange, state } = useFilter()
   const range = getDateRange()
-  const rFrom = range?.from
+  const rFrom = range?.from  // ช่วงครอบ (min→max) — ใช้กับ comparison/trend ; หลายปีงบใช้ span
   const rTo = range?.to
   const availableYears = useMemo(() => {
     const s = new Set()
@@ -200,9 +200,9 @@ export default function AllDistricts() {
     return [...s].sort((a, b) => b - a)
   }, [records, incidents, dealerRows])
 
-  const fRecords = useMemo(() => filterByDateColumn(records, 'date', range), [records, rFrom, rTo])
-  const fIncidents = useMemo(() => filterByDateColumn(incidents, 'received_date', range), [incidents, rFrom, rTo])
-  const fDealers = useMemo(() => filterByDateColumn(dealerRows, 'surveyed_at', range), [dealerRows, rFrom, rTo])
+  const fRecords = useMemo(() => filterByDateColumn(records, 'date', range), [records, range])
+  const fIncidents = useMemo(() => filterByDateColumn(incidents, 'received_date', range), [incidents, range])
+  const fDealers = useMemo(() => filterByDateColumn(dealerRows, 'surveyed_at', range), [dealerRows, range])
 
   // ── YTD comparison (จาก incidents raw) ──
   const comparison = useMemo(() => {
