@@ -81,7 +81,7 @@ export default function SituationPage() {
                 </button>
               ))}
             </div>
-            <DateFilter availableYears={availableYears} />
+            <DateFilter availableYears={availableYears} defaultAllYears />
           </div>
         </div>
       </header>

@@ -73,7 +73,7 @@ export default function StylePanel({
           แสดงเส้นขอบเขต
         </label>
         <Field label="ภาพแผนที่พื้นหลัง">
-          <Seg options={[['carto', 'ยาเสพติด'], ['osm', 'OSM'], ['', 'ไม่ใช้']]}
+          <Seg options={[['gray', 'เทาอ่อน'], ['osm', 'OSM'], ['', 'ไม่ใช้']]}
             value={style.tileSource} onChange={v => updateStyle({ tileSource: v })} />
         </Field>
         <Field label="พื้นหลัง">

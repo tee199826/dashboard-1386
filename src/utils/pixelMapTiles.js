@@ -1,17 +1,18 @@
-// pixelMapTiles.js — raster basemap (OSM/CARTO) วางใต้ pixel map
+// pixelMapTiles.js — raster basemap วางใต้ pixel map
 // tile คำนวณจาก standard Web Mercator slippy-map grid แล้ว project มุมแต่ละ tile ผ่าน equirectangular
 // projection เดียวกับ district polygons (makeProjection) — ภาพจึงถูกยืด/บีบเล็กน้อยให้พอดีกรอบเขต
 // (<image preserveAspectRatio="none"> ที่ MapCanvas.jsx รองรับ mismatch นี้อยู่แล้ว)
 const TILE_SIZE = 256
-const CARTO_SUBDOMAINS = ['a', 'b', 'c', 'd']
 const OSM_SUBDOMAINS = ['a', 'b', 'c']
 
-// สอดคล้องกับ basemap ที่ใช้อยู่แล้วใน IncidentMap.jsx (carto) / OverviewMiniMap.jsx (osm)
+// basemap ที่ใช้ได้จริง (ฟรี ไม่ต้องมี API key)
+// gray = Esri World Light Gray — พื้นเทาอ่อนสะอาดแบบเดิม แทน CARTO light_all ที่บังคับ API key แล้ว (ขึ้น "API KEY REQUIRED")
+//        Esri ใช้ลำดับ {z}/{y}/{x} (y ก่อน x) — pixel-map วาดชื่อเขตเองจึงใช้เฉพาะชั้นพื้น ไม่ต้องมี reference labels
 export const TILE_SOURCES = {
-  carto: {
-    label: 'ยาเสพติด',
-    attribution: '© OpenStreetMap contributors © CARTO',
-    url: (z, x, y) => `https://${CARTO_SUBDOMAINS[(x + y) % CARTO_SUBDOMAINS.length]}.basemaps.cartocdn.com/light_all/${z}/${x}/${y}.png`,
+  gray: {
+    label: 'เทาอ่อน',
+    attribution: 'Tiles © Esri',
+    url: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/${z}/${y}/${x}`,
   },
   osm: {
     label: 'OSM',

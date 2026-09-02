@@ -192,10 +192,16 @@ export default function IncidentMap({
       attributionControl={!mini}
       className={className}
     >
+      {/* Esri World Light Gray — พื้นเทาอ่อนสะอาดแบบเดิม (แทน CARTO light_all ที่บังคับ API key แล้ว = ขึ้น "API KEY REQUIRED") ; base = พื้น, reference = ชื่อสถานที่ */}
       <TileLayer
-        attribution='&copy; OpenStreetMap contributors &copy; CARTO'
-        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+        attribution='Tiles &copy; Esri'
+        url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
         crossOrigin="anonymous"
+      />
+      <TileLayer
+        url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}"
+        crossOrigin="anonymous"
+        pane="tilePane"
       />
       <ZoomTracker onZoom={handleZoom} />
       <FlyController target={flyTarget} />

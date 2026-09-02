@@ -132,7 +132,7 @@ function Popover({ availableYears, disabledModes, onClose }) {
   )
 }
 
-export default function DateFilter({ availableYears = [], compact = false, disabledModes = [], override = false }) {
+export default function DateFilter({ availableYears = [], compact = false, disabledModes = [], override = false, defaultAllYears = false }) {
   const { state, setMode, setFiscalYear, setMonthYear } = useFilter()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -150,9 +150,10 @@ export default function DateFilter({ availableYears = [], compact = false, disab
     if (didInit.current || !availableYears.length) return
     didInit.current = true
     // ตั้ง default เฉพาะตอนยังไม่เลือกปีเลย — ไม่ทับการเลือกหลายปีที่ผู้ใช้ตั้งไว้ (fiscalYears มีค่า → fiscalYear=null)
-    if ((state.fiscalYears?.length || 0) === 0) setFiscalYear(availableYears[0])
+    // defaultAllYears → ไม่ตั้งปีเริ่มต้น ปล่อยเป็น "ทุกปี" (fiscalYears = [])
+    if (!defaultAllYears && (state.fiscalYears?.length || 0) === 0) setFiscalYear(availableYears[0])
     if (state.monthYear == null) setMonthYear(availableYears[0])
-  }, [availableYears, state.fiscalYears, state.monthYear, setFiscalYear, setMonthYear])
+  }, [availableYears, state.fiscalYears, state.monthYear, setFiscalYear, setMonthYear, defaultAllYears])
 
   // click outside ปิด
   useEffect(() => {
