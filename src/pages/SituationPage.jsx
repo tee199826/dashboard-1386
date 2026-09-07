@@ -1,6 +1,7 @@
 // /situation — สถานการณ์ยาเสพติด (รวม จับกุม/บำบัด/ร้องเรียน เดิม /arrest /incidents /treatment)
 // filter เวลา+พื้นที่ ใช้ร่วมกันทุกส่วน (state เดียว) — เลือกส่วนที่แสดงด้วย listbox
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
 import { useDrugIncidents } from '../hooks/useDrugIncidents'
 import { useAreaCascade } from '../hooks/useAreaCascade'
@@ -22,7 +23,11 @@ export default function SituationPage() {
   const { rows: allRows, isLoading, error, reload, availableYears } = useDrugIncidents()
   const { getDateRange, state: filterState } = useFilter()
   const range = getDateRange()
-  const [section, setSection] = useState('arrest')
+  // แท็บอ่านจาก ?section= ให้ sidebar deep-link เข้าตรงส่วนได้ (และ active state ตรงกับ URL)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlSection = searchParams.get('section')
+  const section = SECTIONS.some(([id]) => id === urlSection) ? urlSection : 'arrest'
+  const setSection = (id) => setSearchParams({ section: id }, { replace: true })
 
   const dateFiltered = useMemo(() => filterByDateColumn(allRows, 'received_date', range), [allRows, range])
   const cascade = useAreaCascade(dateFiltered)
