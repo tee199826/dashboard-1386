@@ -36,6 +36,7 @@ const NAV = [
   {
     title: 'ฐานข้อมูลการข่าว',
     restricted: true,
+    adminOnly: true, // ซ่อนทั้งหมวดถ้าไม่ใช่ผู้ดูแลระบบ
     note: 'เปิดสิทธิ์เฉพาะเจ้าหน้าที่ที่ได้รับอนุญาต',
     groups: [
       { label: 'แบบซักผู้เสพ', items: [
@@ -163,7 +164,7 @@ export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
       </div>
 
       <nav className="p-3 space-y-4">
-        {NAV.map(renderSection)}
+        {NAV.filter((sec) => !sec.adminOnly || isAdmin).map(renderSection)}
 
         {isAdmin && (
           <div className="space-y-0.5 pt-1">
