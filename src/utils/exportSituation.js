@@ -93,35 +93,48 @@ function detailRows(rows) {
     }))
 }
 
-/** Export ส่วนจับกุม — summaryRows/drugRows = arrest_summary/arrest_drug ที่ filter ตาม view ปัจจุบันแล้ว (สถิติทางการจาก CRIMES กทม.) */
-export async function exportArrestReport({ summaryRows = [], drugRows = [], periodLabel = 'ทั้งหมด', filterLabel = 'ทุกพื้นที่', filenamePrefix = 'arrest-report' } = {}) {
+const DIM_LABEL = { charge: 'ข้อหา', drug: 'ตัวยา' }
+
+/** Export ส่วนจับกุม — caseRows/dimRows = arrest_case/arrest_dim, ageSummaryRows = view arrest_age_summary (aggregate ที่ DB แล้ว) ที่ filter ตาม view ปัจจุบันแล้ว (สถิติทางการจาก CRIMES กทม.) */
+export async function exportArrestReport({ caseRows = [], dimRows = [], ageSummaryRows = [], periodLabel = 'ทั้งหมด', filterLabel = 'ทุกพื้นที่', filenamePrefix = 'arrest-report' } = {}) {
   const wb = new ExcelJS.Workbook()
   wb.creator = '1386 Dashboard'; wb.created = new Date()
 
-  const totalCases = summaryRows.reduce((s, r) => s + (r.cases || 0), 0)
+  const totalCases = caseRows.reduce((s, r) => s + (r.cases || 0), 0)
   const meta = [
     `ข้อมูล ณ วันที่: ${formatThaiDateTime(new Date())}`,
     `ช่วงเวลา: ${periodLabel}`,
     `ตัวกรอง: ${filterLabel}`,
-    `รวม ${totalCases.toLocaleString()} คดี (${summaryRows.length.toLocaleString()} แถวเขต×ปีงบ)`,
-    'ที่มา: CRIMES กทม. (arrest_summary / arrest_drug)',
+    `รวม ${totalCases.toLocaleString()} คดี (${caseRows.length.toLocaleString()} แถวเขต×ปีงบ)`,
+    'ที่มา: CRIMES กทม. (arrest_case / arrest_dim / arrest_age)',
   ]
 
-  const summarySheetRows = summaryRows
+  const summarySheetRows = caseRows
     .slice()
     .sort((a, b) => b.fiscal_year - a.fiscal_year || b.cases - a.cases)
-    .map((r) => ({
-      เขต: r.district, ปีงบ: r.fiscal_year, จำนวนคดี: r.cases || 0,
-      'ผู้ต้องหา(คน)': r.suspects_person || 0, รายเก่า: r.suspects_old ?? '-', รายใหม่: r.suspects_new ?? '-',
-    }))
-  writeSheet(wb, 'สรุปรายเขต', meta, ['เขต', 'ปีงบ', 'จำนวนคดี', 'ผู้ต้องหา(คน)', 'รายเก่า', 'รายใหม่'], summarySheetRows)
+    .map((r) => ({ เขต: r.district, ปีงบ: r.fiscal_year, จำนวนคดี: r.cases || 0, 'ผู้ต้องหา(คน)': r.persons || 0 }))
+  writeSheet(wb, 'สรุปรายเขต', meta, ['เขต', 'ปีงบ', 'จำนวนคดี', 'ผู้ต้องหา(คน)'], summarySheetRows)
 
-  const drugSheetRows = drugRows
+  const dimSheetRows = dimRows
     .slice()
-    .sort((a, b) => b.fiscal_year - a.fiscal_year || b.cases - a.cases)
-    .map((r) => ({ เขต: r.district, ปีงบ: r.fiscal_year, ตัวยา: r.dim_value, จำนวนคดี: r.cases || 0 }))
-  writeSheet(wb, 'ของกลางตัวยา', [...meta, 'หมายเหตุ: ไม่ใช่ทุกคดีระบุตัวยาได้ — ผลรวมจำนวนคดีในชีตนี้จึงน้อยกว่ายอดรวมคดีทั้งหมด'],
-    ['เขต', 'ปีงบ', 'ตัวยา', 'จำนวนคดี'], drugSheetRows)
+    .sort((a, b) => b.fiscal_year - a.fiscal_year || a.dimension.localeCompare(b.dimension) || b.count - a.count)
+    .map((r) => ({ เขต: r.district, ปีงบ: r.fiscal_year, มิติ: DIM_LABEL[r.dimension] || r.dimension, ค่า: r.dim_value, จำนวน: r.count || 0 }))
+  writeSheet(wb, 'มิติ (ข้อหา ตัวยา)', [...meta, 'หมายเหตุ: ข้อหานับคน ตัวยานับคดี — 1 คน/คดีมีได้หลายค่าในมิติเดียวกัน'],
+    ['เขต', 'ปีงบ', 'มิติ', 'ค่า', 'จำนวน'], dimSheetRows)
+
+  // PDPA เข้ม: frontend ไม่เคยดึง arrest_age (รายคน มี percode) เลย — ageSummaryRows มาจาก view arrest_age_summary
+  // ที่ aggregate เป็น histogram ช่วงอายุ + min/max รายเขต×ปีงบ ไว้ที่ DB แล้ว (ดู useArrestData.js) — export จึงเป็นระดับเขต ไม่ระบุตัวคน
+  const ageSheetRows = ageSummaryRows
+    .slice()
+    .sort((a, b) => b.fiscal_year - a.fiscal_year || a.district.localeCompare(b.district, 'th'))
+    .map((r) => ({
+      เขต: r.district, ปีงบ: r.fiscal_year,
+      '12-19': r.bucket_12_19 || 0, '20-29': r.bucket_20_29 || 0, '30-39': r.bucket_30_39 || 0,
+      '40-49': r.bucket_40_49 || 0, '50+': r.bucket_50_plus || 0,
+      อายุต่ำสุด: r.min_age ?? '-', อายุสูงสุด: r.max_age ?? '-',
+    }))
+  writeSheet(wb, 'ช่วงอายุรายเขต', meta,
+    ['เขต', 'ปีงบ', '12-19', '20-29', '30-39', '40-49', '50+', 'อายุต่ำสุด', 'อายุสูงสุด'], ageSheetRows)
 
   await download(wb, filenamePrefix)
 }

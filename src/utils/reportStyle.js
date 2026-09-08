@@ -1,7 +1,11 @@
 // reportStyle.js — style constants ใช้ร่วมทุก section ของ /situation (แยกจาก ReportUI.jsx เพื่อไม่ให้ fast-refresh พัง)
 export const COLORS = { slate: '#334155', slateSoft: '#94a3b8', rose: '#e11d48', emerald: '#059669', amber: '#f59e0b' }
-export const barTooltipStyle = { borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }
+export const barTooltipStyle = {
+  borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, padding: '8px 12px',
+  boxShadow: '0 4px 16px -4px rgba(15,23,42,0.12)',
+}
 export const labelStyle = { fontSize: 11, fill: '#475569', fontWeight: 600 }
+export const gridStyle = { stroke: '#f1f5f9' }
 
 // สี ข้อหา/พฤติการณ์ 4 หมวด — คงที่ทั้งระบบ (ใช้ซ้ำกับ BknDrugStats) ไม่ลอกสีจ้าจาก PDF template
 export const BEHAVIOR_COLOR = { 'เสพ': COLORS.slateSoft, 'ค้า': COLORS.amber, 'ค้าเสพ': COLORS.rose, 'ผลิต': COLORS.emerald }

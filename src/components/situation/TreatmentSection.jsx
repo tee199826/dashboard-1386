@@ -2,6 +2,7 @@
 // ดึงจาก treatment_summary + treatment_dim (สถิติบำบัดจริงจาก บสต. กทม., เขต × ปีงบ) — ไม่ใช่ drug_incidents.action_treatment
 // (แค่เรื่องร้องเรียนที่จบด้วยบำบัด ~201 ราย) ตัวเลขจึงเป็นทางการ (เช่น 5,996 ราย ปีงบ 2569)
 import { useState, useMemo } from 'react'
+import { HeartPulse, TrendingUp, Pill, Users, Briefcase, Scale, MapPin } from 'lucide-react'
 import {
   computeTreatmentYoy, topTreatmentDistricts, dimensionCounts, section113Pct, topWithOther, withDonutColors,
 } from '../../utils/treatmentData'
@@ -83,39 +84,39 @@ export default function TreatmentSection({ summaryRows, dimRows, total, allSumma
     <div className="space-y-8">
       <Panel>
         <div className="grid grid-cols-12 gap-y-6">
-          <Metric span="sm:col-span-6" eyebrow="จำนวนผู้บำบัด" value={total.toLocaleString()} unit="ราย" />
-          <Metric span="sm:col-span-6" divider eyebrow="เทียบปีงบก่อน" value={yoyView.value} sub={yoyView.sub} />
+          <Metric span="sm:col-span-6" icon={HeartPulse} eyebrow="จำนวนผู้บำบัด" value={total.toLocaleString()} unit="ราย" />
+          <Metric span="sm:col-span-6" divider icon={TrendingUp} eyebrow="เทียบปีงบก่อน" value={yoyView.value} sub={yoyView.sub} />
         </div>
       </Panel>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Panel>
-          <SectionHead title="ตัวยาหลัก" sub="Top 5 · % คำนวณจากรายที่ระบุตัวยาได้เท่านั้น" />
+          <SectionHead title="ตัวยาหลัก" icon={Pill} sub="Top 5 · % คำนวณจากรายที่ระบุตัวยาได้เท่านั้น" />
           {drugDonutData.length ? (
             <DonutChart data={drugDonutData} unit="ราย" pctBase={drugSum} centerValue={drugSum} centerLabel="ระบุตัวยาได้" />
           ) : <EmptyChart />}
         </Panel>
         <Panel>
-          <SectionHead title="เพศ" />
+          <SectionHead title="เพศ" icon={Users} />
           {sexDonutData.length ? (
             <DonutChart data={sexDonutData} unit="ราย" pctBase={sexSum} centerValue={sexSum} centerLabel="ระบุเพศได้" />
           ) : <EmptyChart />}
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Panel>
-          <SectionHead title="อาชีพ" sub="Top 8" />
+          <SectionHead title="อาชีพ" icon={Briefcase} sub="Top 8" />
           {occupationData.length ? <RankedBarChart data={occupationData} unit="ราย" /> : <EmptyChart />}
         </Panel>
         <Panel>
-          <SectionHead title="มาตรา"
+          <SectionHead title="มาตรา" icon={Scale}
             sub={section113.total ? `ม.113 = ${section113.pct.toFixed(1)}% ของรายที่ระบุมาตราได้ (${section113.m113.toLocaleString()}/${section113.total.toLocaleString()} ราย)` : undefined} />
           {sectionData.length ? <RankedBarChart data={sectionData} unit="ราย" /> : <EmptyChart />}
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Panel>
           <SectionHead title="การศึกษา" />
           {educationData.length ? <RankedBarChart data={educationData} unit="ราย" /> : <EmptyChart />}
@@ -126,7 +127,7 @@ export default function TreatmentSection({ summaryRows, dimRows, total, allSumma
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Panel>
           <SectionHead title="รายเก่า / รายใหม่" sub="ผู้บำบัดจำแนกตามประวัติ" />
           {oldNewSum ? (
@@ -137,7 +138,7 @@ export default function TreatmentSection({ summaryRows, dimRows, total, allSumma
           ) : <EmptyChart />}
         </Panel>
         <Panel>
-          <SectionHead title="เขตบำบัดสูงสุด" sub="Top 3 · % จากจำนวนผู้บำบัดทั้งหมดในช่วงที่เลือก" />
+          <SectionHead title="เขตบำบัดสูงสุด" icon={MapPin} sub="Top 3 · % จากจำนวนผู้บำบัดทั้งหมดในช่วงที่เลือก" />
           <Top3List data={top3} />
         </Panel>
       </div>
@@ -154,26 +155,26 @@ export default function TreatmentSection({ summaryRows, dimRows, total, allSumma
       <ActionBar tableOpen={tableOpen} onToggleTable={() => setTableOpen((o) => !o)} onExport={handleExport} exporting={exporting} />
 
       {tableOpen && (
-        <div className="bg-white rounded-lg ring-1 ring-slate-200 overflow-hidden">
+        <div className="bg-white rounded-xl ring-1 ring-slate-900/[0.06] shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
           <div className="overflow-auto max-h-[560px]">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 sticky top-0 z-10">
-                <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2.5 font-medium">เขต</th>
-                  <th className="px-3 py-2.5 font-medium">ปีงบ</th>
-                  <th className="px-3 py-2.5 font-medium text-right">จำนวนผู้บำบัด</th>
-                  <th className="px-3 py-2.5 font-medium text-right">รายเก่า</th>
-                  <th className="px-3 py-2.5 font-medium text-right">รายใหม่</th>
+              <thead className="bg-slate-50/80 sticky top-0 z-10 shadow-[0_1px_0_rgba(15,23,42,0.06)]">
+                <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+                  <th className="px-4 py-3 font-semibold">เขต</th>
+                  <th className="px-4 py-3 font-semibold">ปีงบ</th>
+                  <th className="px-4 py-3 font-semibold text-right">จำนวนผู้บำบัด</th>
+                  <th className="px-4 py-3 font-semibold text-right">รายเก่า</th>
+                  <th className="px-4 py-3 font-semibold text-right">รายใหม่</th>
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-3 py-2.5 text-slate-700 whitespace-nowrap">{r.district}</td>
-                    <td className="px-3 py-2.5 text-slate-500 tabular-nums whitespace-nowrap">{r.fiscal_year}</td>
-                    <td className="px-3 py-2.5 text-slate-700 tabular-nums text-right">{(r.total_person || 0).toLocaleString()}</td>
-                    <td className="px-3 py-2.5 text-slate-500 tabular-nums text-right">{r.old_person != null ? r.old_person.toLocaleString() : '-'}</td>
-                    <td className="px-3 py-2.5 text-slate-500 tabular-nums text-right">{r.new_person != null ? r.new_person.toLocaleString() : '-'}</td>
+                  <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/70 transition-colors">
+                    <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{r.district}</td>
+                    <td className="px-4 py-3 text-slate-500 tabular-nums whitespace-nowrap">{r.fiscal_year}</td>
+                    <td className="px-4 py-3 text-slate-900 font-medium tabular-nums text-right">{(r.total_person || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-slate-500 tabular-nums text-right">{r.old_person != null ? r.old_person.toLocaleString() : '-'}</td>
+                    <td className="px-4 py-3 text-slate-500 tabular-nums text-right">{r.new_person != null ? r.new_person.toLocaleString() : '-'}</td>
                   </tr>
                 ))}
               </tbody>

@@ -14,7 +14,9 @@ export default function FilterPill({ icon, label, value, onChange, options, vari
   const v = VARIANTS[variant] || VARIANTS.white
   return (
     <div title={title}
-      className={`flex items-center gap-1.5 border rounded-lg px-2.5 py-1.5 shadow-sm ${v.box} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}>
+      className={`flex items-center gap-1.5 border rounded-lg px-2.5 py-1.5 shadow-sm transition-colors ${v.box} ${
+        disabled ? 'opacity-60 cursor-not-allowed' : 'hover:border-slate-300'
+      }`}>
       {icon}
       {label && <span className={`text-xs ${v.sub}`}>{label}</span>}
       <select value={value} onChange={e => onChange(e.target.value)} disabled={disabled}
