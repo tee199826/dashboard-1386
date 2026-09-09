@@ -4,7 +4,7 @@ import { formatThaiDate } from '../../utils/heroMeta'
 import { BEHAVIOR_FLAGS, DRUG_FLAGS, drugCounts, rowsWithAnyDrug, countFlag, isSevere } from '../../utils/drugFlags'
 import { computeYoy, top3Districts } from '../../utils/situationCompare'
 import { exportArrestReport } from '../../utils/exportSituation'
-import { Panel, SectionHead, Metric, RankedBarChart, EmptyChart, SplitBarChart, Top3List, PlaceholderCard, ActionBar, TablePager } from '../ReportUI'
+import { Panel, SectionHead, Metric, RankedBarChart, DrugTileGrid, EmptyChart, SplitBarChart, Top3List, PlaceholderCard, ActionBar, TablePager } from '../ReportUI'
 import { COLORS } from '../../utils/reportStyle'
 
 const PAGE_SIZE = 50
@@ -83,10 +83,10 @@ export default function ArrestSection({ rows: arrestRows, total, allRows, cascad
           {behData.some((d) => d.value > 0) ? <RankedBarChart data={behData} percent unit="คดี" /> : <EmptyChart />}
         </Panel>
         <Panel>
-          <SectionHead title="ของกลางตัวยา" sub="สัดส่วนตัวยาที่พบ — รวม 100% (1 คดีมีได้หลายตัวยา)" />
+          <SectionHead title="ของกลางยาเสพติด" sub="สัดส่วนตัวยาที่พบ — รวม 100% (1 คดีมีได้หลายตัวยา)" />
           {drugData.length ? (
             <>
-              <RankedBarChart data={drugData} percent unit="คดี" />
+              <DrugTileGrid data={drugData} unit="คดี" />
               <div className="mt-3 text-xs text-slate-400 tabular-nums">ระบุตัวยาได้ {withDrug.toLocaleString()} จาก {total.toLocaleString()} คดี</div>
             </>
           ) : <EmptyChart />}

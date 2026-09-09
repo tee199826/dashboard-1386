@@ -12,7 +12,7 @@ const NAV = [
         { to: '/situation?section=incidents', label: 'ภาพรวม' },
         { to: '/situation?section=arrest', label: 'ข้อมูลการจับกุม' },
         { to: '/situation?section=treatment', label: 'ข้อมูลการบำบัด' },
-        { to: '/radar', label: 'แผนที่ยาเสพติด' },
+        { to: '/radar', label: 'พิกัดยาเสพติด' },
       ] },
     ],
   },
@@ -41,7 +41,7 @@ const NAV = [
     groups: [
       { label: 'แบบซักผู้เสพ', items: [
         { to: '/substance-users', label: 'ข้อมูลการซักผู้เสพ' },
-        { label: 'บันทึกข้อมูล' },
+        { to: '/intel/interview/new', label: 'บันทึกข้อมูล' },
       ] },
       { label: 'ราคายาเสพติด', items: [
         { label: 'แผนที่ราคายาเสพติด' },

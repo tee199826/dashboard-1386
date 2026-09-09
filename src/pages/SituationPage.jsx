@@ -74,13 +74,13 @@ export default function SituationPage() {
             </p>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5" role="tablist" aria-label="เลือกข้อมูล">
+            <div className="inline-flex rounded-xl border border-slate-300 bg-slate-100 p-1 shadow-sm" role="tablist" aria-label="เลือกข้อมูล">
               {SECTIONS.map(([id, label]) => (
                 <button key={id} type="button" role="tab" aria-selected={section === id} onClick={() => setSection(id)}
-                  className={`h-8 px-3.5 rounded-md text-[13px] transition ${
+                  className={`h-11 px-6 rounded-lg text-[15px] transition ${
                     section === id
-                      ? 'bg-white text-[#243aa8] font-semibold shadow-[0_1px_2px_rgba(15,22,38,0.08)]'
-                      : 'text-slate-500 font-medium hover:text-slate-700'
+                      ? 'bg-white text-[#243aa8] font-bold shadow-[0_2px_6px_rgba(15,22,38,0.12)]'
+                      : 'text-slate-500 font-semibold hover:text-slate-700 hover:bg-white/60'
                   }`}>
                   {label}
                 </button>

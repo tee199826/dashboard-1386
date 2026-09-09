@@ -163,13 +163,13 @@ export default function DateFilter({ availableYears = [], compact = false, disab
     return () => document.removeEventListener('mousedown', onDoc)
   }, [open])
 
-  const h = compact ? 'h-7 px-2 text-xs' : 'h-8 px-3 text-sm'
-  const icon = compact ? 12 : 14
+  const h = compact ? 'h-7 px-2 text-xs' : 'h-11 px-4 text-[15px] font-semibold'
+  const icon = compact ? 12 : 16
 
   return (
     <div className="relative inline-flex items-center gap-1" ref={ref}>
       <button onClick={() => setOpen(o => !o)}
-        className={`inline-flex items-center gap-2 ${h} rounded-lg bg-white border border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition`}>
+        className={`inline-flex items-center gap-2 ${h} rounded-xl bg-white border border-slate-300 text-slate-700 shadow-sm hover:border-slate-400 hover:bg-slate-50 transition`}>
         <Calendar size={icon} className="text-blue-600" />
         <span>{summarize(state)}</span>
         {override && <span className="text-[10px] text-amber-600 font-medium">● ต่าง</span>}

@@ -2,11 +2,11 @@ import { cloneElement, useMemo, useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Search, MapPin, AlertTriangle, Info, ChevronRight, ChevronDown, Trophy, Clock,
-  BarChart3, TrendingUp, PieChart as PieIcon, Grid3X3, Layers, CalendarRange, Download, X,
+  BarChart3, PieChart as PieIcon, Grid3X3, Layers, CalendarRange, Download, X,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  AreaChart, Area, PieChart, Pie, Cell, Legend, LabelList, ReferenceDot,
+  AreaChart, Area, PieChart, Pie, Cell, Legend, LabelList,
 } from 'recharts'
 import { useData } from '../context/DataContext'
 import { fetchAllPages } from '../utils/supabasePagination'
@@ -34,7 +34,6 @@ const METRICS = [
   { id: 'incidents',  short: 'เหตุการณ์', map: 'เหตุการณ์ยาเสพติด', header: 'เหตุการณ์ยา (ครั้ง)', color: C.rose },
   { id: 'complaints', short: 'ร้องเรียน',  map: 'เรื่องร้องเรียน',     header: 'ร้องเรียน (เรื่อง)',   color: C.violet },
   { id: 'completed',  short: 'ดำเนินการ', map: 'ดำเนินการสำเร็จ',   header: 'ดำเนินการ (เรื่อง)',  color: C.emerald },
-  { id: 'dealers',    short: 'แหล่งซื้อ',  map: 'แหล่งซื้อยาเสพติด',   header: 'แหล่งซื้อ (แห่ง)',    color: C.amberDeep },
 ]
 
 const GROUP_ORDER  = ['กรุงเทพกลาง', 'กรุงเทพเหนือ', 'กรุงเทพใต้', 'กรุงเทพตะวันออก', 'กรุงธนเหนือ', 'กรุงธนใต้']
@@ -43,7 +42,6 @@ const BEHAVIOR_CATS = ['เสพ', 'ค้า', 'เสพ/ค้า', 'ผล�
 const BEHAVIOR_PALETTE = { 'เสพ': C.violet, 'ค้า': C.rose, 'เสพ/ค้า': C.amber, 'ผลิต': C.emerald }
 const YEAR_COLORS = [C.violetSoft, C.violet, C.amber, C.rose, C.emerald, C.violetDark]
 const TH_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
-const TH_MON_FY = ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.']
 const MIN_BASE_ROWS = 100
 const TODAY_ISO = new Date().toISOString().slice(0, 10)
 
@@ -56,7 +54,6 @@ function daysAgo(iso) {
 const agoLabel = (d) => d == null ? null : d === 0 ? 'วันนี้' : `${d.toLocaleString()} วันที่แล้ว`
 const pctChange = (cur, prev) => (!prev || prev === 0) ? null : (cur - prev) / prev * 100
 const EMPTY = {}
-const fyMonthIndex = (dt) => (dt.getMonth() + 3) % 12   // ต.ค.=0 ... ก.ย.=11
 
 // diverging color ตาม % YoY — 🟢ลด / ⚪ใกล้เคียง / 🔴เพิ่ม
 function pctColor(pct) {
@@ -148,11 +145,13 @@ export default function AllDistricts() {
   const [sortKey, setSortKey] = useState('incidents')
   const [metric, setMetric] = useState('incidents')
   const [selectedDistrict, setSelectedDistrict] = useState(null)
-  const [selectedGroup, setSelectedGroup] = useState(null)        // cross-filter จาก donut
+  const [selectedGroup, setSelectedGroup] = useState(null)        // cross-filter จาก donut / dropdown บนหัวหน้า
+  // เขตใน dropdown — จำกัดตามกลุ่มที่เลือก แล้วเรียงตามตัวอักษรไทย
+  const districtOptions = useMemo(() => Object.keys(DNAME_TO_GROUP)
+    .filter((d) => !selectedGroup || DNAME_TO_GROUP[d] === selectedGroup)
+    .sort((a, b) => a.localeCompare(b, 'th')), [selectedGroup])
   const [compareYoY, setCompareYoY] = useState(false)
   const [autoOff, setAutoOff] = useState(false)                   // notice "ปิดเทียบปีอัตโนมัติ" เมื่อเปลี่ยน pill ออกจากเหตุการณ์
-  const [yearA, setYearA] = useState(null)                        // hero chart: ปีเทียบ A (null = default current FY)
-  const [yearB, setYearB] = useState(null)                        // hero chart: ปีเทียบ B (null = default nearest prev)
   const [mapCompareMode, setMapCompareMode] = useState('absolute')
   const [tableOpen, setTableOpen] = useState(false)               // ตาราง drill-down default closed
   const [incidents, setIncidents] = useState([])
@@ -311,36 +310,15 @@ export default function AllDistricts() {
     return Object.entries(m).map(([fy, count]) => ({ fy: Number(fy), count })).filter(d => d.count >= MIN_BASE_ROWS).sort((a, b) => a.fy - b.fy)
   }, [incidents])
 
-  // ── HERO chart: เทียบ 2 ปีงบ (เลือกเอง) อิงเดือนปีงบ ต.ค.→ก.ย. ──
-  const currentFY = dateToFiscalYear(TODAY_ISO)
-  const yearsAvail = useMemo(() => yearCompare.map(d => d.fy).sort((a, b) => b - a), [yearCompare])   // ปีที่มี data >100, ใหม่→เก่า
-  // default A = ปีงบปัจจุบัน (ถ้ามี data) ไม่งั้นปีล่าสุด ; default B = ปีที่ใกล้ A ที่สุด
-  const effA = (yearA != null && yearsAvail.includes(yearA)) ? yearA
-    : (yearsAvail.includes(currentFY) ? currentFY : yearsAvail[0])
-  const effB = (yearB != null && yearsAvail.includes(yearB) && yearB !== effA) ? yearB
-    : yearsAvail.filter(y => y !== effA).sort((a, b) => Math.abs(a - effA) - Math.abs(b - effA))[0]
-
-  const heroCompare = useMemo(() => {
-    const inGroup = (r) => !selectedGroup || DNAME_TO_GROUP[r.district] === selectedGroup
-    const aArr = Array(12).fill(0), bArr = Array(12).fill(0)
-    for (const r of incidents) {
-      if (!inGroup(r)) continue
-      const fy = dateToFiscalYear(r.received_date); if (!fy) continue
-      const dt = new Date(r.received_date); if (isNaN(dt)) continue
-      const idx = fyMonthIndex(dt)
-      if (fy === effA) aArr[idx]++
-      else if (fy === effB) bArr[idx]++
-    }
-    // YTD-align: ตัดถึงเดือนสุดท้ายที่มี data (ปีที่ยังไม่จบ → ทั้ง A,B ตัดเท่ากัน)
-    let lastIdx = 0
-    for (let i = 0; i < 12; i++) if (aArr[i] || bArr[i]) lastIdx = i
-    const points = TH_MON_FY.slice(0, lastIdx + 1).map((label, i) => ({ label, fullLabel: label, cur: aArr[i], prev: bArr[i] }))
-    return { points, labelA: `ปีงบ ${effA} (YTD)`, labelB: effB ? `ปีงบ ${effB} (YTD)` : null }
-  }, [incidents, effA, effB, selectedGroup])
-
   // ── map/table (complaints+incidents+dealers aggregate) ──
   const metrics = useMemo(() => getDistrictMetrics(fRecords, fIncidents, fDealers), [fRecords, fIncidents, fDealers])
   const byName = useMemo(() => Object.fromEntries(metrics.map(m => [m.district, m])), [metrics])
+  // ยอดเรื่องร้องเรียน + ดำเนินการแล้ว ในขอบเขตที่เลือก (กลุ่ม/เขต) — แสดงบนการ์ด KPI ใหญ่
+  const complaintTotals = useMemo(() => metrics
+    .filter(m => (!selectedGroup || DNAME_TO_GROUP[m.district] === selectedGroup)
+      && (!selectedDistrict || m.district === selectedDistrict))
+    .reduce((a, m) => ({ complaints: a.complaints + (m.complaints || 0), completed: a.completed + (m.completed || 0) }),
+      { complaints: 0, completed: 0 }), [metrics, selectedGroup, selectedDistrict])
   const metricMax = useMemo(() => Math.max(1, ...metrics.map(m => m[metric] || 0)), [metrics, metric])
   const maxDelta = useMemo(() => {
     if (!comparing) return 0
@@ -408,9 +386,9 @@ export default function AllDistricts() {
     }
     const complaints = m?.complaints || 0, done = m?.completed || 0
     const pct = complaints ? Math.round(done / complaints * 100) : 0
-    const incidents = m?.incidents || 0, dealers = m?.dealers || 0
+    const incidents = m?.incidents || 0
     const r = (lbl, val, color) => `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#64748b">${lbl}</span><span style="font-weight:600;font-variant-numeric:tabular-nums;color:${color || '#0f172a'}">${val}</span></div>`
-    layer.bindTooltip(`<div style="min-width:210px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid #f1f5f9"><span style="font-weight:700;color:#0f172a">${dn}</span><span style="font-size:11px;color:#64748b">${group}</span></div><div style="display:flex;flex-direction:column;gap:4px;font-size:12px">${r('เรื่องร้องเรียน', `${complaints.toLocaleString()} เรื่อง`)}${r('ดำเนินการสำเร็จ', `${done.toLocaleString()} เรื่อง (${pct}%)`, '#047857')}${r('เหตุการณ์ยา', `${incidents.toLocaleString()} ครั้ง`)}${r('แหล่งซื้อ', `${dealers.toLocaleString()} แห่ง`)}</div></div>`, { sticky: true, className: 'su-district-tooltip' })
+    layer.bindTooltip(`<div style="min-width:210px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid #f1f5f9"><span style="font-weight:700;color:#0f172a">${dn}</span><span style="font-size:11px;color:#64748b">${group}</span></div><div style="display:flex;flex-direction:column;gap:4px;font-size:12px">${r('เรื่องร้องเรียน', `${complaints.toLocaleString()} เรื่อง`)}${r('ดำเนินการสำเร็จ', `${done.toLocaleString()} เรื่อง (${pct}%)`, '#047857')}${r('เหตุการณ์ยา', `${incidents.toLocaleString()} ครั้ง`)}</div></div>`, { sticky: true, className: 'su-district-tooltip' })
   }, [byName, comparing, mapCompareMode, curByD, prevByD])
 
   const chartsEmpty = incReady && fIncidents.length === 0
@@ -483,6 +461,9 @@ export default function AllDistricts() {
           subtitle={`เหตุการณ์ยาเสพติดรายเขต · ${filterLabel(state)}`}
           onExport={() => setExportDialogOpen(true)}
           exporting={exporting}
+          selectedGroup={selectedGroup} setSelectedGroup={setSelectedGroup}
+          selectedDistrict={selectedDistrict} setSelectedDistrict={setSelectedDistrict}
+          districtOptions={districtOptions}
         />
         <ExportDialog
           open={exportDialogOpen} onClose={() => setExportDialogOpen(false)} onConfirm={handleExportConfirm}
@@ -519,6 +500,7 @@ export default function AllDistricts() {
         <div className="grid grid-cols-1 md:grid-cols-4 md:auto-rows-fr gap-4">
           <HeroKpi value={kpiIncidents} spark={sparkTrend}
             badge={{ change: incChange, note: cmpNote, tooltip: cmpTooltip }}
+            complaints={complaintTotals.complaints} completed={complaintTotals.completed}
             onClick={() => scrollTo(heroChartRef)} />
           <TopDistrictKpi district={kpiTopDistrict?.district} count={kpiTopDistrict?.count}
             badge={{ change: topChange, note: cmpNote, tooltip: cmpTooltip }}
@@ -542,19 +524,8 @@ export default function AllDistricts() {
           )}
         </div>
 
-        {/* ── SECTION 2: HERO chart — เทียบปี (เลือกเอง) ── */}
-        <Card innerRef={heroChartRef} scrollMt title="แนวโน้มเหตุการณ์ — เทียบปี"
-          sub={selectedGroup ? `กรอง: ${selectedGroup} · รายเดือน (ปีงบ ต.ค.→ก.ย.)` : 'รายเดือน (ปีงบ ต.ค.→ก.ย.)'}
-          icon={<TrendingUp />} loading={!incReady} empty={incReady && yearsAvail.length === 0}
-          right={
-            <div className="flex items-center gap-2 text-sm">
-              <YearSelect value={effA} options={yearsAvail} exclude={effB} onChange={setYearA} color="text-violet-700" />
-              <span className="text-slate-400 text-xs">vs</span>
-              <YearSelect value={effB} options={yearsAvail} exclude={effA} onChange={setYearB} color="text-amber-600" />
-            </div>
-          }>
-          <HeroTrendChart data={heroCompare} />
-        </Card>
+        {/* SECTION 2 (แนวโน้มเหตุการณ์ — เทียบปี) เอาออกตามที่ผู้ใช้ระบุ
+            — เทียบรายปียังดูได้ที่การ์ด "เปรียบเทียบรายปี" ด้านล่าง */}
 
         {/* cross-filter chip */}
         {selectedGroup && (
@@ -760,7 +731,6 @@ export default function AllDistricts() {
                               <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
                             </div>
                           </td>
-                          <td className="px-3 py-2.5 text-right tabular-nums font-medium text-amber-700">{m.dealers.toLocaleString()}</td>
                           {comparing && (() => {
                             const insufficient = prevC < 10
                             const delta = curC - prevC
@@ -824,7 +794,22 @@ function AnimatedCounter({ value, duration = 800 }) {
 function HeroChip({ icon, children }) {
   return <span className="inline-flex items-center gap-1.5 text-xs text-white/90 bg-white/10 backdrop-blur-md ring-1 ring-white/20 rounded-full px-3 py-1.5">{icon}{children}</span>
 }
-function DistrictHero({ period, lastUpload, subtitle, onExport, exporting }) {
+// dropdown บนหัวหน้า — ผูกกับ cross-filter ตัวเดียวกับที่คลิกโดนัท/แผนที่
+function HeroSelect({ label, value, onChange, options, placeholder }) {
+  return (
+    <label className="flex flex-col gap-1 min-w-0">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-white/70">{label}</span>
+      <select value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}
+        className="h-10 min-w-[170px] max-w-[220px] px-3 rounded-xl bg-white/15 backdrop-blur-md ring-1 ring-white/25 text-sm font-medium text-white outline-none transition hover:bg-white/20 focus:ring-2 focus:ring-white/50 [&>option]:text-slate-800">
+        <option value="">{placeholder}</option>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </label>
+  )
+}
+
+function DistrictHero({ period, lastUpload, subtitle, onExport, exporting,
+  selectedGroup, setSelectedGroup, selectedDistrict, setSelectedDistrict, districtOptions }) {
   return (
     <div className="animate-rise relative overflow-hidden rounded-3xl px-8 py-10 text-white bg-gradient-to-br from-violet-600 via-purple-700 to-fuchsia-900 shadow-xl shadow-violet-900/20">
       <div className="orb absolute -top-16 -left-10 w-72 h-72 rounded-full bg-fuchsia-500/30 blur-3xl pointer-events-none" />
@@ -842,10 +827,16 @@ function DistrictHero({ period, lastUpload, subtitle, onExport, exporting }) {
             {lastUpload && <HeroChip icon={<Clock size={13} />}>อัปเดต {lastUpload}</HeroChip>}
           </div>
         </div>
-        <button onClick={onExport} disabled={exporting}
-          className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-white/10 backdrop-blur-md ring-1 ring-white/20 text-sm font-medium text-white hover:bg-white/20 transition disabled:opacity-50 disabled:cursor-wait">
-          <Download size={15} /> {exporting ? 'กำลังสร้างไฟล์...' : 'Export Excel'}
-        </button>
+        <div className="flex items-end gap-3 flex-wrap">
+          <HeroSelect label="กลุ่มพื้นที่" placeholder="ทั้งหมด" options={GROUP_ORDER}
+            value={selectedGroup} onChange={(v) => { setSelectedGroup(v); setSelectedDistrict(null) }} />
+          <HeroSelect label="เขต" placeholder="ทั้งหมด" options={districtOptions}
+            value={selectedDistrict} onChange={setSelectedDistrict} />
+          <button onClick={onExport} disabled={exporting}
+            className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-white/10 backdrop-blur-md ring-1 ring-white/20 text-sm font-medium text-white hover:bg-white/20 transition disabled:opacity-50 disabled:cursor-wait">
+            <Download size={15} /> {exporting ? 'กำลังสร้างไฟล์...' : 'Export Excel'}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -924,7 +915,8 @@ function MiniArea({ data, height = 130 }) {
 }
 
 // ── Bento KPI ──
-function HeroKpi({ value, spark, badge, onClick }) {
+function HeroKpi({ value, spark, badge, onClick, complaints, completed }) {
+  const donePct = complaints ? (completed / complaints) * 100 : null
   return (
     <div onClick={onClick}
       className="animate-rise group relative overflow-hidden rounded-3xl md:col-span-2 md:row-span-2 p-7 cursor-pointer text-white bg-gradient-to-br from-violet-600 to-fuchsia-700 shadow-xl shadow-violet-900/20 hover:shadow-2xl hover:scale-[1.01] transition-all duration-300">
@@ -948,6 +940,25 @@ function HeroKpi({ value, spark, badge, onClick }) {
             <span className="text-base font-bold">{Math.abs(badge.change).toFixed(1)}%</span><span className="text-xs text-white/60">YoY</span>
           </div>
         ) : badge.note ? <div className="mt-4 text-xs text-white/60">{badge.note}</div> : null)}
+
+        {/* ผลดำเนินการเรื่องร้องเรียนในช่วง/ขอบเขตเดียวกัน */}
+        {complaints > 0 && (
+          <div className="mt-5 pt-4 border-t border-white/20">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.12em] text-white/60">เรื่องร้องเรียน · ดำเนินการแล้ว</div>
+                <div className="mt-1 flex items-baseline gap-1.5">
+                  <span className="text-2xl font-bold tabular-nums">{completed.toLocaleString()}</span>
+                  <span className="text-sm text-white/60">/ {complaints.toLocaleString()} เรื่อง</span>
+                </div>
+              </div>
+              {donePct != null && <span className="text-2xl font-bold tabular-nums text-emerald-200">{donePct.toFixed(1)}%</span>}
+            </div>
+            <div className="mt-2 h-1.5 w-full rounded-full bg-white/20 overflow-hidden">
+              <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.min(100, donePct || 0)}%` }} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1064,58 +1075,6 @@ function YoyLabel({ x, y, width, height, value }) {
     <text x={x + width + 6} y={y + height / 2} dy={4} fontSize={10} fontWeight={700} fill={up ? '#e11d48' : '#059669'}>
       {up ? '▲' : '▼'}{Math.abs(value).toFixed(0)}%
     </text>
-  )
-}
-
-// dropdown เลือกปีงบเทียบ (กันเลือกซ้ำกับอีกฝั่ง)
-function YearSelect({ value, options, exclude, onChange, color }) {
-  return (
-    <select value={value ?? ''} onChange={e => onChange(Number(e.target.value))}
-      className={`border border-slate-300 rounded-lg px-2 py-1 text-xs bg-white font-semibold ${color} focus:border-violet-400 focus:ring-2 focus:ring-violet-100 outline-none`}>
-      {options.map(y => <option key={y} value={y} disabled={y === exclude}>ปีงบ {y}</option>)}
-    </select>
-  )
-}
-
-// hero dual-area tooltip — มี diff % (label จาก series name)
-function HeroTooltip({ active, payload, label, labelA, labelB }) {
-  if (!active || !payload?.length) return null
-  const cur = payload.find(p => p.dataKey === 'cur')?.value ?? 0
-  const prev = payload.find(p => p.dataKey === 'prev')?.value
-  const diff = (prev != null && prev > 0) ? (cur - prev) / prev * 100 : null
-  return (
-    <div className="bg-white rounded-lg ring-1 ring-slate-200 shadow-lg px-3 py-2 text-xs">
-      <div className="font-semibold text-slate-800 mb-1">{label}</div>
-      <div className="flex items-center justify-between gap-4"><span className="text-violet-600">{labelA}</span><span className="font-bold tabular-nums">{cur.toLocaleString()}</span></div>
-      {prev != null && labelB && <div className="flex items-center justify-between gap-4"><span className="text-amber-600">{labelB}</span><span className="font-bold tabular-nums text-slate-500">{prev.toLocaleString()}</span></div>}
-      {diff != null && <div className={`mt-1 pt-1 border-t border-slate-100 text-right font-bold ${diff >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{diff >= 0 ? '▲' : '▼'} {Math.abs(diff).toFixed(1)}%</div>}
-    </div>
-  )
-}
-
-function HeroTrendChart({ data }) {
-  const { points, labelA, labelB } = data
-  if (!points.length) return <EmptyState />
-  const peak = points.reduce((mx, p, i) => p.cur > points[mx].cur ? i : mx, 0)
-  return (
-    <ResponsiveContainer width="100%" height={360}>
-      <AreaChart data={points} margin={{ top: 16, right: 20, left: 0, bottom: 4 }}>
-        <defs>
-          <linearGradient id="heroFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={C.violet} stopOpacity={0.35} />
-            <stop offset="100%" stopColor={C.violet} stopOpacity={0.02} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-        <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#64748b' }} interval="preserveStartEnd" minTickGap={10} />
-        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
-        <Tooltip content={<HeroTooltip labelA={labelA} labelB={labelB} />} />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
-        {labelB && <Area type="monotone" dataKey="prev" name={labelB} stroke={C.amber} strokeWidth={2.5} strokeDasharray="6 3" fill="none" dot={false} isAnimationActive />}
-        <Area type="monotone" dataKey="cur" name={labelA} stroke={C.violet} strokeWidth={3} fill="url(#heroFill)" dot={false} activeDot={{ r: 5 }} isAnimationActive />
-        {points[peak]?.cur > 0 && <ReferenceDot x={points[peak].label} y={points[peak].cur} r={5} fill={C.violet} stroke="#fff" strokeWidth={2} />}
-      </AreaChart>
-    </ResponsiveContainer>
   )
 }
 

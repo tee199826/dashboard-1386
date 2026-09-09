@@ -77,6 +77,45 @@ export function RankedBarChart({ data, percent = false, highlightFirst = true, u
   )
 }
 
+// DrugTileGrid — ของกลางยาเสพติดแบบการ์ดไทล์ : ตัวแรกเข้มสุด, ไทล์ "อื่น ๆ" กดเพื่อกางรายการที่เหลือ
+export function DrugTileGrid({ data, unit = 'คดี', topN = 5 }) {
+  const [open, setOpen] = useState(false)
+  const sum = data.reduce((s, d) => s + d.value, 0) || 1
+  const pct = (v) => ((v / sum) * 100).toFixed(1)
+  const head = data.slice(0, topN)
+  const rest = data.slice(topN)
+  const shown = open ? data : head
+  const restTotal = rest.reduce((s, d) => s + d.value, 0)
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+      {shown.map((d, i) => {
+        const lead = i === 0
+        return (
+          <div key={d.name}
+            className={`rounded-xl px-3.5 py-3 flex flex-col justify-center min-h-[92px] ${lead ? 'ring-1 ring-[#2f49c9]/25' : ''}`}
+            style={{ background: lead ? COLORS.accent : COLORS.accentSoft, color: lead ? '#ffffff' : COLORS.accentInk }}>
+            <div className="text-[15px] font-bold leading-tight truncate" title={d.name}>{d.name}</div>
+            <div className="mt-1 text-[13px] font-semibold tabular-nums opacity-95">{d.value.toLocaleString()} {unit}</div>
+            <div className="text-[13px] font-bold tabular-nums opacity-90">{pct(d.value)}%</div>
+          </div>
+        )
+      })}
+      {rest.length > 0 && (
+        <button type="button" onClick={() => setOpen((o) => !o)}
+          className="rounded-xl px-3.5 py-3 flex flex-col justify-center min-h-[92px] text-left transition hover:brightness-95"
+          style={{ background: COLORS.accentSoft, color: COLORS.accentInk }}>
+          <div className="text-[15px] font-bold leading-tight">{open ? 'ย่อกลับ' : 'อื่น ๆ'}</div>
+          <div className="text-[11.5px] opacity-80 leading-tight">
+            {open ? 'แสดงเฉพาะอันดับต้น' : `แสดงรายละเอียด · อีก ${rest.length} ชนิด`}
+          </div>
+          {!open && <div className="mt-1 text-[13px] font-bold tabular-nums opacity-90">{restTotal.toLocaleString()} {unit} · {pct(restTotal)}%</div>}
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function EmptyChart() {
   return <div className="h-[180px] flex items-center justify-center text-sm text-slate-400">ไม่มีข้อมูลในช่วงที่เลือก</div>
 }

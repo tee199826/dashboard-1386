@@ -539,7 +539,7 @@ export default function SubstanceRadar() {
 
   return (
     <>
-    {isPresentation && <PresentationBar title="แผนที่ยาเสพติด กรุงเทพมหานคร" />}
+    {isPresentation && <PresentationBar title="พิกัดยาเสพติด กรุงเทพมหานคร" />}
 
     {/* Portals — เฉพาะ normal mode (mobile sidebar controls) */}
     {!isPresentation && sidebarOpen && createPortal(
@@ -575,7 +575,7 @@ export default function SubstanceRadar() {
               <MapPin size={20} />
             </div>
             <div>
-              <h1 className="font-bold text-lg text-white leading-tight">ระบบแผนที่ยาเสพติด</h1>
+              <h1 className="font-bold text-lg text-white leading-tight">ระบบพิกัดยาเสพติด</h1>
               <p className="text-xs text-blue-300">BKK Substance Radar · กรุงเทพมหานคร</p>
             </div>
           </div>
