@@ -65,6 +65,26 @@ export function Select({ options, placeholder = '— เลือก —', class
   )
 }
 
+// ChipGroup — แทนช่องติ๊ก ☐ ในกระดาษ : multi=false เลือกได้อันเดียว (กดซ้ำ = ยกเลิก), multi=true เลือกหลายอัน
+export function ChipGroup({ options, value, onChange, multi = false }) {
+  const list = multi ? (Array.isArray(value) ? value : []) : []
+  const on = (o) => (multi ? list.includes(o) : value === o)
+  const toggle = (o) => {
+    if (multi) onChange(list.includes(o) ? list.filter((x) => x !== o) : [...list, o])
+    else onChange(value === o ? '' : o)
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((o) => (
+        <button key={o} type="button" onClick={() => toggle(o)}
+          className={`h-8 px-3 rounded-full text-xs font-medium ring-1 transition ${
+            on(o) ? 'bg-blue-600 text-white ring-blue-600' : 'bg-white text-slate-600 ring-slate-300 hover:bg-slate-50'
+          }`}>{o}</button>
+      ))}
+    </div>
+  )
+}
+
 // แถวที่เพิ่ม/ลบได้ — rows = array, onChange(nextRows), renderRow(row, patch) วาดช่องกรอกของแถวนั้น
 // cols ต้องเป็น class เต็ม ๆ (Tailwind อ่าน class จาก source ตรง ๆ — สร้างชื่อ class แบบ `sm:grid-cols-${n}` ไม่ติด)
 const GRID_COLS = { 2: 'sm:grid-cols-2', 3: 'sm:grid-cols-3', 4: 'sm:grid-cols-4' }

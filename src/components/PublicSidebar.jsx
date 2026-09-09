@@ -41,7 +41,8 @@ const NAV = [
     groups: [
       { label: 'แบบซักผู้เสพ', items: [
         { to: '/substance-users', label: 'ข้อมูลการซักผู้เสพ' },
-        { to: '/intel/interview/new', label: 'บันทึกข้อมูล' },
+        { to: '/intel/interview', label: 'ค้นหา/รายการที่บันทึก' },
+        { to: '/intel/interview/new', label: 'บันทึกข้อมูลผู้เสพ' },
       ] },
       { label: 'ราคายาเสพติด', items: [
         { label: 'แผนที่ราคายาเสพติด' },

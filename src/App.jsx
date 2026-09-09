@@ -23,6 +23,7 @@ import ComplaintsPage from './pages/ComplaintsPage'
 import SituationPage from './pages/SituationPage'
 import DrugEvidence from './pages/DrugEvidence'
 import InterviewForm from './pages/intel/InterviewForm'
+import InterviewSearch from './pages/intel/InterviewSearch'
 import Admin from './pages/Admin'
 import { Menu } from 'lucide-react'
 
@@ -81,6 +82,9 @@ export default function App() {
             <Route path="/situation/drug-evidence" element={<MainLayout><DrugEvidence /></MainLayout>} />
 
             {/* ฐานข้อมูลการข่าว — ผู้ดูแลระบบเท่านั้น (ข้อมูลอ่อนไหว) */}
+            <Route path="/intel/interview" element={
+              <ProtectedRoute><MainLayout><InterviewSearch /></MainLayout></ProtectedRoute>
+            } />
             <Route path="/intel/interview/new" element={
               <ProtectedRoute><MainLayout><InterviewForm /></MainLayout></ProtectedRoute>
             } />
