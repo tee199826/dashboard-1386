@@ -1,5 +1,7 @@
 // IncidentsSection — ส่วน "ร้องเรียน" ของหน้า /situation (ยกเนื้อจาก IncidentsPage เดิม + เพิ่มตาม infographic template)
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { drugEvidencePath } from '../../utils/filterParams'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
 import { formatThaiDate } from '../../utils/heroMeta'
 import { BEHAVIOR_FLAGS, DRUG_FLAGS, RESULT_FLAGS, drugCounts, countFlag } from '../../utils/drugFlags'
@@ -41,6 +43,7 @@ function BehaviorYearCompareChart({ allRows, cascade, fyOld, fyNew }) {
 }
 
 export default function IncidentsSection({ rows, total, allRows, cascade, filterState, range, availableYears }) {
+  const navigate = useNavigate()
   const doneCount = useMemo(() => rows.filter((r) => r.result_found || r.action_arrest || r.action_treatment).length, [rows])
   const remainingCount = total - doneCount
   const donePct = total ? (doneCount / total) * 100 : 0
@@ -124,8 +127,12 @@ export default function IncidentsSection({ rows, total, allRows, cascade, filter
           <SectionHead title="พฤติการณ์" sub="4 หมวด (แยกจากกัน) — %รวม 100" />
           {behData.some((d) => d.value > 0) ? <RankedBarChart data={behData} percent unit="เรื่อง" /> : <EmptyChart />}
         </Panel>
-        <Panel>
-          <SectionHead title="ตัวยา" sub="Top 10 · 1 เรื่องอาจพบหลายชนิด" />
+        {/* กดที่การ์ด → หน้ารายละเอียดตัวยาทั้งหมด (scope=incidents นับทุกเรื่อง ไม่ใช่เฉพาะคดีจับกุม) */}
+        <Panel className="cursor-pointer transition hover:border-[#2f49c9]/40 hover:shadow-[0_4px_16px_rgba(47,73,201,0.10)]"
+          role="button" tabIndex={0} title="ดูรายละเอียดตัวยาทั้งหมด"
+          onClick={() => navigate(drugEvidencePath(filterState, cascade, 'incidents'))}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(drugEvidencePath(filterState, cascade, 'incidents')) } }}>
+          <SectionHead title="ตัวยา" sub="Top 10 · กดเพื่อดูรายละเอียดทั้งหมด" />
           {drugData.length ? <RankedBarChart data={drugData} percent unit="เรื่อง" /> : <EmptyChart />}
         </Panel>
       </div>

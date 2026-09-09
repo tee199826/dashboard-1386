@@ -10,11 +10,12 @@ export const GROUP_ORDER = ['กรุงเทพกลาง', 'กรุง�
 const DISTRICT_ALIAS = { 'เขตราษฎร์บูรณะ': 'เขตราษฏร์บูรณะ' }
 export const groupOf = (district) => DNAME_TO_GROUP[DISTRICT_ALIAS[district] || district] || null
 
-export function useAreaCascade(dateFiltered) {
-  const [group, setGroup] = useState('all')
-  const [district, setDistrict] = useState('all')
-  const [subdistrict, setSubdistrict] = useState('all')
-  const [community, setCommunity] = useState('all')
+// initial — ค่าพื้นที่เริ่มต้น (เช่น อ่านจาก query params ตอนข้ามหน้ามา) ; ไม่ส่ง = 'all' ทุกระดับ
+export function useAreaCascade(dateFiltered, initial) {
+  const [group, setGroup] = useState(initial?.group ?? 'all')
+  const [district, setDistrict] = useState(initial?.district ?? 'all')
+  const [subdistrict, setSubdistrict] = useState(initial?.subdistrict ?? 'all')
+  const [community, setCommunity] = useState(initial?.community ?? 'all')
 
   const districtOptions = useMemo(() => {
     const s = new Set()

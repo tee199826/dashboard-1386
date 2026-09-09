@@ -1,5 +1,7 @@
 // ArrestSection — ส่วน "จับกุม" ของหน้า /situation (ยกเนื้อจาก ArrestPage เดิม + เพิ่มตาม infographic template)
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { drugEvidencePath } from '../../utils/filterParams'
 import { formatThaiDate } from '../../utils/heroMeta'
 import { BEHAVIOR_FLAGS, DRUG_FLAGS, drugCounts, rowsWithAnyDrug, countFlag, isSevere } from '../../utils/drugFlags'
 import { computeYoy, top3Districts } from '../../utils/situationCompare'
@@ -10,6 +12,7 @@ import { COLORS } from '../../utils/reportStyle'
 const PAGE_SIZE = 50
 
 export default function ArrestSection({ rows: arrestRows, total, allRows, cascade, filterState, range }) {
+  const navigate = useNavigate()
   // ── G1 ข้อหา (พฤติการณ์ 4 หมวด mutually exclusive — %รวม 100) ──
   const behData = useMemo(() => BEHAVIOR_FLAGS
     .map(([col, label]) => ({ name: label, value: countFlag(arrestRows, col) }))
@@ -82,11 +85,17 @@ export default function ArrestSection({ rows: arrestRows, total, allRows, cascad
           <SectionHead title="ข้อหา" sub="พฤติการณ์ 4 หมวด (แยกจากกัน) — %รวม 100" />
           {behData.some((d) => d.value > 0) ? <RankedBarChart data={behData} percent unit="คดี" /> : <EmptyChart />}
         </Panel>
-        <Panel>
-          <SectionHead title="ของกลางยาเสพติด" sub="สัดส่วนตัวยาที่พบ — รวม 100% (1 คดีมีได้หลายตัวยา)" />
+        {/* กดที่การ์ด → หน้ารายละเอียดของกลางทั้งหมด (พาตัวกรองเวลา+พื้นที่ไปด้วย) */}
+        <Panel className="cursor-pointer transition hover:border-[#2f49c9]/40 hover:shadow-[0_4px_16px_rgba(47,73,201,0.10)]"
+          role="button" tabIndex={0}
+          title="ดูรายละเอียดของกลางทั้งหมด"
+          onClick={() => navigate(drugEvidencePath(filterState, cascade))}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(drugEvidencePath(filterState, cascade)) } }}>
+          <SectionHead title="ของกลางยาเสพติด" sub="กดเพื่อดูรายละเอียดทั้งหมด — รวม 100% (1 คดีมีได้หลายตัวยา)" />
           {drugData.length ? (
             <>
-              <DrugTileGrid data={drugData} unit="คดี" />
+              <DrugTileGrid data={drugData} unit="คดี"
+                onOther={() => navigate(drugEvidencePath(filterState, cascade))} />
               <div className="mt-3 text-xs text-slate-400 tabular-nums">ระบุตัวยาได้ {withDrug.toLocaleString()} จาก {total.toLocaleString()} คดี</div>
             </>
           ) : <EmptyChart />}

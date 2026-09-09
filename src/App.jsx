@@ -21,6 +21,7 @@ import BknPage from './pages/BknPage'
 import SubstanceUsers from './pages/SubstanceUsers'
 import ComplaintsPage from './pages/ComplaintsPage'
 import SituationPage from './pages/SituationPage'
+import DrugEvidence from './pages/DrugEvidence'
 import InterviewForm from './pages/intel/InterviewForm'
 import Admin from './pages/Admin'
 import { Menu } from 'lucide-react'
@@ -76,6 +77,8 @@ export default function App() {
             <Route path="/substance-users" element={<MainLayout><FilterProvider><SubstanceUsers /></FilterProvider></MainLayout>} />
             <Route path="/complaints" element={<MainLayout><FilterProvider><ComplaintsPage /></FilterProvider></MainLayout>} />
             <Route path="/situation" element={<MainLayout><FilterProvider><SituationPage /></FilterProvider></MainLayout>} />
+
+            <Route path="/situation/drug-evidence" element={<MainLayout><DrugEvidence /></MainLayout>} />
 
             {/* ฐานข้อมูลการข่าว — ผู้ดูแลระบบเท่านั้น (ข้อมูลอ่อนไหว) */}
             <Route path="/intel/interview/new" element={

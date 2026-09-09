@@ -6,8 +6,8 @@ import { COLORS, readableOn } from '../utils/reportStyle'
 
 const CARD = 'rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,22,38,0.05)]'
 
-export function Panel({ children, className = '' }) {
-  return <div className={`${CARD} p-5 md:p-6 ${className}`}>{children}</div>
+export function Panel({ children, className = '', ...rest }) {
+  return <div className={`${CARD} p-5 md:p-6 ${className}`} {...rest}>{children}</div>
 }
 
 export function SectionHead({ title, sub }) {
@@ -78,7 +78,7 @@ export function RankedBarChart({ data, percent = false, highlightFirst = true, u
 }
 
 // DrugTileGrid — ของกลางยาเสพติดแบบการ์ดไทล์ : ตัวแรกเข้มสุด, ไทล์ "อื่น ๆ" กดเพื่อกางรายการที่เหลือ
-export function DrugTileGrid({ data, unit = 'คดี', topN = 5 }) {
+export function DrugTileGrid({ data, unit = 'คดี', topN = 5, onOther }) {
   const [open, setOpen] = useState(false)
   const sum = data.reduce((s, d) => s + d.value, 0) || 1
   const pct = (v) => ((v / sum) * 100).toFixed(1)
@@ -102,12 +102,12 @@ export function DrugTileGrid({ data, unit = 'คดี', topN = 5 }) {
         )
       })}
       {rest.length > 0 && (
-        <button type="button" onClick={() => setOpen((o) => !o)}
+        <button type="button" onClick={(e) => { if (onOther) { e.stopPropagation(); onOther() } else setOpen((o) => !o) }}
           className="rounded-xl px-3.5 py-3 flex flex-col justify-center min-h-[92px] text-left transition hover:brightness-95"
           style={{ background: COLORS.accentSoft, color: COLORS.accentInk }}>
-          <div className="text-[15px] font-bold leading-tight">{open ? 'ย่อกลับ' : 'อื่น ๆ'}</div>
+          <div className="text-[15px] font-bold leading-tight">{!onOther && open ? 'ย่อกลับ' : 'อื่น ๆ'}</div>
           <div className="text-[11.5px] opacity-80 leading-tight">
-            {open ? 'แสดงเฉพาะอันดับต้น' : `แสดงรายละเอียด · อีก ${rest.length} ชนิด`}
+            {!onOther && open ? 'แสดงเฉพาะอันดับต้น' : `แสดงรายละเอียด · อีก ${rest.length} ชนิด`}
           </div>
           {!open && <div className="mt-1 text-[13px] font-bold tabular-nums opacity-90">{restTotal.toLocaleString()} {unit} · {pct(restTotal)}%</div>}
         </button>

@@ -41,8 +41,19 @@ function computeRange(state) {
   return null
 }
 
-export function FilterProvider({ children, initialFiscalYear = null }) {
-  const [state, setState] = useState(() => makeInitial(initialFiscalYear))
+// initialState — state เริ่มต้นบางส่วน (เช่น อ่านจาก query params ตอนข้ามหน้ามา) ทับค่า default
+// ควรถูก memo มาจากฝั่งผู้เรียกให้ identity คงที่
+export function FilterProvider({ children, initialFiscalYear = null, initialState = null }) {
+  const initial = useMemo(() => {
+    const base = makeInitial(initialFiscalYear)
+    if (!initialState) return base
+    const merged = { ...base, ...initialState }
+    // fiscalYear เป็นค่า derived — คำนวณใหม่ให้ตรงกับ fiscalYears ที่ส่งเข้ามา
+    if (initialState.fiscalYears) merged.fiscalYear = deriveSingle(initialState.fiscalYears)
+    return merged
+  }, [initialFiscalYear, initialState])
+
+  const [state, setState] = useState(initial)
 
   const patch = useCallback((p) => setState(s => ({ ...s, ...p })), [])
   const setMode        = useCallback((mode) => patch({ mode }), [patch])
@@ -56,7 +67,7 @@ export function FilterProvider({ children, initialFiscalYear = null }) {
   const setMonth      = useCallback((month) => patch({ month }), [patch])
   const setCustomFrom = useCallback((customFrom) => patch({ customFrom }), [patch])
   const setCustomTo   = useCallback((customTo) => patch({ customTo }), [patch])
-  const reset         = useCallback(() => setState(makeInitial(initialFiscalYear)), [initialFiscalYear])
+  const reset         = useCallback(() => setState(initial), [initial])
 
   // memoize ให้ range identity คงที่จนกว่า state จะเปลี่ยน — consumer ใช้ [range] เป็น dep ได้ตรง (รองรับหลายปี)
   const range = useMemo(() => computeRange(state), [state])
