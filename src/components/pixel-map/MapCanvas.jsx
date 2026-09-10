@@ -34,6 +34,11 @@ const DISTRICT_NAME_SIZE = { sm: 10, md: 13, lg: 16 }
 const SUBDISTRICT_NAME_SIZE = { sm: 9.5, md: 12, lg: 14.5 }
 const COMMUNITY_NAME_SIZE = { sm: 9, md: 11, lg: 13 }
 
+// สระบน-ล่าง/วรรณยุกต์ไทย ไม่กินความกว้างแนวนอน — ตัดออกก่อนประมาณความกว้างข้อความ
+// (String.length นับรวมทำให้ป้ายกว้างเกินจริง → กันชนดันห่างเกินจำเป็น)
+const THAI_COMBINING = /[ัิ-ฺ็-๎]/g
+const visualLen = (s) => s.replace(THAI_COMBINING, '').length
+
 function Dot({ shape, x, y, size, fill, opacity }) {
   const r = size / 2
   const common = { fill, opacity }
@@ -97,7 +102,7 @@ const PlaceNameLabel = memo(function PlaceNameLabel({ x, y, text, fontSize, fill
 const PixelMapCanvas = forwardRef(function PixelMapCanvas({
   width, height, geojson, hierarchy, subdistrictIndex, communityIndex,
   checkedDistricts, checkedSubdistricts, checkedCommunities = EMPTY_SET,
-  layers, layerCounts, labelsConfig, style, panelLabel, exporting = false,
+  layers, layerCounts, labelsConfig, style, panelLabel, exporting = false, showExportNumbers = true,
   zoomTransform, onZoomChange,
 }, ref) {
   const theme = THEMES[style.background] ?? THEMES.map
@@ -114,7 +119,10 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
 
   const { project, unproject } = useMemo(() => makeProjection(BKK_BBOX, width, height, 24), [width, height])
 
-  const [districtLayer, subdistrictLayer, ...dataLayers] = layers
+  const [districtLayer, subdistrictLayer] = layers
+  // memo แทน rest-spread (`...dataLayers`) ที่สร้าง array ใหม่ทุก render — ทำให้ memo ที่ dep กับ dataLayers
+  // (dataOverlay/dotGrid/hoverCountOf) คำนวณใหม่ทุกเฟรมแม้ layers ไม่เปลี่ยน
+  const dataLayers = useMemo(() => layers.slice(2), [layers])
   const t = zoomTransform ?? IDENTITY
 
   // ── d3-zoom binding — svgInternalRef คือตัวจริงที่ forward ออกไปให้ export ใช้ (ผ่าน useImperativeHandle) ──
@@ -420,7 +428,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
   // ── ตัวเลขจำนวนเคสของ "พื้นที่ที่เลือก" — โชว์เฉพาะตอน export ให้ติดไปในรูป (ชุมชน > แขวง > เขต ตามระดับที่ลึกสุดที่ติ๊ก)
   // ระดับที่ลึกกว่าอยู่บนสุด ; ตำแหน่งอิงจากรูปทรง/centroid เดียวกับป้ายชื่อ ; ค่า = จำนวนเคส (metric 'count')
   const exportNumbers = useMemo(() => {
-    if (!exporting) return []
+    if (!exporting || !showExportNumbers) return []
     const out = []
     for (const dname of checkedDistricts) {
       const pos = districtCentroids[dname]
@@ -429,7 +437,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
     for (const s of subdistrictShapes) out.push({ key: `n:s:${s.key}`, x: s.x, y: s.y, label: s.text, count: s.count })
     for (const c of checkedCommunityPoints) out.push({ key: `n:c:${c.key}`, x: c.x, y: c.y, label: c.text, count: c.count })
     return out
-  }, [exporting, checkedDistricts, districtCentroids, hierarchy, subdistrictShapes, checkedCommunityPoints])
+  }, [exporting, showExportNumbers, checkedDistricts, districtCentroids, hierarchy, subdistrictShapes, checkedCommunityPoints])
 
   // จัดตำแหน่งป้าย export ในพิกัด "จอ" + กันชน — ถ้าจุดฐานทับกัน เลื่อนขึ้น/ลงทีละก้อนจนไม่ทับ (โชว์ครบทุกอันไม่ให้ซ่อนกัน)
   const placedExportNumbers = useMemo(() => {
@@ -437,19 +445,26 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
     const H = 34, GAP = 5
     const items = exportNumbers.map(p => {
       const countText = `${p.count.toLocaleString()} เรื่อง`
-      const w = Math.max(p.label.length, countText.length + 1) * 7.2 + 18
-      return { ...p, sx: p.x * t.k + t.x, sy: p.y * t.k + t.y, w, h: H }
+      const w = Math.max(visualLen(p.label), visualLen(countText) + 1) * 7.2 + 18
+      return { ...p, sx: p.x * t.k + t.x, sy: p.y * t.k + t.y, w }
     })
     const boxes = []
+    const boxAt = (it, y) => ({ left: it.sx - it.w / 2, right: it.sx + it.w / 2, top: y - H / 2, bottom: y + H / 2 })
     const hit = (b) => boxes.some(o => !(b.right < o.left || b.left > o.right || b.bottom < o.top || b.top > o.bottom))
     const placed = []
+    // ขยับขึ้น/ลงทีละก้อนจนเจอช่องว่าง — ค้นได้กว้างพอ (≥ 2N ก้อน) ให้พบช่องว่างเสมอ ไม่ fallback ทับกันเงียบ ๆ
+    const maxStep = items.length * 2 + 4
     for (const it of items) {
       let cy = it.sy
-      for (const step of [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5]) {
-        const y = it.sy + step * (H + GAP)
-        if (!hit({ left: it.sx - it.w / 2, right: it.sx + it.w / 2, top: y - H / 2, bottom: y + H / 2 })) { cy = y; break }
+      for (let s = 0; s <= maxStep; s++) {
+        let done = false
+        for (const dir of (s === 0 ? [0] : [s, -s])) {
+          const y = it.sy + dir * (H + GAP)
+          if (!hit(boxAt(it, y))) { cy = y; done = true; break }
+        }
+        if (done) break
       }
-      boxes.push({ left: it.sx - it.w / 2, right: it.sx + it.w / 2, top: cy - H / 2, bottom: cy + H / 2 })
+      boxes.push(boxAt(it, cy))
       placed.push({ ...it, sy: cy })
     }
     return placed

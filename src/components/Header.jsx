@@ -18,7 +18,7 @@ function toThaiDate(iso) {
 const isStaleDate = (iso) => (Date.now() - new Date(iso).getTime()) > 30 * 24 * 3600 * 1000
 
 export default function Header() {
-  const { user, profile, isAdmin, signOut } = useAuth()
+  const { user, signOut } = useAuth()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const isSubstanceUsers = pathname.startsWith('/substance-users')
@@ -106,10 +106,7 @@ export default function Header() {
           })()}
           {user ? (
             <>
-              <div className="text-right text-sm hidden sm:block">
-                <div className="font-semibold">{profile?.full_name || user.email}</div>
-                <div className="text-xs text-blue-200">{isAdmin ? '👑 ผู้ดูแลระบบ' : '👤 ผู้ใช้งาน'}</div>
-              </div>
+              {/* ชื่อผู้ใช้ย้ายไปแสดงบน sidebar แล้ว — ตรงนี้เหลือแค่ปุ่มออกจากระบบ */}
               <button
                 onClick={handleLogout}
                 className="px-3 sm:px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition flex items-center gap-2 text-sm font-medium flex-shrink-0"

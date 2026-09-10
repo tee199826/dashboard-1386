@@ -202,8 +202,8 @@ export default function Overview() {
   const rawData = records ?? []
   const { getDateRange } = useFilter()
   const range = getDateRange()
-  const data = useMemo(() => filterByDateColumn(rawData, 'date', range), [records, range?.from, range?.to])
-  const incidents = useMemo(() => filterByDateColumn(incidentsRaw, 'received_date', range), [incidentsRaw, range?.from, range?.to])
+  const data = useMemo(() => filterByDateColumn(rawData, 'date', range), [rawData, range])
+  const incidents = useMemo(() => filterByDateColumn(incidentsRaw, 'received_date', range), [incidentsRaw, range])
   const fyYears = useMemo(() => {
     const s = new Set()
     rawData.forEach(r => { const fy = dateToFiscalYear(r.date); if (fy) s.add(fy) })

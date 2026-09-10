@@ -1,16 +1,49 @@
 // IncidentsSection — ส่วน "ร้องเรียน" ของหน้า /situation (ยกเนื้อจาก IncidentsPage เดิม + เพิ่มตาม infographic template)
 import { useState, useMemo } from 'react'
-import { FileWarning, CheckCircle2, CircleDashed, TrendingUp, ListChecks, Pill, SearchCheck, Workflow, MapPin, ArrowLeftRight } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { drugEvidencePath } from '../../utils/filterParams'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
 import { formatThaiDate } from '../../utils/heroMeta'
 import { BEHAVIOR_FLAGS, DRUG_FLAGS, RESULT_FLAGS, drugCounts, countFlag } from '../../utils/drugFlags'
-import { computeYoy, top3Districts, pickComparePair } from '../../utils/situationCompare'
+import { computeYoy, top3Districts, pickComparePair, yearRows } from '../../utils/situationCompare'
 import { exportIncidentsReport } from '../../utils/exportSituation'
 import { Panel, SectionHead, Metric, RankedBarChart, EmptyChart, Top3List, ActionBar, TablePager } from '../ReportUI'
-import BehaviorCompareChart from './BehaviorCompareChart'
+import { COLORS, barTooltipStyle, labelStyle } from '../../utils/reportStyle'
 
 const PAGE_SIZE = 50
 
+function BehaviorYearCompareChart({ allRows, cascade, fyOld, fyNew }) {
+  const rowsOld = useMemo(() => yearRows(allRows, cascade, fyOld), [allRows, cascade, fyOld])
+  const rowsNew = useMemo(() => yearRows(allRows, cascade, fyNew), [allRows, cascade, fyNew])
+  const keyOld = `ปีงบ ${fyOld}`, keyNew = `ปีงบ ${fyNew}`
+  const data = BEHAVIOR_FLAGS.map(([col, label]) => ({
+    name: label, [keyOld]: countFlag(rowsOld, col), [keyNew]: countFlag(rowsNew, col),
+  }))
+
+  return (
+    <>
+      <div className="flex items-center gap-4 mb-3 text-xs text-slate-500">
+        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: COLORS.slateSoft }} /> {keyOld}</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: COLORS.amber }} /> {keyNew}</span>
+      </div>
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={data} layout="vertical" margin={{ top: 4, right: 36, left: 8, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+          <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
+          <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 12, fill: '#475569' }} />
+          <Tooltip contentStyle={barTooltipStyle} formatter={(v) => [v.toLocaleString(), 'เรื่อง']} />
+          <Bar dataKey={keyOld} stackId="a" fill={COLORS.slateSoft} />
+          <Bar dataKey={keyNew} stackId="a" fill={COLORS.amber} radius={[0, 4, 4, 0]}>
+            <LabelList dataKey={keyNew} position="right" formatter={(v) => v.toLocaleString()} style={labelStyle} />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </>
+  )
+}
+
 export default function IncidentsSection({ rows, total, allRows, cascade, filterState, range, availableYears }) {
+  const navigate = useNavigate()
   const doneCount = useMemo(() => rows.filter((r) => r.result_found || r.action_arrest || r.action_treatment).length, [rows])
   const remainingCount = total - doneCount
   const donePct = total ? (doneCount / total) * 100 : 0
@@ -80,46 +113,50 @@ export default function IncidentsSection({ rows, total, allRows, cascade, filter
     <div className="space-y-8">
       <Panel>
         <div className="grid grid-cols-12 gap-y-6">
-          <Metric span="sm:col-span-3" icon={FileWarning} eyebrow="เรื่องทั้งหมด" value={total.toLocaleString()} unit="เรื่อง" />
-          <Metric span="sm:col-span-3" divider icon={CheckCircle2} accent="text-emerald-700" eyebrow="ดำเนินการแล้ว"
+          <Metric span="sm:col-span-3" eyebrow="เรื่องทั้งหมด" value={total.toLocaleString()} unit="เรื่อง" />
+          <Metric span="sm:col-span-3" divider accent="text-emerald-700" eyebrow="ดำเนินการแล้ว"
             value={`${donePct.toFixed(1)}%`} sub={`${doneCount.toLocaleString()} เรื่อง`} />
-          <Metric span="sm:col-span-3" divider icon={CircleDashed} accent="text-rose-600" eyebrow="คงเหลือ"
+          <Metric span="sm:col-span-3" divider accent="text-rose-600" eyebrow="คงเหลือ"
             value={`${remainingPct.toFixed(1)}%`} sub={`${remainingCount.toLocaleString()} เรื่อง`} />
-          <Metric span="sm:col-span-3" divider icon={TrendingUp} eyebrow="เทียบปีงบก่อน" value={yoyView.value} sub={yoyView.sub} />
+          <Metric span="sm:col-span-3" divider eyebrow="เทียบปีงบก่อน" value={yoyView.value} sub={yoyView.sub} />
         </div>
       </Panel>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Panel>
-          <SectionHead title="พฤติการณ์" icon={ListChecks} sub="4 หมวด (แยกจากกัน) — %รวม 100" />
-          {behData.some((d) => d.value > 0) ? <RankedBarChart data={behData} unit="เรื่อง" /> : <EmptyChart />}
+          <SectionHead title="พฤติการณ์" sub="4 หมวด (แยกจากกัน) — %รวม 100" />
+          {behData.some((d) => d.value > 0) ? <RankedBarChart data={behData} percent unit="เรื่อง" /> : <EmptyChart />}
         </Panel>
-        <Panel>
-          <SectionHead title="ตัวยา" icon={Pill} sub="Top 10 · 1 เรื่องอาจพบหลายชนิด" />
-          {drugData.length ? <RankedBarChart data={drugData} unit="เรื่อง" /> : <EmptyChart />}
-        </Panel>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Panel>
-          <SectionHead title="ผลตรวจสอบ" icon={SearchCheck} />
-          {resultData.some((d) => d.value > 0) ? <RankedBarChart data={resultData} unit="เรื่อง" /> : <EmptyChart />}
-        </Panel>
-        <Panel>
-          <SectionHead title="พบแล้วผลเป็นอะไร" icon={Workflow} sub={`ใน ${foundOutcome.total.toLocaleString()} เรื่องที่พบพฤติการณ์`} />
-          {foundOutcome.total ? <RankedBarChart data={foundOutcome.data} unit="เรื่อง" /> : <EmptyChart />}
+        {/* กดที่การ์ด → หน้ารายละเอียดตัวยาทั้งหมด (scope=incidents นับทุกเรื่อง ไม่ใช่เฉพาะคดีจับกุม) */}
+        <Panel className="cursor-pointer transition hover:border-[#2f49c9]/40 hover:shadow-[0_4px_16px_rgba(47,73,201,0.10)]"
+          role="button" tabIndex={0} title="ดูรายละเอียดตัวยาทั้งหมด"
+          onClick={() => navigate(drugEvidencePath(filterState, cascade, 'incidents'))}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(drugEvidencePath(filterState, cascade, 'incidents')) } }}>
+          <SectionHead title="ตัวยา" sub="Top 10 · กดเพื่อดูรายละเอียดทั้งหมด" />
+          {drugData.length ? <RankedBarChart data={drugData} percent unit="เรื่อง" /> : <EmptyChart />}
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Panel>
-          <SectionHead title="เขตร้องเรียนสูงสุด" icon={MapPin} sub="Top 3 · % จากจำนวนเรื่องทั้งหมดในช่วงที่เลือก" />
+          <SectionHead title="ผลตรวจสอบ" />
+          {resultData.some((d) => d.value > 0) ? <RankedBarChart data={resultData} percent unit="เรื่อง" /> : <EmptyChart />}
+        </Panel>
+        <Panel>
+          <SectionHead title="พบแล้วผลเป็นอะไร" sub={`ใน ${foundOutcome.total.toLocaleString()} เรื่องที่พบพฤติการณ์`} />
+          {foundOutcome.total ? <RankedBarChart data={foundOutcome.data} percent unit="เรื่อง" /> : <EmptyChart />}
+        </Panel>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Panel>
+          <SectionHead title="เขตร้องเรียนสูงสุด" sub="Top 3 · % จากจำนวนเรื่องทั้งหมดในช่วงที่เลือก" />
           <Top3List data={top3} />
         </Panel>
         <Panel>
-          <SectionHead title="พฤติการณ์เทียบ 2 ปีงบ" icon={ArrowLeftRight} sub={comparePair ? undefined : 'ยังไม่มีข้อมูลครบ 2 ปีงบสำหรับเปรียบเทียบ'} />
+          <SectionHead title="พฤติการณ์เทียบ 2 ปีงบ" sub={comparePair ? undefined : 'ยังไม่มีข้อมูลครบ 2 ปีงบสำหรับเปรียบเทียบ'} />
           {comparePair
-            ? <BehaviorCompareChart allRows={allRows} cascade={cascade} fyOld={comparePair[1]} fyNew={comparePair[0]} />
+            ? <BehaviorYearCompareChart allRows={allRows} cascade={cascade} fyOld={comparePair[1]} fyNew={comparePair[0]} />
             : <EmptyChart />}
         </Panel>
       </div>
@@ -127,38 +164,38 @@ export default function IncidentsSection({ rows, total, allRows, cascade, filter
       <ActionBar tableOpen={tableOpen} onToggleTable={() => setTableOpen((o) => !o)} onExport={handleExport} exporting={exporting} />
 
       {tableOpen && (
-        <div className="bg-white rounded-xl ring-1 ring-slate-900/[0.06] shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
+        <div className="bg-white rounded-lg ring-1 ring-slate-200 overflow-hidden">
           <div className="overflow-auto max-h-[560px]">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50/80 sticky top-0 z-10 shadow-[0_1px_0_rgba(15,23,42,0.06)]">
-                <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
-                  <th className="px-4 py-3 font-semibold">วันที่</th>
-                  <th className="px-4 py-3 font-semibold">เขต</th>
-                  <th className="px-4 py-3 font-semibold">แขวง</th>
-                  <th className="px-4 py-3 font-semibold">พฤติการณ์</th>
-                  <th className="px-4 py-3 font-semibold">ตัวยา</th>
-                  <th className="px-4 py-3 font-semibold">ผลตรวจสอบ</th>
-                  <th className="px-4 py-3 font-semibold">ผลดำเนินการ</th>
+              <thead className="bg-slate-50 sticky top-0 z-10">
+                <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-2.5 font-medium">วันที่</th>
+                  <th className="px-3 py-2.5 font-medium">เขต</th>
+                  <th className="px-3 py-2.5 font-medium">แขวง</th>
+                  <th className="px-3 py-2.5 font-medium">พฤติการณ์</th>
+                  <th className="px-3 py-2.5 font-medium">ตัวยา</th>
+                  <th className="px-3 py-2.5 font-medium">ผลตรวจสอบ</th>
+                  <th className="px-3 py-2.5 font-medium">ผลดำเนินการ</th>
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map((r) => {
                   const isDone = r.result_found || r.action_arrest || r.action_treatment
                   return (
-                    <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/70 transition-colors">
-                      <td className="px-4 py-3 text-slate-600 tabular-nums whitespace-nowrap">{formatThaiDate(r.received_date) || '-'}</td>
-                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{r.district || '-'}</td>
-                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{r.subdistrict || '-'}</td>
-                      <td className="px-4 py-3 text-slate-500">{BEHAVIOR_FLAGS.filter(([c]) => r[c]).map(([, l]) => l).join(', ') || '-'}</td>
-                      <td className="px-4 py-3 text-slate-500">
+                    <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="px-3 py-2.5 text-slate-600 tabular-nums whitespace-nowrap">{formatThaiDate(r.received_date) || '-'}</td>
+                      <td className="px-3 py-2.5 text-slate-700 whitespace-nowrap">{r.district || '-'}</td>
+                      <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{r.subdistrict || '-'}</td>
+                      <td className="px-3 py-2.5 text-slate-500">{BEHAVIOR_FLAGS.filter(([c]) => r[c]).map(([, l]) => l).join(', ') || '-'}</td>
+                      <td className="px-3 py-2.5 text-slate-500">
                         {[...DRUG_FLAGS.filter(([c]) => r[c]).map(([, l]) => l), ...(Array.isArray(r.drug_others) ? r.drug_others.filter(Boolean) : [])].join(', ') || '-'}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${isDone ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
                           {RESULT_FLAGS.filter(([c]) => r[c]).map(([, l]) => l).join(', ') || 'ยังไม่มีผล'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">
                         {[r.action_arrest && 'จับกุม', r.action_treatment && 'บำบัด', r.action_investigating && 'สืบสวน',
                           r.action_search && 'ตรวจค้น', r.action_escape && 'หลบหนี'].filter(Boolean).join(', ') || '-'}
                       </td>

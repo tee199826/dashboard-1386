@@ -43,7 +43,13 @@ const TOP3_PALETTES = {
 }
 const FIELDS = 'fiscal_year,surveyed_at,age,occupation,income_range,arrest_count,rehab_count,first_use_age,first_drug,first_reason,arrests,rehabs,regular_drugs,dealer_locations'
 
-const INCOME_ORDER = ['ไม่มีรายได้', 'ต่ำกว่า 10,000', '10,000-15,000', '15,001-20,000', '20,001-25,000', '25,001-30,000', 'มากกว่า 30,000']
+// เรียงตามเพดานของช่วง — มีทั้งค่าเดิมที่นำเข้ามา และช่วงใหม่ (ละ 5,000) จากฟอร์มบันทึก
+const INCOME_ORDER = [
+  'ไม่มีรายได้',
+  'ต่ำกว่า 5,000', '5,001-10,000',
+  'ต่ำกว่า 10,000', '10,000-15,000', '10,001-15,000',
+  '15,001-20,000', '20,001-25,000', '25,001-30,000', 'มากกว่า 30,000',
+]
 const incomeRank = v => { const i = INCOME_ORDER.findIndex(o => String(v || '').includes(o)); return i === -1 ? 99 : i }
 
 const num = v => (v == null || v === '' ? null : (isNaN(Number(v)) ? null : Number(v)))
@@ -70,10 +76,10 @@ function topN(counts, n, otherLabel = 'อื่นๆ') {
 
 // ── tab navigation (executive) ──
 const TABS = [
-  { id: 'demographics', label: 'ข้อมูลประชากร' },
+  { id: 'demographics', label: 'ข้อมูลผู้เสพ' },
   { id: 'history', label: 'ประวัติการเสพ' },
-  { id: 'drugs', label: 'ยาประจำ + ราคา' },
-  { id: 'arrests', label: 'จับและบำบัด' },
+  { id: 'drugs', label: 'ราคา' },
+  { id: 'arrests', label: 'ประวัติการจับกุมและบำบัด' },
   { id: 'dealers', label: 'แหล่งซื้อ' },
 ]
 const TAB_IDS = TABS.map(t => t.id)
@@ -101,6 +107,7 @@ export default function SubstanceUsers() {
 
   const [search, setSearch] = useState('')
   const [sortDesc, setSortDesc] = useState(true)
+  const [pickedDistrict, setPickedDistrict] = useState(null)   // เขตที่คลิกดูชื่อแหล่งซื้อ
 
   // ── DateFilter (page-level) — กรองตาม surveyed_at ──
   const { getDateRange } = useFilter()
@@ -113,7 +120,7 @@ export default function SubstanceUsers() {
   }, [rows])
   const filteredRows = useMemo(
     () => filterByDateColumn(rows, 'surveyed_at', range),
-    [rows, range?.from, range?.to],
+    [rows, range],
   )
 
   // ── ช่วงวันที่สำรวจจริง (footer pill) — min/max ของ surveyed_at จาก filtered ──
@@ -273,15 +280,35 @@ export default function SubstanceUsers() {
       .map(([name, value]) => ({ name, value }))
     const charges = topN(acMap, 5)
 
+    // [5.4] rehab count buckets  [5.5] rehabs[].drug  [5.6] rehabs[].place
+    const rhBuckets = { '0': 0, '1': 0, '2': 0, '3+': 0 }
+    rows.forEach(r => { const c = num(r.rehab_count) || 0; rhBuckets[c >= 3 ? '3+' : String(c)]++ })
+    const rehabBuckets = Object.entries(rhBuckets).map(([name, value]) => ({ name, value }))
+    const rdMap = {}, rpMap = {}
+    rows.forEach(r => (r.rehabs || []).forEach(x => {
+      const d = (x?.drug || '').trim(); if (d) rdMap[d] = (rdMap[d] || 0) + 1
+      const pl = (x?.place || '').trim(); if (pl) rpMap[pl] = (rpMap[pl] || 0) + 1
+    }))
+    const rehabDrugs = Object.entries(rdMap).sort((a, b) => b[1] - a[1]).slice(0, 10)
+      .map(([name, value]) => ({ name, value }))
+    const rehabPlaces = topN(rpMap, 10)
+
     // [6] dealer_locations[].district → count
     // กรองเฉพาะเขต กทม. (ขึ้นต้น "เขต") — ตัดอำเภอนอก กทม. ออกจาก choropleth + ตาราง (raw ใน DB คงไว้)
     const isBangkokDistrict = dn => dn.startsWith('เขต')
     const distMap = {}
+    const dealerSpots = {}   // เขต → { ชื่อแหล่งซื้อ: จำนวน }
     let dealerDropped = 0
     rows.forEach(r => (r.dealer_locations || []).forEach(d => {
       const dn = (d?.district || '').trim(); if (!dn) return
       if (!isBangkokDistrict(dn)) { dealerDropped++; return }
       distMap[dn] = (distMap[dn] || 0) + 1
+      // ชื่อแหล่งซื้อในเขตนั้น — ใช้ ชุมชน > จุดสังเกต(area) > แขวง ตามที่กรอกมา
+      const spot = (d?.community || d?.area || d?.subdistrict || '').trim()
+      if (spot) {
+        const b = (dealerSpots[dn] ||= {})
+        b[spot] = (b[spot] || 0) + 1
+      }
     }))
     const districtMax = Math.max(1, ...Object.values(distMap))
     const districtTable = Object.entries(distMap).map(([name, count]) => ({ name, count }))
@@ -292,7 +319,10 @@ export default function SubstanceUsers() {
       ageGroups, occupations, income, firstUseHist, firstDrug, firstReason,
       regularDrugs, priceRecords,
       arrestBuckets, arrestDrugs, charges,
+      rehabBuckets, rehabDrugs, rehabPlaces,
       distMap, districtMax, districtTable, dealerDropped,
+      dealerSpots: Object.fromEntries(Object.entries(dealerSpots).map(([dn, b]) =>
+        [dn, Object.entries(b).map(([name, count]) => ({ name, count })).sort((a, b2) => b2.count - a.count)])),
     }
   }, [filteredRows])
 
@@ -308,8 +338,11 @@ export default function SubstanceUsers() {
   const districtLayerOnEachFeature = useMemo(() => (feature, layer) => {
     const dn = feature.properties?.dname || 'ไม่ระบุ'
     const c = agg.distMap[dn] || 0
-    layer.bindTooltip(`${dn} — ${c} ราย`, { sticky: true, className: 'su-district-tooltip' })
+    layer.bindTooltip(`${dn} — ${c} ราย${c ? ' · คลิกดูชื่อแหล่งซื้อ' : ''}`, { sticky: true, className: 'su-district-tooltip' })
+    layer.on('click', () => setPickedDistrict(prev => prev === dn ? null : dn))
   }, [agg.distMap])
+
+  const pickedSpots = pickedDistrict ? (agg.dealerSpots?.[pickedDistrict] || []) : []
 
   const filteredTable = useMemo(() => {
     const q = search.trim()
@@ -380,7 +413,7 @@ export default function SubstanceUsers() {
             <div>
               <div className="text-xs font-semibold uppercase tracking-widest text-violet-200 mb-2">Substance Users · Drug Survey Data</div>
               <h1 className="text-4xl font-bold tracking-tight">แบบเก็บข้อมูลจากผู้เสพ</h1>
-              <p className="text-violet-200 text-base mt-2 leading-relaxed">ข้อมูลสำรวจผู้เสพยาเสพติด · ภาพรวมเชิงบริหาร</p>
+              <p className="text-violet-200 text-base mt-2 leading-relaxed">ข้อมูลสำรวจผู้เสพยาเสพติด</p>
             </div>
             <div className="flex flex-col items-end gap-3 shrink-0">
               <HeroActions onRefresh={load} refreshing={loading} sourceInfo={sourceInfo} />
@@ -405,7 +438,7 @@ export default function SubstanceUsers() {
 
         {/* SECTION 1 — KPI */}
         <section>
-          <SectionHeader title="ภาพรวม" desc="ตัวชี้วัดหลักของกลุ่มผู้เสพในระบบ" />
+          <SectionHeader title="ภาพรวม" />
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <KpiCard icon={<Users size={26} />} gradient="from-violet-500 to-purple-600" shadow="shadow-violet-500/30"
               label="ผู้เสพรวม" value={<AnimatedCounter value={agg.total} />} sub="ทั้งหมดในระบบ" />
@@ -437,7 +470,8 @@ export default function SubstanceUsers() {
               {activeTab === 'dealers' && (
                 <DealersSection agg={agg} yearCtl={yearCtl} mapKey={`map-${activeTab}`}
                   districtLayerKey={districtLayerKey} districtLayerStyle={districtLayerStyle} districtLayerOnEachFeature={districtLayerOnEachFeature}
-                  search={search} setSearch={setSearch} sortDesc={sortDesc} setSortDesc={setSortDesc} filteredTable={filteredTable} />
+                  search={search} setSearch={setSearch} sortDesc={sortDesc} setSortDesc={setSortDesc} filteredTable={filteredTable}
+                  pickedDistrict={pickedDistrict} setPickedDistrict={setPickedDistrict} pickedSpots={pickedSpots} />
               )}
             </>
           ) : (
@@ -448,7 +482,8 @@ export default function SubstanceUsers() {
               <ArrestsSection agg={agg} yearCtl={yearCtl} />
               <DealersSection agg={agg} yearCtl={yearCtl} mapKey="map-all"
                 districtLayerKey={districtLayerKey} districtLayerStyle={districtLayerStyle} districtLayerOnEachFeature={districtLayerOnEachFeature}
-                search={search} setSearch={setSearch} sortDesc={sortDesc} setSortDesc={setSortDesc} filteredTable={filteredTable} />
+                search={search} setSearch={setSearch} sortDesc={sortDesc} setSortDesc={setSortDesc} filteredTable={filteredTable}
+                  pickedDistrict={pickedDistrict} setPickedDistrict={setPickedDistrict} pickedSpots={pickedSpots} />
             </>
           )}
         </div>
@@ -481,10 +516,10 @@ function TabBar({ tabs, active, onChange, viewMode, setViewMode }) {
               tabIndex={isActive ? 0 : -1}
               onClick={() => onChange(t.id)}
               onKeyDown={e => onKeyDown(e, i)}
-              className={`relative px-4 py-3 text-sm font-medium transition whitespace-nowrap hover:text-violet-700
-                ${isActive ? 'text-violet-700' : 'text-slate-500'}`}
+              className={`relative px-5 py-4 text-[15px] transition whitespace-nowrap hover:text-violet-700
+                ${isActive ? 'text-violet-700 font-bold' : 'text-slate-500 font-medium'}`}
             >
-              <span className="flex items-center gap-2">{Icon && <Icon size={16} />}{t.label}</span>
+              <span className="flex items-center gap-2">{Icon && <Icon size={18} />}{t.label}</span>
               {isActive && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-gradient-to-r from-violet-500 to-purple-600" />
               )}
@@ -494,10 +529,10 @@ function TabBar({ tabs, active, onChange, viewMode, setViewMode }) {
         <button
           onClick={() => setViewMode(allOn ? 'tabs' : 'all')}
           aria-pressed={allOn}
-          className={`ml-auto px-4 py-3 text-sm font-medium transition whitespace-nowrap inline-flex items-center gap-1.5
+          className={`ml-auto px-5 py-4 text-[15px] font-medium transition whitespace-nowrap inline-flex items-center gap-1.5
             ${allOn ? 'text-violet-700' : 'text-slate-500 hover:text-violet-700'}`}
         >
-          <LayoutGrid size={16} />
+          <LayoutGrid size={18} />
           แสดงทั้งหมด
         </button>
       </nav>
@@ -510,7 +545,7 @@ function TabBar({ tabs, active, onChange, viewMode, setViewMode }) {
 function DemographicsSection({ agg, yearCtl }) {
   return (
     <section>
-      <SectionHeader title="ข้อมูลประชากร" desc="อายุ อาชีพ และรายได้ต่อเดือนของผู้เสพ" />
+      <SectionHeader title="ข้อมูลผู้เสพ" desc="อายุ อาชีพ และรายได้ต่อเดือนของผู้เสพ" />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard title="กลุ่มอายุ" desc="การกระจายตัวตามช่วงอายุ" {...yearCtl}><VBar data={agg.ageGroups} unit=" ราย" palette="blue" /></ChartCard>
         <ChartCard title="อาชีพ (10 อันดับแรก)" desc="อาชีพที่พบมากที่สุด" {...yearCtl}><HBar data={agg.occupations} unit=" คน" palette="indigo" /></ChartCard>
@@ -523,13 +558,17 @@ function DemographicsSection({ agg, yearCtl }) {
 function HistorySection({ agg, yearCtl }) {
   return (
     <section>
-      <SectionHeader title="ประวัติการเสพ" desc="อายุที่เริ่มเสพ ชนิดยา และสาเหตุการเสพครั้งแรก" />
+      <SectionHeader title="ประวัติการเสพ" desc="อายุที่เริ่มเสพ ชนิดยา สาเหตุการเสพครั้งแรก และยาที่ใช้ประจำปัจจุบัน" />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard title="อายุที่เริ่มเสพ" desc="ช่วงอายุที่เริ่มใช้ยาเสพติด" {...yearCtl}>
           {agg.firstUseHist.length ? <VBar data={agg.firstUseHist} palette="amber" /> : <Empty />}
         </ChartCard>
         <ChartCard title="ชนิดยาที่ใช้ครั้งแรก" desc="ชนิดยาเสพติดที่ใช้เป็นครั้งแรก" {...yearCtl}><HBar data={agg.firstDrug} unit=" คน" rainbow /></ChartCard>
         <ChartCard title="สาเหตุการเสพครั้งแรก" desc="เหตุผลที่เริ่มใช้ยาเสพติด" {...yearCtl}><HBar data={agg.firstReason} unit=" คน" palette="violet" /></ChartCard>
+        {/* ย้ายมาจากแท็บ "ราคา" — ยาที่ใช้ปัจจุบันเป็นส่วนหนึ่งของประวัติการเสพ */}
+        <ChartCard title="ยาเสพติดที่ใช้ปัจจุบัน" desc="ชนิดยาที่ใช้เป็นประจำในปัจจุบัน" {...yearCtl}>
+          {agg.regularDrugs.length ? <HBar data={agg.regularDrugs} unit=" ราย" palette="teal" /> : <Empty />}
+        </ChartCard>
       </div>
     </section>
   )
@@ -538,35 +577,53 @@ function HistorySection({ agg, yearCtl }) {
 function DrugsSection({ agg, yearCtl }) {
   return (
     <section>
-      <SectionHeader title="ยาที่ใช้ประจำ และ ราคา" desc="ชนิดยาที่ใช้ประจำและราคาเฉลี่ยต่อหน่วย" />
+      <SectionHeader title="ราคา" desc="ราคายาเสพติดเฉลี่ยต่อหน่วย" />
       <div className="space-y-8">
-        <ChartCard title="ยาที่ใช้เป็นประจำ" desc="ชนิดยาที่ใช้เป็นประจำ" {...yearCtl}>
-          {agg.regularDrugs.length ? <HBar data={agg.regularDrugs} unit=" ราย" palette="teal" /> : <Empty />}
-        </ChartCard>
         <PriceTrend records={agg.priceRecords} periodLabel={yearCtl.periodLabel} />
       </div>
     </section>
   )
 }
 
-function ArrestsSection({ agg, yearCtl }) {
+function ArrestsSection({ agg }) {
   return (
     <section>
-      <SectionHeader title="ประวัติการถูกจับ และ การบำบัด" desc="ประวัติการถูกจับและการเข้ารับการบำบัด" />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ChartCard title="จำนวนครั้งที่ถูกจับ" desc="การกระจายตามจำนวนครั้งที่ถูกจับ" {...yearCtl}><VBar data={agg.arrestBuckets} unit=" ครั้ง" palette="red" /></ChartCard>
-        <ChartCard title="ชนิดยาตอนถูกจับ" desc="ชนิดยาเสพติดที่พบขณะถูกจับ" {...yearCtl}>
+      <SectionHeader title="ประวัติการจับกุมและบำบัด" desc="ประวัติการถูกจับและการเข้ารับการบำบัด" />
+
+      {/* จับกุม — โทนสีแดง */}
+      <div className="mb-3 flex items-center gap-2">
+        <span className="h-4 w-1 rounded-full bg-red-600" />
+        <h3 className="text-base font-bold text-slate-800">ข้อมูลการจับกุม</h3>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+        <ChartCard title="จำนวนครั้งที่ถูกจับ" desc="การกระจายตามจำนวนครั้งที่ถูกจับ"><VBar data={agg.arrestBuckets} unit=" ครั้ง" palette="red" /></ChartCard>
+        <ChartCard title="ชนิดยาตอนถูกจับ" desc="ชนิดยาเสพติดที่พบขณะถูกจับ">
           {agg.arrestDrugs.length ? <HBar data={agg.arrestDrugs} unit=" คน" palette="rose" /> : <Empty />}
         </ChartCard>
-        <ChartCard title="ข้อหา" desc="ข้อหาที่ถูกดำเนินคดี" {...yearCtl}>
-          {agg.charges.length ? <HBar data={agg.charges} unit=" ราย" palette="fuchsia" /> : <Empty />}
+        <ChartCard title="ข้อหา" desc="ข้อหาที่ถูกดำเนินคดี">
+          {agg.charges.length ? <HBar data={agg.charges} unit=" ราย" palette="red" /> : <Empty />}
+        </ChartCard>
+      </div>
+
+      {/* บำบัด — โทนสีเขียว */}
+      <div className="mb-3 flex items-center gap-2">
+        <span className="h-4 w-1 rounded-full bg-emerald-600" />
+        <h3 className="text-base font-bold text-slate-800">ข้อมูลการบำบัด</h3>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ChartCard title="จำนวนครั้งที่บำบัด" desc="การกระจายตามจำนวนครั้งที่เข้ารับการบำบัด"><VBar data={agg.rehabBuckets} unit=" ครั้ง" palette="emerald" /></ChartCard>
+        <ChartCard title="ชนิดยาตอนบำบัด" desc="ชนิดยาเสพติดที่เข้ารับการบำบัด">
+          {agg.rehabDrugs.length ? <HBar data={agg.rehabDrugs} unit=" คน" palette="teal" /> : <Empty />}
+        </ChartCard>
+        <ChartCard title="สถานที่บำบัด" desc="สถานที่ที่เข้ารับการบำบัด">
+          {agg.rehabPlaces.length ? <HBar data={agg.rehabPlaces} unit=" ราย" palette="emerald" /> : <Empty />}
         </ChartCard>
       </div>
     </section>
   )
 }
 
-function DealersSection({ agg, yearCtl, mapKey, districtLayerKey, districtLayerStyle, districtLayerOnEachFeature, search, setSearch, sortDesc, setSortDesc, filteredTable }) {
+function DealersSection({ agg, yearCtl, mapKey, districtLayerKey, districtLayerStyle, districtLayerOnEachFeature, search, setSearch, sortDesc, setSortDesc, filteredTable, pickedDistrict, setPickedDistrict, pickedSpots }) {
   return (
     <section>
       <SectionHeader title="แหล่งซื้อยา รายเขต" desc="การกระจายตัวของแหล่งซื้อยาจำแนกตามเขต" />
@@ -626,17 +683,52 @@ function DealersSection({ agg, yearCtl, mapKey, districtLayerKey, districtLayerS
                 </tr>
               </thead>
               <tbody>
-                {filteredTable.map((d, i) => (
-                  <tr key={d.name} className={`border-b border-slate-100 last:border-0 ${i % 2 ? 'bg-slate-50/50' : 'bg-white'} hover:bg-violet-50 hover:text-violet-900 transition-colors`}>
-                    <td className="px-6 py-3 text-sm text-slate-700">{d.name}</td>
-                    <td className="px-6 py-3 text-sm text-right font-medium text-slate-900 tabular-nums">{d.count.toLocaleString()}</td>
-                  </tr>
-                ))}
+                {filteredTable.map((d, i) => {
+                  const on = d.name === pickedDistrict
+                  return (
+                    <tr key={d.name}
+                      onClick={() => setPickedDistrict?.(on ? null : d.name)}
+                      title={`ดูชื่อแหล่งซื้อใน${d.name}`}
+                      className={`border-b border-slate-100 last:border-0 cursor-pointer transition-colors ${
+                        on ? 'bg-violet-100 text-violet-900 font-semibold' : `${i % 2 ? 'bg-slate-50/50' : 'bg-white'} hover:bg-violet-50 hover:text-violet-900`
+                      }`}>
+                      <td className="px-6 py-3 text-sm">{d.name}</td>
+                      <td className="px-6 py-3 text-sm text-right font-medium tabular-nums">{d.count.toLocaleString()}</td>
+                    </tr>
+                  )
+                })}
                 {filteredTable.length === 0 && (
                   <tr><td colSpan={2} className="px-6 py-8 text-center text-slate-400 text-sm">ไม่พบเขต</td></tr>
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* ชื่อแหล่งซื้อของเขตที่คลิก (จากแผนที่หรือตาราง) */}
+          <div className="border-t border-slate-200 p-4">
+            {!pickedDistrict ? (
+              <p className="text-xs text-slate-400 text-center">คลิกเขตบนแผนที่หรือในตาราง เพื่อดูชื่อแหล่งซื้อ</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <h4 className="text-sm font-bold text-violet-900 truncate">แหล่งซื้อใน{pickedDistrict}</h4>
+                  <button onClick={() => setPickedDistrict?.(null)}
+                    className="text-xs text-slate-400 hover:text-slate-700 shrink-0">ล้าง</button>
+                </div>
+                {pickedSpots.length === 0 ? (
+                  <p className="text-xs text-slate-400">ไม่มีชื่อแหล่งซื้อระบุไว้ในเขตนี้</p>
+                ) : (
+                  <ul className="space-y-1 max-h-56 overflow-auto">
+                    {pickedSpots.map((sp) => (
+                      <li key={sp.name} className="flex items-center justify-between gap-3 text-sm px-2 py-1.5 rounded-md bg-violet-50">
+                        <span className="text-slate-700 truncate" title={sp.name}>{sp.name}</span>
+                        <span className="text-violet-800 font-semibold tabular-nums shrink-0">{sp.count}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -666,7 +758,8 @@ function FooterPill({ periodLabel }) {
   )
 }
 
-function ChartCard({ title, desc, periodLabel, children }) {
+// ไม่แสดง pill "ข้อมูลช่วง..." ใต้การ์ดแล้ว — ซ้ำกับที่แสดงบนหัวหน้า
+function ChartCard({ title, desc, children }) {
   return (
     <div className="group relative bg-white rounded-2xl p-6 border border-slate-100
       shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_40px_rgba(124,58,237,0.12)]
@@ -684,7 +777,6 @@ function ChartCard({ title, desc, periodLabel, children }) {
         </div>
       </div>
       {children}
-      <FooterPill periodLabel={periodLabel} />
     </div>
   )
 }

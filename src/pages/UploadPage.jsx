@@ -38,7 +38,7 @@ const TABLE_TO_PAGES = {
   drug_incidents: [
     { name: 'ภาพรวม', route: '/', icon: BarChart3 },
     { name: 'รายเขต', route: '/districts', icon: MapPin },
-    { name: 'แผนที่ยาเสพติด', route: '/radar', icon: MapIcon },
+    { name: 'พิกัดยาเสพติด', route: '/radar', icon: MapIcon },
   ],
   bkn_summary: [
     { name: 'ภาพรวม', route: '/', icon: BarChart3 },
@@ -1490,7 +1490,7 @@ const FLOW_MAP = [
   { page: 'ภาพรวม', route: '/', icon: BarChart3, color: 'blue', files: ['ทุกไฟล์ — แสดงรวม'], tables: ['ทุกตาราง'] },
   { page: 'รายเขต', route: '/districts', icon: MapPin, color: 'indigo', files: ['เรื่องร้องเรียน', 'เหตุการณ์ยาเสพติด', 'แบบเก็บข้อมูลผู้เสพ'], tables: ['complaints', 'drug_incidents', 'substance_users'] },
   { page: 'สถิติ บก.น.', route: '/bkn', icon: Shield, color: 'slate', files: ['สรุป บก.น. (RPT 115_B)'], tables: ['bkn_summary'] },
-  { page: 'แผนที่ยาเสพติด', route: '/radar', icon: MapIcon, color: 'cyan', files: ['เหตุการณ์ยาเสพติด (ต้องมี lat/lng)'], tables: ['drug_incidents'] },
+  { page: 'พิกัดยาเสพติด', route: '/radar', icon: MapIcon, color: 'cyan', files: ['เหตุการณ์ยาเสพติด (ต้องมี lat/lng)'], tables: ['drug_incidents'] },
   { page: 'ผลการดำเนินงาน', route: '/operations', icon: TrendingUp, color: 'amber', files: ['รายงาน 114 (RPT_114)'], tables: ['report_114'] },
   { page: 'ผลเก็บข้อมูลผู้เสพ', route: '/substance-users', icon: Users, color: 'violet', files: ['แบบเก็บข้อมูลจากผู้เสพ (Google Form export)'], tables: ['substance_users'] },
 ]

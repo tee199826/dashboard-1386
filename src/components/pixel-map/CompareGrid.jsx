@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Plus, X } from 'lucide-react'
 import MapCanvas from './MapCanvas'
 import ColorSwatch from './ColorSwatch'
@@ -6,6 +7,9 @@ import DistrictPicker from './DistrictPicker'
 const PANEL_ASPECT = 1.29
 const PANEL_GAP = 16
 const PANEL_MIN_W = 220 // ต่ำกว่านี้ header (สี+dropdown) เริ่มอึดอัด → ยุบเหลือ 1 คอลัมน์แทน
+
+// แขวง/ชุมชนที่ติ๊ก กรองเฉพาะที่อยู่ในเขตของ panel นี้ (pure — อยู่นอก component ให้ reference คงที่)
+const inDistricts = (keys, names) => new Set(names.length ? [...keys].filter(k => names.includes(k.split('|')[0])) : [])
 
 // layers (สี/opacity ของ เขต/แขวง/data) แชร์ทุก panel — ยกเว้นสี fill ของเขตที่ override เป็น slot.color ต่อ panel (แยกแยะ panel ด้วยตา)
 // zoom: ปกติแต่ละ panel อิสระ (slot.zoom ของตัวเอง) — ถ้า syncZoom เปิด ทุก panel ใช้ sharedCompareZoom ตัวเดียวกันแทน
@@ -16,7 +20,7 @@ export default function CompareGrid({
   districtOptions, availableWidth = 900, checkedSubdistricts, checkedCommunities, toggleSubdistrict, toggleCommunity,
   syncZoom, setSyncZoom, sharedCompareZoom, setSharedCompareZoom, setCompareSlotZoom,
   toggleCompareSlotDistrict, setCompareSlotDistricts, setCompareSlotColor, addComparePanel, removeComparePanel,
-  exporting = false,
+  exporting = false, showExportNumbers = true,
 }) {
   const slotLabel = (districts) => (districts.length === 1 ? districts[0] : districts.length > 1 ? `${districts.length} เขต` : null)
   // ขนาด panel + จำนวนคอลัมน์คิดจากพื้นที่จริง — ถ้ากว้างไม่พอสำหรับ 2 คอลัมน์ที่ความกว้างขั้นต่ำ ให้ยุบเหลือ 1 คอลัมน์ (ไม่ล้น/ไม่ต้องเลื่อน)
@@ -24,7 +28,22 @@ export default function CompareGrid({
   const cols = availableWidth >= desiredCols * PANEL_MIN_W + (desiredCols - 1) * PANEL_GAP ? desiredCols : 1
   const panelW = Math.max(200, Math.floor((availableWidth - PANEL_GAP * (cols - 1)) / cols))
   const panelH = Math.round(panelW / PANEL_ASPECT)
-  const inDistricts = (keys, names) => new Set(names.length ? [...keys].filter(k => names.includes(k.split('|')[0])) : [])
+
+  // per-slot: Set เขต/แขวง/ชุมชน + panelLayers — memo คีย์ด้วย "เนื้อหา" (เขต+สี) ไม่ใช่ทั้ง slot
+  // slot.zoom เปลี่ยนทุกครั้งที่ซูม → ถ้าสร้าง Set ใหม่ทุก render จะทำให้ memo ใน MapCanvas (path layers) พังตอนซูม
+  // คีย์ด้วย signature ของ districts/สีเท่านั้น → Set/panelLayers reference คงที่ระหว่างซูม เลเยอร์รูปทรงจึงข้าม re-render ได้
+  const districtsSig = compareSlots.map(s => (s.districts ?? []).join('|')).join('~')
+  const colorsSig = compareSlots.map(s => s.color).join('~')
+  const slotSelections = useMemo(() => compareSlots.map(slot => {
+    const districts = slot.districts ?? []
+    return {
+      checkedDistricts: new Set(districts),
+      panelSubs: inDistricts(checkedSubdistricts, districts),
+      panelCommunities: inDistricts(checkedCommunities, districts),
+      panelLayers: [{ ...layers[0], color: slot.color }, ...layers.slice(1)],
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [districtsSig, colorsSig, checkedSubdistricts, checkedCommunities, layers])
 
   return (
     <div className="space-y-3">
@@ -50,10 +69,7 @@ export default function CompareGrid({
       <div className="grid justify-center" style={{ gap: PANEL_GAP, gridTemplateColumns: `repeat(${cols}, max-content)` }}>
         {compareSlots.map((slot, i) => {
           const districts = slot.districts ?? []
-          const checkedDistricts = new Set(districts)
-          const panelSubs = inDistricts(checkedSubdistricts, districts)
-          const panelCommunities = inDistricts(checkedCommunities, districts)
-          const panelLayers = [{ ...layers[0], color: slot.color }, ...layers.slice(1)]
+          const { checkedDistricts, panelSubs, panelCommunities, panelLayers } = slotSelections[i]
           const label = slotLabel(districts) ?? slot.label
           const subCount = panelSubs.size
           const comCount = panelCommunities.size
@@ -92,6 +108,7 @@ export default function CompareGrid({
                 geojson={geojson} hierarchy={hierarchy} subdistrictIndex={subdistrictIndex} communityIndex={communityIndex}
                 checkedDistricts={checkedDistricts} checkedSubdistricts={panelSubs} checkedCommunities={panelCommunities}
                 layers={panelLayers} layerCounts={layerCounts} labelsConfig={labelsConfig} style={style} exporting={exporting}
+                showExportNumbers={showExportNumbers}
                 panelLabel={exporting ? '' : label}
                 zoomTransform={syncZoom ? sharedCompareZoom : slot.zoom}
                 onZoomChange={syncZoom ? setSharedCompareZoom : (t) => setCompareSlotZoom(slot.id, t)}

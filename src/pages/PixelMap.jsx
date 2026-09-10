@@ -111,6 +111,7 @@ export default function PixelMap() {
   const levelMaxes = useMemo(() => getLevelMaxes(hierarchy, labelsConfig.metric), [hierarchy, labelsConfig.metric])
 
   const [exportFullMap, setExportFullMap] = useState(false)
+  const [showExportNumbers, setShowExportNumbers] = useState(true) // โชว์ตัวเลขจำนวนเรื่องของพื้นที่ที่เลือกในภาพ export
 
   // โหมด export — ใช้ทั้ง multi และ compare: compare ซ่อนแถบเครื่องมือ, ทุกโหมดโชว์ตัวเลขจำนวนเคสของพื้นที่ที่เลือกในรูป
   const [exporting, setExporting] = useState(false)
@@ -192,7 +193,7 @@ export default function PixelMap() {
               toggleCompareSlotDistrict={toggleCompareSlotDistrict} setCompareSlotDistricts={setCompareSlotDistricts}
               setCompareSlotColor={setCompareSlotColor}
               addComparePanel={addComparePanel} removeComparePanel={removeComparePanel}
-              exporting={exporting}
+              exporting={exporting} showExportNumbers={showExportNumbers}
             />
           ) : (
             <MapCanvas
@@ -201,7 +202,7 @@ export default function PixelMap() {
               geojson={geojson} hierarchy={hierarchy} subdistrictIndex={subdistrictIndex} communityIndex={communityIndex}
               checkedDistricts={checkedDistricts} checkedSubdistricts={checkedSubdistricts} checkedCommunities={checkedCommunities}
               layers={layers} layerCounts={layerCounts} levelMaxes={levelMaxes} labelsConfig={labelsConfig}
-              style={style} exporting={exporting}
+              style={style} exporting={exporting} showExportNumbers={showExportNumbers}
               zoomTransform={zoomTransform} onZoomChange={setZoomTransform}
             />
           )}
@@ -224,6 +225,7 @@ export default function PixelMap() {
             compareActive={mode === 'compare'}
             zoomTransform={zoomTransform} onZoomChange={setZoomTransform}
             exportFullMap={exportFullMap} setExportFullMap={setExportFullMap}
+            showExportNumbers={showExportNumbers} setShowExportNumbers={setShowExportNumbers}
           />
         </div>
       </div>

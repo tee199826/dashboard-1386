@@ -67,7 +67,7 @@ export function usePixelMapState() {
     shape: 'circle',
     autoFitOnSelection: true,
     showZoomControls: true,
-    tileSource: 'carto', // ภาพแผนที่พื้นหลัง — carto light_all = ชุดเดียวกับหน้าแผนที่ยาเสพติด (IncidentMap) | 'osm' | '' (ไม่ใช้)
+    tileSource: 'gray', // ภาพแผนที่พื้นหลัง — 'gray' (Esri Light Gray, โทนเทาอ่อนแบบเดิม) | 'osm' | '' (ไม่ใช้) ; carto light_all ถูกตัดออก (บังคับ API key แล้ว = ขึ้น "API KEY REQUIRED")
     focusSelection: false,
   })
   const updateStyle = useCallback((patch) => setStyleState(s => ({ ...s, ...patch })), [])

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Calendar, ChevronDown, RotateCcw } from 'lucide-react'
+import { Calendar, ChevronDown, RotateCcw, Check } from 'lucide-react'
 import { useFilter } from '../context/FilterContext'
 import { getFiscalYearRange, dateToFiscalYear } from '../utils/fiscalYear'
 
@@ -13,24 +13,20 @@ const MODES = [
   { id: 'custom', label: 'ช่วงวันที่' },
 ]
 const TH = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+const SELECT = 'border border-slate-300 rounded-md px-3 py-1.5 text-sm bg-white text-slate-700 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none'
 const DISABLED_TIP = 'หน้านี้ใช้ข้อมูลรายปีงบเท่านั้น'
-
-// accent: หน้าที่จำกัด palette เป็น slate+rose+emerald+amber (เช่น /situation) ส่ง accent="amber" มาแทนสีฟ้า default
-// ไม่ส่งมา = พฤติกรรมเดิมทุกหน้าที่ใช้อยู่ (blue) กันไม่ให้กระทบหน้าอื่น
-const ACCENTS = {
-  blue:  { icon: 'text-blue-600',  active: 'text-blue-700 bg-white',   ok: 'bg-blue-600 hover:bg-blue-700',   focus: 'focus:border-blue-400 focus:ring-blue-100' },
-  amber: { icon: 'text-amber-500', active: 'text-amber-700 bg-white',  ok: 'bg-slate-900 hover:bg-slate-800', focus: 'focus:border-amber-400 focus:ring-amber-100' },
-}
-const selectClass = (accent) => `border border-slate-300 rounded-md px-3 py-1.5 text-sm bg-white text-slate-700 ${ACCENTS[accent].focus} focus:ring-2 outline-none`
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 const shiftDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
 
 function summarize(state) {
-  if (state.mode === 'fiscal') return state.fiscalYear ? `ปีงบ ${state.fiscalYear}` : 'ทุกปีงบ'
+  if (state.mode === 'fiscal') {
+    const n = state.fiscalYears?.length || 0
+    return n === 0 ? 'ทุกปี' : n === 1 ? `ปี ${state.fiscalYears[0]}` : `${n} ปีงบ`
+  } 
   if (state.mode === 'month') {
-    if (!state.monthYear) return 'ทุกปีงบ'
-    if (!state.month) return `ปีงบ ${state.monthYear} (ทุกเดือน)`
+    if (!state.monthYear) return 'ทุกปี'
+    if (!state.month) return `ปี ${state.monthYear} (ทุกเดือน)`
     return `${TH[state.month]} ${state.monthYear}`
   }
   // custom
@@ -42,11 +38,9 @@ function summarize(state) {
   return `${a[2]} ${TH[a[1]]} ${a[0] + 543} - ${b[2]} ${TH[b[1]]} ${b[0] + 543}`
 }
 
-function Popover({ availableYears, disabledModes, onClose, accent }) {
-  const { state, setMode, setFiscalYear, setMonthYear, setMonth, setCustomFrom, setCustomTo, reset } = useFilter()
-  const a = ACCENTS[accent]
-  const SELECT = selectClass(accent)
-  const years = availableYears.length ? availableYears : (state.fiscalYear ? [state.fiscalYear] : [])
+function Popover({ availableYears, disabledModes, onClose }) {
+  const { state, setMode, setFiscalYears, toggleFiscalYear, setMonthYear, setMonth, setCustomFrom, setCustomTo, reset } = useFilter()
+  const years = availableYears.length ? availableYears : (state.fiscalYears?.length ? state.fiscalYears : [])
 
   const presets = [
     { label: '30 วัน', apply: () => { setCustomFrom(shiftDays(-30)); setCustomTo(todayISO()) } },
@@ -58,7 +52,7 @@ function Popover({ availableYears, disabledModes, onClose, accent }) {
   const safeYears = years.length ? years : [currentFY]
 
   return (
-    <div className="absolute top-full left-0 mt-2 z-50 w-72 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-lg p-4">
+    <div className="absolute top-full right-0 mt-2 z-50 w-72 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-lg p-4">
       {/* tab switcher */}
       <div className="flex gap-1 p-1 bg-slate-100 rounded-lg mb-3">
         {MODES.map(m => {
@@ -68,7 +62,7 @@ function Popover({ availableYears, disabledModes, onClose, accent }) {
             <button key={m.id} disabled={off} title={off ? DISABLED_TIP : undefined}
               onClick={() => !off && setMode(m.id)}
               className={`flex-1 px-2.5 py-1 text-xs font-medium rounded-md transition ${
-                active ? `${a.active} shadow-sm` : 'text-slate-600 hover:text-slate-800'
+                active ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'
               } ${off ? 'opacity-40 cursor-not-allowed' : ''}`}>
               {m.label}
             </button>
@@ -77,10 +71,26 @@ function Popover({ availableYears, disabledModes, onClose, accent }) {
       </div>
 
       {state.mode === 'fiscal' && (
-        <select className={`${SELECT} w-full h-9`} value={state.fiscalYear ?? ''} onChange={e => setFiscalYear(e.target.value === '' ? null : Number(e.target.value))}>
-          <option value="">ทั้งหมด</option>
-          {safeYears.map(y => <option key={y} value={y}>ปีงบ {y}</option>)}
-        </select>
+        <div className="rounded-lg ring-1 ring-slate-200 divide-y divide-slate-100 overflow-hidden">
+          {/* เลือกได้หลายปีงบ (ติ๊กหลายอัน) — ว่าง = ทุกปีงบ */}
+          <button type="button" onClick={() => setFiscalYears([])}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-blue-50">
+            <span className={`w-4 shrink-0 ${(state.fiscalYears?.length || 0) === 0 ? 'text-blue-600' : 'text-transparent'}`}><Check size={15} /></span>
+            ทุกปีงบ
+          </button>
+          <div className="max-h-56 overflow-y-auto">
+            {safeYears.map(y => {
+              const on = state.fiscalYears?.includes(y)
+              return (
+                <button key={y} type="button" onClick={() => toggleFiscalYear(y)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-blue-50">
+                  <span className={`w-4 shrink-0 ${on ? 'text-blue-600' : 'text-transparent'}`}><Check size={15} /></span>
+                  ปีงบ {y}
+                </button>
+              )
+            })}
+          </div>
+        </div>
       )}
 
       {state.mode === 'month' && (
@@ -98,15 +108,15 @@ function Popover({ availableYears, disabledModes, onClose, accent }) {
 
       {state.mode === 'custom' && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <input type="date" className={`${SELECT} flex-1`} value={state.customFrom ?? ''} onChange={e => setCustomFrom(e.target.value || null)} />
-            <span className="text-slate-400 text-sm">→</span>
-            <input type="date" className={`${SELECT} flex-1`} value={state.customTo ?? ''} onChange={e => setCustomTo(e.target.value || null)} />
+          {/* วางแนวตั้ง — input[type=date] มีความกว้างขั้นต่ำ ~157px วางคู่กันใน popover w-72 จะล้น */}
+          <div className="flex flex-col gap-2">
+            <input type="date" aria-label="ตั้งแต่วันที่" className={`${SELECT} w-full`} value={state.customFrom ?? ''} onChange={e => setCustomFrom(e.target.value || null)} />
+            <input type="date" aria-label="ถึงวันที่" className={`${SELECT} w-full`} value={state.customTo ?? ''} onChange={e => setCustomTo(e.target.value || null)} />
           </div>
           <div className="flex flex-wrap gap-1.5">
             {presets.map(p => (
               <button key={p.label} onClick={p.apply}
-                className="text-xs px-2 py-1 bg-slate-100 rounded-full hover:bg-slate-200 hover:text-slate-800 transition">
+                className="text-xs px-2 py-1 bg-slate-100 rounded-full hover:bg-blue-50 hover:text-blue-700 transition">
                 {p.label}
               </button>
             ))}
@@ -116,14 +126,13 @@ function Popover({ availableYears, disabledModes, onClose, accent }) {
 
       <div className="flex items-center justify-between mt-4">
         <button onClick={() => reset()} className="text-slate-500 text-sm hover:text-slate-700">ล้าง</button>
-        <button onClick={onClose} className={`${a.ok} text-white text-sm h-8 px-4 rounded-lg transition`}>ตกลง</button>
+        <button onClick={onClose} className="bg-blue-600 text-white text-sm h-8 px-4 rounded-lg hover:bg-blue-700 transition">ตกลง</button>
       </div>
     </div>
   )
 }
 
-// size='lg' — ใช้คู่กับ SegmentedTabs ตัวใหญ่ (เช่น /situation) ให้ control แถวเดียวกันสูงเท่ากัน · default = ขนาดเดิมทุกหน้า
-export default function DateFilter({ availableYears = [], compact = false, disabledModes = [], override = false, accent = 'blue', size = 'md' }) {
+export default function DateFilter({ availableYears = [], compact = false, disabledModes = [], override = false, defaultAllYears = false }) {
   const { state, setMode, setFiscalYear, setMonthYear } = useFilter()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -140,9 +149,11 @@ export default function DateFilter({ availableYears = [], compact = false, disab
   useEffect(() => {
     if (didInit.current || !availableYears.length) return
     didInit.current = true
-    if (state.fiscalYear == null) setFiscalYear(availableYears[0])
+    // ตั้ง default เฉพาะตอนยังไม่เลือกปีเลย — ไม่ทับการเลือกหลายปีที่ผู้ใช้ตั้งไว้ (fiscalYears มีค่า → fiscalYear=null)
+    // defaultAllYears → ไม่ตั้งปีเริ่มต้น ปล่อยเป็น "ทุกปี" (fiscalYears = [])
+    if (!defaultAllYears && (state.fiscalYears?.length || 0) === 0) setFiscalYear(availableYears[0])
     if (state.monthYear == null) setMonthYear(availableYears[0])
-  }, [availableYears, state.fiscalYear, state.monthYear, setFiscalYear, setMonthYear])
+  }, [availableYears, state.fiscalYears, state.monthYear, setFiscalYear, setMonthYear, defaultAllYears])
 
   // click outside ปิด
   useEffect(() => {
@@ -152,32 +163,30 @@ export default function DateFilter({ availableYears = [], compact = false, disab
     return () => document.removeEventListener('mousedown', onDoc)
   }, [open])
 
-  const lg = size === 'lg' && !compact
-  const h = compact ? 'h-7 px-2 text-xs' : lg ? 'h-12 px-4 text-[15px] font-medium' : 'h-8 px-3 text-sm'
-  const icon = compact ? 12 : lg ? 16 : 14
+  const h = compact ? 'h-7 px-2 text-xs' : 'h-11 px-4 text-[15px] font-semibold'
+  const icon = compact ? 12 : 16
 
   return (
     <div className="relative inline-flex items-center gap-1" ref={ref}>
       <button onClick={() => setOpen(o => !o)}
-        className={`inline-flex items-center gap-2 ${h} ${lg ? 'rounded-xl' : 'rounded-lg'} bg-white border border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition`}>
-        <Calendar size={icon} className={ACCENTS[accent].icon} />
+        className={`inline-flex items-center gap-2 ${h} rounded-xl bg-white border border-slate-300 text-slate-700 shadow-sm hover:border-slate-400 hover:bg-slate-50 transition`}>
+        <Calendar size={icon} className="text-blue-600" />
         <span>{summarize(state)}</span>
         {override && <span className="text-[10px] text-amber-600 font-medium">● ต่าง</span>}
         <ChevronDown size={icon} className="text-slate-400" />
       </button>
-      <ResetButton size={size} />
-      {open && <Popover availableYears={availableYears} disabledModes={disabledModes} onClose={() => setOpen(false)} accent={accent} />}
+      <ResetButton />
+      {open && <Popover availableYears={availableYears} disabledModes={disabledModes} onClose={() => setOpen(false)} />}
     </div>
   )
 }
 
-function ResetButton({ size = 'md' }) {
+function ResetButton() {
   const { reset } = useFilter()
-  const lg = size === 'lg'
   return (
     <button onClick={() => reset()} title="รีเซ็ต"
-      className={`inline-flex items-center justify-center ${lg ? 'h-10 w-10' : 'h-7 w-7'} rounded-lg text-slate-500 hover:bg-slate-100 transition`}>
-      <RotateCcw size={lg ? 15 : 13} />
+      className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-slate-500 hover:bg-slate-100 transition">
+      <RotateCcw size={13} />
     </button>
   )
 }

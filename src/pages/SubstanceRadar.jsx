@@ -539,7 +539,7 @@ export default function SubstanceRadar() {
 
   return (
     <>
-    {isPresentation && <PresentationBar title="แผนที่ยาเสพติด กรุงเทพมหานคร" />}
+    {isPresentation && <PresentationBar title="พิกัดยาเสพติด กรุงเทพมหานคร" />}
 
     {/* Portals — เฉพาะ normal mode (mobile sidebar controls) */}
     {!isPresentation && sidebarOpen && createPortal(
@@ -575,7 +575,7 @@ export default function SubstanceRadar() {
               <MapPin size={20} />
             </div>
             <div>
-              <h1 className="font-bold text-lg text-white leading-tight">ระบบแผนที่ยาเสพติด</h1>
+              <h1 className="font-bold text-lg text-white leading-tight">ระบบพิกัดยาเสพติด</h1>
               <p className="text-xs text-blue-300">BKK Substance Radar · กรุงเทพมหานคร</p>
             </div>
           </div>
@@ -1458,7 +1458,7 @@ function PremiumTrendChart({ data, aName, bName, yearLabel }) {
         <RTooltip content={<TrendTooltip aName={aName} bName={bName} yearLabel={yearLabel} />} />
         <Legend wrapperStyle={{ fontSize: 12, paddingTop: 6 }} />
         <Area type="monotone" dataKey="A" name={aName} stroke="#7c3aed" strokeWidth={3} fill="url(#cmpA)" dot={false} activeDot={{ r: 5 }} isAnimationActive animationDuration={1000} />
-        <Area type="monotone" dataKey="B" name={bName} stroke="#f59e0b" strokeWidth={2.5} strokeDasharray="6 3" fill="url(#cmpB)" dot={false} activeDot={{ r: 5 }} isAnimationActive animationDuration={1000} />
+        <Area type="monotone" dataKey="B" name={bName} stroke="#f59e0b" strokeWidth={3} fill="url(#cmpB)" dot={false} activeDot={{ r: 5 }} isAnimationActive animationDuration={1000} />
         {data[peakA].A > 0 && <ReferenceDot x={data[peakA].label} y={data[peakA].A} r={5} fill="#7c3aed" stroke="#fff" strokeWidth={2} label={{ value: data[peakA].A, position: 'top', fontSize: 11, fontWeight: 700, fill: '#7c3aed' }} />}
         {data[peakB].B > 0 && <ReferenceDot x={data[peakB].label} y={data[peakB].B} r={5} fill="#f59e0b" stroke="#fff" strokeWidth={2} label={{ value: data[peakB].B, position: 'bottom', fontSize: 11, fontWeight: 700, fill: '#d97706' }} />}
       </ComposedChart>

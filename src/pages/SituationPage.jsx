@@ -1,18 +1,14 @@
 // /situation — สถานการณ์ยาเสพติด (รวม จับกุม/บำบัด/ร้องเรียน เดิม /arrest /incidents /treatment)
 // filter เวลา+พื้นที่ ใช้ร่วมกันทุกส่วน (state เดียว) — เลือกส่วนที่แสดงด้วย listbox
-import { useState, useMemo, useEffect } from 'react'
-import { AlertTriangle, ChevronRight, Database } from 'lucide-react'
+import { useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { AlertTriangle } from 'lucide-react'
 import { useDrugIncidents } from '../hooks/useDrugIncidents'
-import { useArrestData } from '../hooks/useArrestData'
-import { useTreatmentData } from '../hooks/useTreatmentData'
 import { useAreaCascade } from '../hooks/useAreaCascade'
 import { useFilter } from '../context/FilterContext'
 import DateFilter from '../components/DateFilter'
 import AreaCascadeBar from '../components/AreaCascadeBar'
-import { SegmentedTabs } from '../components/ReportUI'
 import { filterByDateColumn } from '../utils/filterRows'
-import { filterArrestRows, arrestSubdistrictOptions } from '../utils/arrestData'
-import { filterTreatmentRows } from '../utils/treatmentData'
 import ArrestSection from '../components/situation/ArrestSection'
 import TreatmentSection from '../components/situation/TreatmentSection'
 import IncidentsSection from '../components/situation/IncidentsSection'
@@ -23,81 +19,30 @@ const SECTIONS = [
   ['incidents', 'ร้องเรียน', 'เรื่อง'],
 ]
 
-// จับกุม/บำบัดมี caption ของตัวเอง (ดึงจาก arrest_/treatment_ — สถิติทางการจาก CRIMES/บสต.) — ดูจุดแสดงผล yearRangeLabel ด้านล่าง
-// ร้องเรียนไม่ต้องมี caption เพราะคือทุกเหตุการณ์ในระบบอยู่แล้ว ไม่มีความเสี่ยงเข้าใจผิด
-// จับกุม: arrest_case มีระดับแขวงแล้ว (ไม่มีชุมชน) — บำบัดยังมีแค่ระดับเขต
-const SUB_DISABLED_REASON = { treatment: 'บำบัดมีข้อมูลระดับเขต' }
-const COMMUNITY_DISABLED_REASON = { arrest: 'จับกุมมีข้อมูลระดับแขวง (ไม่มีระดับชุมชน)', treatment: 'บำบัดมีข้อมูลระดับเขต' }
-const SUBDISTRICT_DISABLED_SECTIONS = ['treatment']
-const COMMUNITY_DISABLED_SECTIONS = ['arrest', 'treatment']
-// จับกุม/บำบัดมีแค่ fiscal_year ไม่มีวันที่จริงระดับวัน — ปิดโหมดกรองตามเดือน/ช่วงวันที่กำหนดเอง
-const FISCAL_ONLY_SECTIONS = ['arrest', 'treatment']
-// footer การ์ดที่มาข้อมูล — ข้อความจริงตามระบบต้นทางของแต่ละ section (ดู comment หัวไฟล์ hooks/useArrestData.js, useTreatmentData.js)
-const SOURCE_LABEL = {
-  arrest: 'ระบบสารสนเทศสถานีตำรวจ (CRIMES) สำนักงานตำรวจแห่งชาติ — สถิติจับกุมคดียาเสพติด กทม.',
-  treatment: 'ระบบบำบัดรักษาและฟื้นฟูผู้ติดยาเสพติด (บสต.) กทม.',
-  incidents: 'ระบบร้องเรียนยาเสพติด 1386',
-}
-
 export default function SituationPage() {
   const { rows: allRows, isLoading, error, reload, availableYears } = useDrugIncidents()
-  const arrestData = useArrestData()
-  const treatmentData = useTreatmentData()
   const { getDateRange, state: filterState } = useFilter()
   const range = getDateRange()
-  const [section, setSection] = useState('arrest')
+  // แท็บอ่านจาก ?section= ให้ sidebar deep-link เข้าตรงส่วนได้ (และ active state ตรงกับ URL)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlSection = searchParams.get('section')
+  const section = SECTIONS.some(([id]) => id === urlSection) ? urlSection : 'arrest'
+  const setSection = (id) => setSearchParams({ section: id }, { replace: true })
 
-  const dateFiltered = useMemo(() => filterByDateColumn(allRows, 'received_date', range), [allRows, range?.from, range?.to])
+  const dateFiltered = useMemo(() => filterByDateColumn(allRows, 'received_date', range), [allRows, range])
   const cascade = useAreaCascade(dateFiltered)
 
-  // บำบัดมีข้อมูลระดับเขตเท่านั้น — เข้าแท็บนี้แล้วรีเซ็ตแขวง/ชุมชนกลับ 'all' กันค่าค้างจากแท็บอื่นทำให้ข้อมูลหาย
-  // จับกุมกรองแขวงได้แล้ว แต่ยังไม่มีระดับชุมชน — รีเซ็ตแค่ชุมชนพอ
-  useEffect(() => {
-    if (SUBDISTRICT_DISABLED_SECTIONS.includes(section)) {
-      if (cascade.subdistrict !== 'all') cascade.setSubdistrict('all')
-    } else if (COMMUNITY_DISABLED_SECTIONS.includes(section) && cascade.community !== 'all') {
-      cascade.setCommunity('all')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [section])
-
+  const arrestRows = useMemo(() => cascade.rows.filter((r) => r.action_arrest), [cascade.rows])
+  const treatmentRows = useMemo(() => cascade.rows.filter((r) => r.action_treatment), [cascade.rows])
   const incidentsRows = cascade.rows
 
-  const arrestCaseRows = useMemo(() => filterArrestRows(arrestData.caseRows, cascade, filterState), [arrestData.caseRows, cascade, filterState])
-  const arrestDimRows = useMemo(() => filterArrestRows(arrestData.dimRows, cascade, filterState), [arrestData.dimRows, cascade, filterState])
-  const arrestAgeSummaryRows = useMemo(() => filterArrestRows(arrestData.ageSummaryRows, cascade, filterState), [arrestData.ageSummaryRows, cascade, filterState])
-  const arrestTotalCases = useMemo(() => arrestCaseRows.reduce((s, r) => s + (r.cases || 0), 0), [arrestCaseRows])
-  // dropdown แขวง (เฉพาะ section จับกุม) ต้องมาจาก arrest_case.subdistrict เอง — ไม่ใช่ cascade.subdistrictOptions
-  // (มาจาก drug_incidents คนละชุดข้อมูล แขวงที่มีอาจไม่ตรงกัน) ดู utils/arrestData.js:arrestSubdistrictOptions
-  const arrestSubOptions = useMemo(() => arrestSubdistrictOptions(arrestData.caseRows, cascade, filterState), [arrestData.caseRows, cascade, filterState])
-
-  // สลับมาแท็บจับกุมพร้อมแขวงที่ค้างจากแท็บร้องเรียน (คนละชุดข้อมูล) แต่แขวงนั้นไม่มีเคสจับกุมในเขตนี้ → เคลียร์กัน dropdown โชว์ค่าว่าง
-  useEffect(() => {
-    if (section === 'arrest' && cascade.subdistrict !== 'all' && !arrestSubOptions.includes(cascade.subdistrict)) {
-      cascade.setSubdistrict('all')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [section, arrestSubOptions])
-
-  const treatmentSummaryRows = useMemo(() => filterTreatmentRows(treatmentData.summaryRows, cascade, filterState), [treatmentData.summaryRows, cascade, filterState])
-  const treatmentDimRows = useMemo(() => filterTreatmentRows(treatmentData.dimRows, cascade, filterState), [treatmentData.dimRows, cascade, filterState])
-  const treatmentTotal = useMemo(() => treatmentSummaryRows.reduce((s, r) => s + (r.total_person || 0), 0), [treatmentSummaryRows])
-
-  const totals = { arrest: arrestTotalCases, treatment: treatmentTotal, incidents: incidentsRows.length }
+  const totals = { arrest: arrestRows.length, treatment: treatmentRows.length, incidents: incidentsRows.length }
   const [, sectionLabel, sectionUnit] = SECTIONS.find(([id]) => id === section)
-  const formatYearRange = (years) => {
-    if (!years.length) return null
-    const min = Math.min(...years), max = Math.max(...years)
-    return min === max ? String(min) : `${min}–${max}`
-  }
-  const yearRangeLabel = formatYearRange(availableYears)
-  const arrestYearRangeLabel = formatYearRange(arrestData.availableYears)
-  const treatmentYearRangeLabel = formatYearRange(treatmentData.availableYears)
 
   if (isLoading) {
     return (
-      <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto">
-        <div className="rounded-lg bg-white ring-1 ring-slate-200 p-8 h-64 animate-pulse" />
+      <div className="p-4 md:p-6 lg:p-8 max-w-[1280px] mx-auto">
+        <div className="rounded-xl border border-slate-200 bg-white p-8 h-64 animate-pulse" />
       </div>
     )
   }
@@ -118,79 +63,46 @@ export default function SituationPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6 bg-[#fafaf9] min-h-screen overflow-x-hidden">
+    <div className="p-4 md:p-6 lg:p-8 max-w-[1280px] mx-auto space-y-7 bg-[#f6f7f9] min-h-screen">
       <header className="border-b border-slate-200 pb-6">
         <div className="flex items-end justify-between gap-6 flex-wrap">
           <div className="min-w-0">
-            <nav className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-              <span>สถานการณ์อาชญากรรม</span>
-              <ChevronRight size={13} className="text-slate-400 shrink-0" />
-              <span className="text-slate-800 font-semibold">สถานการณ์ยาเสพติด</span>
-              <span className="text-slate-300">·</span>
-              <span className="text-slate-400">{section === 'arrest' ? 'CRIMES กทม.' : section === 'treatment' ? 'บสต. กทม.' : 'drug_incidents'}</span>
-            </nav>
+            <div className="text-xs uppercase tracking-widest text-slate-500">สถานการณ์ยาเสพติด · drug_incidents</div>
             <h1 className="mt-1.5 text-3xl lg:text-[2rem] font-semibold tracking-tight text-slate-900 leading-tight">สถานการณ์ยาเสพติด</h1>
             <p className="mt-2 text-sm text-slate-500 tabular-nums">
-              <span className="font-semibold text-slate-700">{totals[section].toLocaleString()}</span> {sectionUnit} · {sectionLabel} ในช่วงที่เลือก
+              {totals[section].toLocaleString()} {sectionUnit} · {sectionLabel} ในช่วงที่เลือก
             </p>
-            {section === 'arrest' ? (
-              arrestYearRangeLabel && (
-                <p className="mt-1 text-xs text-slate-400 break-words max-w-xl">
-                  ข้อมูลปีงบ {arrestYearRangeLabel} · ที่มา: CRIMES กทม.
-                </p>
-              )
-            ) : section === 'treatment' ? (
-              treatmentYearRangeLabel && (
-                <p className="mt-1 text-xs text-slate-400 break-words max-w-xl">
-                  ข้อมูลปีงบ {treatmentYearRangeLabel} · ที่มา: บสต.
-                </p>
-              )
-            ) : (
-              yearRangeLabel && (
-                <p className="mt-1 text-xs text-slate-400 break-words max-w-xl">
-                  ข้อมูลปีงบ {yearRangeLabel}
-                </p>
-              )
-            )}
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <SegmentedTabs value={section} onChange={setSection}
-              options={SECTIONS.map(([id, label]) => ({ id, label, count: totals[id] }))} />
-            <DateFilter accent="amber" size="lg"
-              availableYears={section === 'arrest' ? arrestData.availableYears : section === 'treatment' ? treatmentData.availableYears : availableYears}
-              disabledModes={FISCAL_ONLY_SECTIONS.includes(section) ? ['month', 'custom'] : []} />
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="inline-flex rounded-xl border border-slate-300 bg-slate-100 p-1 shadow-sm" role="tablist" aria-label="เลือกข้อมูล">
+              {SECTIONS.map(([id, label]) => (
+                <button key={id} type="button" role="tab" aria-selected={section === id} onClick={() => setSection(id)}
+                  className={`h-11 px-6 rounded-lg text-[15px] transition ${
+                    section === id
+                      ? 'bg-white text-[#243aa8] font-bold shadow-[0_2px_6px_rgba(15,22,38,0.12)]'
+                      : 'text-slate-500 font-semibold hover:text-slate-700 hover:bg-white/60'
+                  }`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <DateFilter availableYears={availableYears} defaultAllYears />
           </div>
         </div>
       </header>
 
-      <AreaCascadeBar cascade={cascade}
-        disableSub={SUBDISTRICT_DISABLED_SECTIONS.includes(section)} disableSubReason={SUB_DISABLED_REASON[section]}
-        disableCommunity={COMMUNITY_DISABLED_SECTIONS.includes(section)} disableCommunityReason={COMMUNITY_DISABLED_REASON[section]}
-        subdistrictOptions={section === 'arrest' ? arrestSubOptions : undefined} />
+      <AreaCascadeBar cascade={cascade} />
 
-      <div key={section} className="animate-rise space-y-8">
-        {section === 'arrest' && (
-          <ArrestSection
-            caseRows={arrestCaseRows} allCaseRows={arrestData.caseRows} dimRows={arrestDimRows} ageSummaryRows={arrestAgeSummaryRows} totalCases={arrestTotalCases}
-            cascade={cascade} filterState={filterState}
-            isLoading={arrestData.isLoading} error={arrestData.error} reload={arrestData.reload} />
-        )}
-        {section === 'treatment' && (
-          <TreatmentSection
-            summaryRows={treatmentSummaryRows} dimRows={treatmentDimRows} total={treatmentTotal}
-            allSummaryRows={treatmentData.summaryRows} cascade={cascade} filterState={filterState}
-            isLoading={treatmentData.isLoading} error={treatmentData.error} reload={treatmentData.reload} />
-        )}
-        {section === 'incidents' && (
-          <IncidentsSection rows={incidentsRows} total={incidentsRows.length} allRows={allRows} cascade={cascade}
-            filterState={filterState} range={range} availableYears={availableYears} />
-        )}
-      </div>
-
-      <div className="bg-white rounded-xl ring-1 ring-slate-900/[0.06] shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-4 flex items-center gap-2 text-xs text-slate-500">
-        <Database size={15} className="text-slate-400 shrink-0" />
-        <span>ที่มาข้อมูล: {SOURCE_LABEL[section]}</span>
-      </div>
+      {section === 'arrest' && (
+        <ArrestSection rows={arrestRows} total={arrestRows.length} allRows={allRows} cascade={cascade} filterState={filterState} range={range} />
+      )}
+      {section === 'treatment' && (
+        <TreatmentSection rows={treatmentRows} total={treatmentRows.length} range={range} cascade={cascade} />
+      )}
+      {section === 'incidents' && (
+        <IncidentsSection rows={incidentsRows} total={incidentsRows.length} allRows={allRows} cascade={cascade}
+          filterState={filterState} range={range} availableYears={availableYears} />
+      )}
     </div>
   )
 }

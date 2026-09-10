@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Download, Table2, Image as ImageIcon } from 'lucide-react'
+import { Download, Table2, Image as ImageIcon, MapPin, ChevronRight } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from 'recharts'
@@ -60,17 +60,20 @@ function Metric({ span, accent = 'text-slate-900', eyebrow, value, unit, sub, di
 const barTooltipStyle = { borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }
 const labelStyle = { fontSize: 11, fill: '#475569', fontWeight: 600 }
 
-function RankedBarChart({ data, unit = 'ครั้ง' }) {
+// percent=true : label บนแท่งเป็น % (ตัวหาร = ผลรวมในกราฟ → รวม 100%) ; bubble (Tooltip) ยังโชว์จำนวนจริง
+function RankedBarChart({ data, unit = 'ครั้ง', percent = true }) {
+  const sum = data.reduce((s, d) => s + d.value, 0) || 1
   return (
     <ResponsiveContainer width="100%" height={Math.max(180, data.length * 40)}>
-      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 36, left: 8, bottom: 4 }}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 44, left: 8, bottom: 4 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
         <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} allowDecimals={false} />
         <YAxis type="category" dataKey="name" width={112} tick={{ fontSize: 12, fill: '#475569' }} />
         <Tooltip contentStyle={barTooltipStyle} formatter={(v) => [v.toLocaleString(), unit]} />
         <Bar dataKey="value" radius={[0, 4, 4, 0]}>
           {data.map((d, i) => <Cell key={d.name} fill={i === 0 ? COLORS.amber : COLORS.slateSoft} />)}
-          <LabelList dataKey="value" position="right" formatter={(v) => v.toLocaleString()} style={labelStyle} />
+          <LabelList dataKey="value" position="right" style={labelStyle}
+            formatter={(v) => (percent ? `${((v / sum) * 100).toFixed(1)}%` : v.toLocaleString())} />
         </Bar>
       </BarChart>
     </ResponsiveContainer>
@@ -88,7 +91,7 @@ export default function ComplaintsPage() {
     return [...s].sort((a, b) => b - a)
   }, [records])
 
-  const dateFiltered = useMemo(() => filterByDateColumn(records, 'date', range), [records, range?.from, range?.to])
+  const dateFiltered = useMemo(() => filterByDateColumn(records, 'date', range), [records, range])
 
   // ── cascading area filter: กลุ่ม → เขต → แขวง → ชุมชน ──
   const [group, setGroup] = useState('all')
@@ -165,6 +168,10 @@ export default function ComplaintsPage() {
     return Object.entries(m).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
   }, [rows])
 
+  // ผลรวมสำหรับคิด % บนแท่ง (คำนวณครั้งเดียว — เลี่ยง reduce ซ้ำในทุก label ของ LabelList)
+  const statusSum = statusData.reduce((s, d) => s + d.value, 0) || 1
+  const channelSum = channelData.reduce((s, d) => s + d.value, 0) || 1
+
   // ── table toggle + pagination ──
   const [tableOpen, setTableOpen] = useState(false)
   const [page, setPage] = useState(1)
@@ -215,18 +222,24 @@ export default function ComplaintsPage() {
         </div>
       </header>
 
-      {/* ── AREA CASCADE ── */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* ── AREA CASCADE — ลำดับชั้นเจาะลึกซ้าย→ขวา (สไตล์เดียวกับหน้า situation) ── */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 shadow-sm">
+        <span className="inline-flex items-center gap-1.5 pr-1 text-xs font-semibold text-slate-500">
+          <MapPin size={15} className="text-slate-400" /> พื้นที่
+        </span>
         <FilterPill label="กลุ่ม" value={group}
           onChange={(v) => { setGroup(v); setDistrict('all'); setSubdistrict('all'); setCommunity('all') }}
           options={[['all', 'ทุกกลุ่ม'], ...GROUP_ORDER.map((g) => [g, g])]} />
+        <ChevronRight size={15} className="text-slate-300 shrink-0" />
         <FilterPill label="เขต" value={district}
           onChange={(v) => { setDistrict(v); setSubdistrict('all'); setCommunity('all') }}
           options={[['all', 'ทุกเขต'], ...districtOptions.map((d) => [d, d.replace(/^เขต/, '')])]} />
+        <ChevronRight size={15} className="text-slate-300 shrink-0" />
         <FilterPill label="แขวง" value={subdistrict}
           onChange={(v) => { setSubdistrict(v); setCommunity('all') }}
           options={[['all', district === 'all' ? 'เลือกเขตก่อน' : 'ทุกแขวง'], ...subdistrictOptions.map((s) => [s, s])]}
           disabled={district === 'all'} />
+        <ChevronRight size={15} className="text-slate-300 shrink-0" />
         <FilterPill label="ชุมชน" value={community} onChange={setCommunity}
           options={[['all', subdistrict === 'all' ? 'เลือกแขวงก่อน' : 'ทุกชุมชน'], ...communityOptions.map((c) => [c, c])]}
           disabled={subdistrict === 'all'} />
@@ -263,7 +276,8 @@ export default function ComplaintsPage() {
                   <Tooltip contentStyle={barTooltipStyle} formatter={(v) => [v.toLocaleString(), 'เรื่อง']} />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                     {statusData.map((d) => <Cell key={d.name} fill={d.done ? COLORS.emerald : COLORS.slateSoft} />)}
-                    <LabelList dataKey="value" position="right" formatter={(v) => v.toLocaleString()} style={labelStyle} />
+                    <LabelList dataKey="value" position="right" style={labelStyle}
+                      formatter={(v) => `${((v / statusSum) * 100).toFixed(1)}%`} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -292,7 +306,8 @@ export default function ComplaintsPage() {
                 <Tooltip contentStyle={barTooltipStyle} formatter={(v) => [v.toLocaleString(), 'เรื่อง']} />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                   {channelData.map((d, i) => <Cell key={d.name} fill={i === 0 ? COLORS.amber : COLORS.slateSoft} />)}
-                  <LabelList dataKey="value" position="top" formatter={(v) => v.toLocaleString()} style={labelStyle} />
+                  <LabelList dataKey="value" position="top" style={labelStyle}
+                    formatter={(v) => `${((v / channelSum) * 100).toFixed(1)}%`} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
