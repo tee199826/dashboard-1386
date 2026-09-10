@@ -30,6 +30,21 @@ export const YEAR_OPTIONS = (() => {
 // หน่วยสำรอง — ใช้เฉพาะตอนยังดึงหน่วยจากข้อมูลจริงไม่ได้
 export const UNIT_FALLBACK = ['เม็ด', 'กรัม', 'ขีด', 'กิโลกรัม', 'มัด', 'ถุง', 'ขวด']
 
+// เลขประจำตัวประชาชน — เก็บในฐานข้อมูลเป็นตัวเลขล้วน แล้วจัดรูปแบบตอนแสดงผล
+// x-xxxx-xxxxx-xx-x (1-4-5-2-1 รวม 13 หลัก) — รองรับกรอกยังไม่ครบด้วย ใส่ขีดเท่าที่กรอกมา
+const NID_GROUPS = [1, 4, 5, 2, 1]
+export function formatNationalId(v) {
+  const d = String(v ?? '').replace(/\D/g, '').slice(0, 13)
+  const parts = []
+  let i = 0
+  for (const g of NID_GROUPS) {
+    if (i >= d.length) break
+    parts.push(d.slice(i, i + g))
+    i += g
+  }
+  return parts.join('-')
+}
+
 // hash สั้น ๆ สำหรับ record_uid (รูปแบบเดียวกับ importEngine ที่ใช้ 'h:' + hash)
 export function simpleHash(str) {
   let h = 5381

@@ -37,14 +37,23 @@ export function Card({ title, sub, children, className = '' }) {
   )
 }
 
-export function Field({ label, required, hint, children, className = '' }) {
+// error = true (ใช้ข้อความ default) หรือใส่ข้อความเองก็ได้
+// ทาสีแดงถึงตัว control ด้วย arbitrary variant — ไม่ต้องส่ง prop ลงไปทุกชั้น
+const INVALID = '[&_input]:border-rose-400 [&_select]:border-rose-400 [&_textarea]:border-rose-400 [&_input]:bg-rose-50/50 [&_select]:bg-rose-50/50'
+
+export function Field({ label, required, hint, error, children, className = '' }) {
   return (
-    <label className={`block space-y-1 ${className}`}>
-      <span className="text-xs font-medium text-slate-600">
+    <label data-invalid={error ? '1' : undefined}
+      className={`block space-y-1 ${error ? INVALID : ''} ${className}`}>
+      <span className={`text-xs font-medium ${error ? 'text-rose-600' : 'text-slate-600'}`}>
         {label} {required && <span className="text-rose-500">*</span>}
       </span>
       {children}
-      {hint && <span className="block text-[11px] text-slate-400">{hint}</span>}
+      {error ? (
+        <span className="block text-[11px] font-medium text-rose-600">
+          {typeof error === 'string' ? error : 'กรุณากรอกช่องนี้'}
+        </span>
+      ) : hint && <span className="block text-[11px] text-slate-400">{hint}</span>}
     </label>
   )
 }

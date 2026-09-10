@@ -10,7 +10,7 @@ import { useAuth } from '../../context/AuthContext'
 import { fetchAllPages } from '../../utils/supabasePagination'
 import { formatThaiDate } from '../../utils/heroMeta'
 import { IntelPage, Card, Field, Input, Select } from '../../components/intel/FormUI'
-import { DISTRICTS } from '../../utils/intelOptions'
+import { DISTRICTS, formatNationalId } from '../../utils/intelOptions'
 
 const PAGE_SIZE = 50
 const txt = (v) => (v == null || v === '' ? '—' : String(v))
@@ -62,8 +62,9 @@ export default function InterviewSearch() {
     return rows.filter((r) => {
       const P = pii[r.record_uid]
       if (term) {
-        const hay = [r.code, P?.full_name, P?.alias, P?.national_id, P?.phone, r.doc_no]
-          .filter(Boolean).join(' ').toLowerCase()
+        // ใส่เลขบัตรทั้งแบบตัวเลขล้วนและแบบมีขีด — พิมพ์ค้นแบบไหนก็เจอ
+        const hay = [r.code, P?.full_name, P?.alias, P?.national_id, formatNationalId(P?.national_id),
+          P?.phone, r.doc_no].filter(Boolean).join(' ').toLowerCase()
         if (!hay.includes(term)) return false
       }
       const d = r.surveyed_at ? String(r.surveyed_at).slice(0, 10) : ''
@@ -112,7 +113,8 @@ export default function InterviewSearch() {
       filtered.forEach((r) => {
         const P = pii[r.record_uid] || {}
         ws.addRow([
-          r.code || '', formatThaiDate(r.surveyed_at) || '', r.doc_no || '', P.full_name || '', P.national_id || '',
+          r.code || '', formatThaiDate(r.surveyed_at) || '', r.doc_no || '', P.full_name || '',
+          formatNationalId(P.national_id) || '',
           P.phone || '', r.age ?? '', r.religion || '', r.occupation || '', r.income_range || '',
           r.education || '', r.residence?.district || '', r.residence?.subdistrict || '',
           (r.main_drug?.drugs || []).join(', ') || (r.regular_drugs || []).map((d) => d.drug).join(', '),
@@ -306,7 +308,7 @@ function DetailPanel({ row: r, pii: P, onClose, onDelete, busy }) {
           <Group title="ส่วนที่ ๑ ข้อมูลบุคคล">
             <Row label="ชื่อ-สกุล" value={P?.full_name} />
             <Row label="ชื่ออื่นๆ" value={P?.alias} />
-            <Row label="เลขประจำตัวประชาชน" value={P?.national_id} />
+            <Row label="เลขประจำตัวประชาชน" value={formatNationalId(P?.national_id)} />
             <Row label="วันเกิด" value={P?.birth_date && formatThaiDate(P.birth_date)} />
             <Row label="อายุ" value={r.age && `${r.age} ปี`} />
             <Row label="ศาสนา" value={r.religion} />
@@ -393,11 +395,12 @@ function DetailPanel({ row: r, pii: P, onClose, onDelete, busy }) {
           )}
 
           <Group title="๖. แหล่งที่เคยซื้อ">
-            <Row label="ช่องทางซื้อ" value={buy.channels} />
+            <Row label="ช่องทางซื้อ" value={buy.channel ?? buy.channels} />
             {(r.dealer_locations || []).map((l, i) => (
               <Row key={i} label={`แหล่งที่ ${i + 1}`}
                 value={[l.area, l.community, l.subdistrict, l.district, l.station, l.bkn].filter(Boolean).join(' · ')} />
             ))}
+            <Row label="ที่อยู่เพื่อนที่ฝากซื้อ" value={P?.friend_address} />
             <Row label="วิธีการซื้อ" value={buy.method} />
             <Row label="รู้แหล่งมาจาก" value={buy.known_from} />
             <Row label="สาเหตุที่ซื้อจากแหล่งนี้" value={buy.why_here} />

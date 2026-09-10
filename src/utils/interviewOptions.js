@@ -5,7 +5,7 @@ export const RELIGION_OPTIONS = ['พุทธ', 'อิสลาม', 'คร�
 
 export const MARITAL_OPTIONS = ['โสด', 'สมรส', 'แยกกันอยู่', 'หย่า', 'หม้าย', 'ไม่ได้จดทะเบียน']
 
-export const RESIDENT_STATUS_OPTIONS = ['เจ้าบ้าน', 'ผู้อาศัย']
+export const RESIDENT_STATUS_OPTIONS = ['เจ้าบ้าน', 'ผู้อาศัย', 'บ้านเช่า']
 
 export const EDUCATION_OPTIONS = [
   'ไม่มีการศึกษา', 'กำลังศึกษาระดับประถมศึกษา', 'ประถมศึกษา',
@@ -63,7 +63,9 @@ export const AVAILABILITY_OPTIONS = ['ง่าย', 'ยาก']
 export const PRICE_DRUG_OPTIONS = ['ยาบ้า', 'ไอซ์', 'เฮโรอีน', 'คีตามีน', 'อื่นๆ']
 
 // ── ข้อ 6 แหล่งที่เคยซื้อ ──
+// เลือก "ฝากเพื่อนซื้อ" แล้วต้องระบุที่อยู่ของเพื่อนที่ฝากซื้อเพิ่ม (ดู CHANNEL_FRIEND)
 export const BUY_CHANNEL_OPTIONS = ['ซื้อเองจากผู้ขาย', 'ฝากเพื่อนซื้อ']
+export const CHANNEL_FRIEND = 'ฝากเพื่อนซื้อ'
 export const SELLER_TYPE_OPTIONS = ['เด็กเดินยา', 'กลุ่มที่ขายประจำ', 'อื่นๆ']
 export const SELLER_ZONE_OPTIONS = ['ในชุมชน', 'นอกชุมชน', 'ทั้งในและนอกชุมชน']
 export const SEX_OPTIONS = ['ชาย', 'หญิง']
