@@ -28,11 +28,12 @@ export function matchesArrestArea(row, cascade) {
   return true
 }
 
-// filterState.mode !== 'fiscal' หรือ fiscalYear ว่าง ('ทั้งหมด') → ไม่กรองปี (รวมทุกปีงบที่มี)
-// ใช้ได้กับทั้ง 3 ตาราง (arrest_case/arrest_dim/arrest_age — ทุกตัวมี field ชื่อเดียวกัน: district, fiscal_year)
+// filterState.mode !== 'fiscal' หรือไม่ได้เลือกปีเลย ('ทุกปีงบ') → ไม่กรองปี (รวมทุกปีงบที่มี)
+// อ่านจาก fiscalYears (เลือกได้หลายปี) — fiscalYear เป็นค่า derived ปีเดียว จะเป็น null ทันทีที่เลือกหลายปี
+// ใช้ได้กับทั้ง 3 ตาราง (arrest_case/arrest_dim/arrest_age_summary — ทุกตัวมี field ชื่อเดียวกัน: district, fiscal_year)
 export function filterArrestRows(rows, cascade, filterState) {
-  const fy = filterState.mode === 'fiscal' ? filterState.fiscalYear : null
-  return rows.filter((r) => matchesArrestArea(r, cascade) && (fy == null || r.fiscal_year === fy))
+  const years = filterState.mode === 'fiscal' ? (filterState.fiscalYears || []) : []
+  return rows.filter((r) => matchesArrestArea(r, cascade) && (!years.length || years.includes(r.fiscal_year)))
 }
 
 // YoY จับกุม — เทียบยอดปีงบที่เลือกกับปีงบก่อนหน้า (คืนทั้งคดีและผู้ต้องหาในรอบเดียว)
