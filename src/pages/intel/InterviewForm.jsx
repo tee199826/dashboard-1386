@@ -272,7 +272,6 @@ export default function InterviewForm() {
     const { data: saved, error } = await supabase.from('interview_records')
       .insert([row]).select('code, doc_no').single()
     if (error) { setStatus({ error: `บันทึกไม่สำเร็จ: ${error.message}` }); return }
-    setSavedRef({ code: saved?.code || null, doc_no: saved?.doc_no || null })
 
     // 2) ข้อมูลส่วนบุคคล (ตารางแยก — แอดมินเท่านั้น)
     const sellerList = sellers.filter((s) => s.full_name.trim() || s.alias.trim() || s.appearance.trim())
@@ -300,11 +299,17 @@ export default function InterviewForm() {
     if (hasPii) {
       const { error: e2 } = await supabase.from('interview_records_pii').insert([pii])
       if (e2) {
-        setStatus({ error: `บันทึกสถิติสำเร็จ แต่ข้อมูลส่วนบุคคลไม่สำเร็จ: ${e2.message}` })
+        // ย้อนแถวหลักออกด้วย — ไม่งั้นจะเหลือแถวกำพร้าที่ไม่มีชื่อเจ้าของ
+        // และกดบันทึกซ้ำจะได้แถวซ้ำ (record_uid สร้างใหม่ทุกครั้งเพราะมี Date.now())
+        const { error: e3 } = await supabase.from('interview_records').delete().eq('record_uid', record_uid)
+        setStatus({ error: e3
+          ? `บันทึกข้อมูลส่วนบุคคลไม่สำเร็จ: ${e2.message} — และย้อนรายการไม่สำเร็จ กรุณาแจ้งผู้ดูแลระบบให้ลบ ${record_uid}`
+          : `บันทึกไม่สำเร็จ: ${e2.message} — ยกเลิกรายการนี้แล้ว ข้อมูลในฟอร์มยังอยู่ครบ กดบันทึกใหม่ได้` })
         return
       }
     }
 
+    setSavedRef({ code: saved?.code || null, doc_no: saved?.doc_no || null })
     setStatus('saved')
     logAction?.('create', 'interview_records', record_uid, { hasPii: !!hasPii })
     setTimeout(() => navigate('/intel/interview'), 3000)   // หน่วงให้อ่าน/จดรหัสอ้างอิงทัน แล้วไปหน้าค้นหา
@@ -331,7 +336,7 @@ export default function InterviewForm() {
             <Field label="วัน เดือน ปีเกิด"><Input type="date" value={p.birth_date} onChange={(e) => setPf({ birth_date: e.target.value })} /></Field>
             <Field label="เลขประจำตัวประชาชน" required
               error={err('national_id') && (p.national_id ? `ต้องครบ 13 หลัก (กรอกแล้ว ${p.national_id.length} หลัก)` : 'กรุณากรอกเลข 13 หลัก')}
-              hint={`x-xxxx-xxxxx-xx-x — กรอกแล้ว ${p.national_id.length}/13 หลัก`}>
+              hint={`เลข 13 หลัก กรอกตัวเลขเท่านั้น ระบบจะใส่ขีดให้อัตโนมัติ`}>
               {/* แสดงเป็น x-xxxx-xxxxx-xx-x แต่เก็บลงฐานข้อมูลเป็นตัวเลขล้วน
                   ขีดใส่ให้อัตโนมัติ — พิมพ์ตัวอักษร/ขีด/เว้นวรรคเองไม่ติด */}
               <Input value={formatNationalId(p.national_id)} inputMode="numeric" maxLength={17}
@@ -706,7 +711,7 @@ export default function InterviewForm() {
           </div>
         </Card>
 
-        <SaveBar status={status} label="บันทึกข้อมูลผู้เสพ" />
+        <SaveBar status={status} label="บันทึกข้อมูล" />
         {savedRef && (
           <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3">
             <div className="text-[12px] font-medium text-emerald-800">บันทึกแล้ว — จดเลขทั้งสองนี้ไว้บนแบบฟอร์มกระดาษ</div>

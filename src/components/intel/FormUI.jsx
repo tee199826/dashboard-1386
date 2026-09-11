@@ -123,9 +123,10 @@ export function RepeatList({ rows, onChange, blank, renderRow, addLabel = 'เ�
 // แถบบันทึก — status: null | 'saving' | 'saved' | { error }
 export function SaveBar({ status, onSave, disabled, label = 'บันทึกข้อมูล' }) {
   const saving = status === 'saving'
+  const done = status === 'saved'   // บันทึกแล้วต้องกดซ้ำไม่ได้ ไม่งั้นได้ข้อมูลซ้ำอีกแถว
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <button type="submit" onClick={onSave} disabled={saving || disabled}
+      <button type="submit" onClick={onSave} disabled={saving || done || disabled}
         className="inline-flex items-center gap-2 h-10 px-5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition">
         {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
         {saving ? 'กำลังบันทึก...' : label}
