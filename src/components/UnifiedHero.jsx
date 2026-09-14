@@ -20,9 +20,10 @@ export default function UnifiedHero({
   sourceInfo, onRefresh, refreshing = false,
 }) {
   return (
-    <header className={`rounded-2xl px-8 py-6 mb-6 bg-gradient-to-r ${GRADIENT_MAP[gradient] || GRADIENT_MAP.blue} shadow-xl shadow-slate-900/20`}>
+    <header className={`rounded-2xl px-5 sm:px-8 py-6 mb-6 bg-gradient-to-r ${GRADIENT_MAP[gradient] || GRADIENT_MAP.blue} shadow-xl shadow-slate-900/20`}>
+      {/* basis-[260px] — จอแคบ (ข้อความ+ปุ่มไม่พอ) ปุ่มจะ wrap ลงบรรทัดใหม่ แทนที่จะบีบคอลัมน์ข้อความจนคำแตกทีละบรรทัด */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[260px]">
           {eyebrow && (
             <div className="text-xs uppercase tracking-widest text-white/70 mb-2">{eyebrow}</div>
           )}

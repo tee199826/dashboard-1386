@@ -100,8 +100,9 @@ export default function Operations() {
   }, [dfState.fiscalYears])
   const changeRptYear = (v) => {
     setRptYear(v)
-    if (v === 'all') dfSetFiscalYears([])
-    else if (v !== 'no_date') dfSetFiscalYears([Number(v)])
+    const cur = (dfState.fiscalYears || []).map(Number)
+    if (v === 'all') { if (cur.length) dfSetFiscalYears([]) }
+    else if (v !== 'no_date') { if (!(cur.length === 1 && cur[0] === Number(v))) dfSetFiscalYears([Number(v)]) }
   }
   const rptYears = useMemo(() => rptYearList(rptYear), [rptYear])
 
@@ -177,6 +178,7 @@ export default function Operations() {
   }
 
   // โหลดรายการปีงบที่มีในตาราง (ครั้งเดียว) สำหรับ dropdown ฝั่งขวา
+  const [yearsLoaded, setYearsLoaded] = useState(false)
   const loadRptYears = async () => {
     try {
       const { data } = await supabase
@@ -186,18 +188,30 @@ export default function Operations() {
       if (data) {
         const ys = [...new Set(data.map(r => r.fiscal_year))].filter(Boolean).sort((a, b) => b - a)
         setRptAllYears(ys)
+        // ตั้งปี default = ปีล่าสุด ที่นี่ (ไม่รอ DateFilter — ตอนนี้หน้ายังเป็น spinner DateFilter ยังไม่ mount)
+        if (ys.length && !(dfState.fiscalYears?.length)) dfSetFiscalYears([ys[0]])
       }
     } catch { /* non-fatal */ }
+    finally { setYearsLoaded(true) }
   }
 
   useEffect(() => { loadRptYears() }, [])
   // โหลด/รีโหลดข้อมูลฝั่งขวาเมื่อปีเปลี่ยน — spinner เต็มหน้าเฉพาะครั้งแรก
   // ครั้งถัดไป silent: หน้าไม่ถูกแทนด้วย spinner → DateFilter ไม่ unmount/remount (ไม่ reset ปีกลับเป็นปีล่าสุด)
+  // โหลดเฉพาะเมื่อ rptYear ตรงกับ DateFilter แล้ว (sync effect ด้านบนตามมาอีก 1 render)
+  // → ตอนเปิดหน้าไม่ fetch 'all' ทิ้งเปล่าก่อนจะ fetch ปีล่าสุดซ้ำ
   const firstRptLoad = useRef(true)
+  const dfInitRef = useRef(false)
   useEffect(() => {
+    if (!yearsLoaded) return
+    const ys = (dfState.fiscalYears || []).map(Number).sort((a, b) => b - a)
+    const dfKey = ys.length ? ys.join(',') : 'all'
+    if (rptYear !== 'no_date' && rptYear !== dfKey) return          // รอ sync
+    if (rptAllYears.length > 0 && ys.length === 0 && !dfInitRef.current) return   // รอตั้งปี default
+    dfInitRef.current = true
     loadRpt(!firstRptLoad.current, rptYear)
     firstRptLoad.current = false
-  }, [rptYear])
+  }, [rptYear, yearsLoaded, dfState.fiscalYears])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── derived data ────────────────────────────────────────────────────────────
 
@@ -578,7 +592,7 @@ export default function Operations() {
         </div>
 
         <div className="border-t-2 border-slate-200 pt-8">
-          <Rpt114Dashboard years={rptYears} onYearsChange={changeRptYear} />
+          <Rpt114Dashboard years={rptYears} onYearsChange={changeRptYear} yearOptions={rptAllYears} lastUpdated={opsLastUpload} />
         </div>
       </div>{/* end slide 3 */}
 
@@ -592,6 +606,8 @@ export default function Operations() {
           totalCases={totalCases}
           completed={completed}
           filteredCount={filteredRecords.length}
+          channelCount={ranking.filter(r => r.total > 0).length}
+          hasRpt={!!rptData}
           percent={percent}
         />
       )}
@@ -619,12 +635,12 @@ function ResultTable({ title, icon, headerClass, totalRowClass, thClass, rows, s
       </div>
       <div className="p-6">
         <div className="overflow-x-auto">
-          <table className="min-w-[480px] w-full">
+          <table className="min-w-[280px] w-full">
             <thead className="bg-slate-800 text-xs text-white font-bold uppercase">
               <tr>
-                <th className="text-left px-5 py-4">หมวด</th>
-                <th className="text-right px-5 py-4">จำนวน</th>
-                <th className={`text-right px-5 py-4 ${thClass}`}>สัดส่วน</th>
+                <th className="text-left px-2 sm:px-5 py-4">หมวด</th>
+                <th className="text-right px-2 sm:px-5 py-4">จำนวน</th>
+                <th className={`text-right px-2 sm:px-5 py-4 ${thClass}`}>สัดส่วน</th>
               </tr>
             </thead>
             <tbody>
@@ -633,26 +649,26 @@ function ResultTable({ title, icon, headerClass, totalRowClass, thClass, rows, s
                 const pct = grandTotal ? ((v / grandTotal) * 100).toFixed(1) : 0
                 return (
                   <tr key={row.key} className={`border-t border-slate-100 ${idx % 2 ? 'bg-slate-50/60' : ''} hover:bg-rose-50/40 transition`}>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
+                    <td className="px-2 sm:px-5 py-4">
+                      <div className="flex items-center gap-2 sm:gap-3">
                         <span className="text-base">{row.emoji}</span>
                         <span className="font-semibold text-slate-800">{row.name}</span>
                       </div>
                     </td>
-                    <td className="text-right px-5 py-4">
-                      <span className="text-xl font-bold" style={{ color: row.color }}>{v.toLocaleString()}</span>
+                    <td className="text-right px-2 sm:px-5 py-4">
+                      <span className="text-xl font-bold tabular-nums" style={{ color: row.color }}>{v.toLocaleString()}</span>
                     </td>
-                    <td className="text-right px-5 py-4">
-                      <span className="inline-block px-3 py-1 rounded-full text-xs font-bold"
+                    <td className="text-right px-2 sm:px-5 py-4">
+                      <span className="inline-block px-2 sm:px-3 py-1 rounded-full text-xs font-bold"
                         style={{ background: row.color + '20', color: row.color }}>{pct}%</span>
                     </td>
                   </tr>
                 )
               })}
               <tr className={`bg-gradient-to-r ${totalRowClass} text-white font-bold`}>
-                <td className="px-5 py-5 text-base rounded-bl-lg">รวม</td>
-                <td className="text-right px-5 py-5 text-xl">{grandTotal.toLocaleString()}</td>
-                <td className="text-right px-5 py-5 text-yellow-200 text-base rounded-br-lg">100%</td>
+                <td className="px-2 sm:px-5 py-5 text-base rounded-bl-lg">รวม</td>
+                <td className="text-right px-2 sm:px-5 py-5 text-xl tabular-nums">{grandTotal.toLocaleString()}</td>
+                <td className="text-right px-2 sm:px-5 py-5 text-yellow-200 text-base rounded-br-lg">100%</td>
               </tr>
             </tbody>
           </table>
