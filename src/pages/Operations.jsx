@@ -89,7 +89,6 @@ export default function Operations() {
   const [opsLastUpload, setOpsLastUpload] = useState(null)
 
   useEffect(() => { getLastUploadDate(supabase, 'report_114').then(setOpsLastUpload).catch(() => {}) }, [])
-  const opsLatestFy = useMemo(() => (rptAllYears.length ? Math.max(...rptAllYears.map(Number)) : null), [rptAllYears])
   const opsYears = useMemo(() => [...rptAllYears].map(Number).sort((a, b) => b - a), [rptAllYears])
 
   // DateFilter (ปีงบ) ↔ rptYear sync สองทาง — รองรับ ทุกปี ([]) / ปีเดียว / หลายปี
@@ -306,7 +305,7 @@ export default function Operations() {
           eyebrow="FY OPERATIONS · ผลปฏิบัติงาน"
           title="ผลการดำเนินงาน"
           description="สรุปรายงาน 114 · ปีงบประมาณ"
-          period={opsLatestFy ? `ปีงบประมาณ ${opsLatestFy}` : (rptData?.period || null)}
+          period={rptYear === 'no_date' ? 'ไม่ระบุวันที่' : (rptData?.period || null)}
           lastUpload={fmtHeroDate(opsLastUpload)}
           sourceInfo={OPS_SOURCE_INFO}
         />
@@ -386,8 +385,8 @@ export default function Operations() {
         {/* KPI cards — 5 ใบหลัก + ปุ่ม expand (อีก 2 ใบ slide เข้ามา) */}
         {(() => {
           const PRIMARY = [
-            <BigCard icon={<AlertCircle />}   label="เรื่องร้องเรียนทั้งหมด" value={totalCases}    sub="ตามรายงาน ป.ป.ส."                color="blue"    />,
-            <BigCard icon={<CheckCircle2 />}  label="ดำเนินการแล้ว"          value={completed}     pct={percent(completed, totalCases)}    sub="จากเรื่องทั้งหมด"             color="emerald" />,
+            <BigCard icon={<AlertCircle />}   label="เรื่องร้องเรียนทั้งหมด" value={totalCases}    sub={rptData ? 'ตามรายงาน ป.ป.ส.' : 'จากข้อมูลรายเรื่อง (ไม่มี RPT_114)'} color="blue"    />,
+            <BigCard icon={<CheckCircle2 />}  label="ดำเนินการแล้ว"          value={completed}     pct={percent(completed, totalCases)}    sub={rptData ? 'จากเรื่องทั้งหมด' : 'จากข้อมูลรายเรื่อง (ไม่มี RPT_114)'} color="emerald" />,
             <BigCard icon={<SearchIcon />}    label="พบพฤติการณ์"             value={found}         pct={percent(found, verifTotal)}        sub="จากผลตรวจสอบ"                  color="rose"    />,
             <BigCard icon={<XCircle />}       label="ไม่พบพฤติการณ์"          value={notFound}      pct={percent(notFound, verifTotal)}     sub="ไม่พบบุคคล/สถานที่"           color="slate"   />,
             <BigCard icon={<FileQuestion />}  label="ไม่พบตัวในพื้นที่"       value={notInArea}     pct={percent(notInArea, verifTotal)}    sub="ออกพื้นที่ตรวจไม่พบ"          color="amber"   />,
@@ -579,7 +578,7 @@ export default function Operations() {
         </div>
 
         <div className="border-t-2 border-slate-200 pt-8">
-          <Rpt114Dashboard />
+          <Rpt114Dashboard years={rptYears} onYearsChange={changeRptYear} />
         </div>
       </div>{/* end slide 3 */}
 

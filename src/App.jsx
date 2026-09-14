@@ -28,33 +28,31 @@ import InterviewSearch from './pages/intel/InterviewSearch'
 import Admin from './pages/Admin'
 import { Menu } from 'lucide-react'
 
+// โครง tree เดียวทั้ง 2 โหมด — presentation แค่ซ่อน Header/Sidebar
+// (ถ้า return tree คนละชุด React จะ remount children → state ของหน้า/FilterProvider หายตอนเข้า-ออกโหมดนำเสนอ)
 function MainLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { isPresentation } = usePresentation()
 
-  if (isPresentation) {
-    return (
-      <div className="h-screen bg-white flex flex-col overflow-hidden">
-        <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <Header />
-      <div className="flex flex-1 relative">
-        <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="lg:hidden fixed top-3 left-3 z-50 w-10 h-10 bg-white rounded-lg shadow-md flex items-center justify-center">
-          <Menu size={20} />
-        </button>
-        {sidebarOpen && (
-          <div
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden fixed inset-0 bg-black/40 z-30" />
+    <div className={isPresentation ? 'h-screen bg-white flex flex-col overflow-hidden' : 'min-h-screen bg-slate-50 flex flex-col'}>
+      {!isPresentation && <Header />}
+      <div className={isPresentation ? 'flex flex-1 min-h-0' : 'flex flex-1 relative'}>
+        {!isPresentation && (
+          <>
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="lg:hidden fixed top-3 left-3 z-50 w-10 h-10 bg-white rounded-lg shadow-md flex items-center justify-center">
+              <Menu size={20} />
+            </button>
+            {sidebarOpen && (
+              <div
+                onClick={() => setSidebarOpen(false)}
+                className="lg:hidden fixed inset-0 bg-black/40 z-30" />
+            )}
+            <PublicSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+          </>
         )}
-        <PublicSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
         <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
       </div>
     </div>
