@@ -71,9 +71,7 @@ function useIsActive() {
 
 export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
   const { user, profile, isAdmin } = useAuth()
-  const { pathname } = useLocation()
   const isActive = useIsActive()
-  const isSubstanceUsers = pathname.startsWith('/substance-users')
   const close = () => setSidebarOpen?.(false)
 
   const renderItem = (item, restricted) => {
@@ -149,9 +147,7 @@ export default function PublicSidebar({ sidebarOpen, setSidebarOpen }) {
   ]
 
   return (
-    <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-gradient-to-b text-white flex-shrink-0 overflow-y-auto transform transition-transform duration-300 ${
-      isSubstanceUsers ? 'from-purple-950 via-violet-900 to-purple-950' : 'from-slate-900 to-blue-900'
-    } ${
+    <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-gradient-to-b from-slate-900 to-blue-900 text-white flex-shrink-0 overflow-y-auto transform transition-transform duration-300 ${
       sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
     }`}>
 
