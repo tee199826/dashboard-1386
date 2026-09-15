@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { MONTH_TH_SHORT } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
+import { checkUploadFile, MAX_SHEET_ROWS } from '../utils/uploadLimits'
 
 const ROWS_PER_PAGE = 10
 
@@ -678,10 +679,13 @@ function UploadForm({ onSaved, onClose, logAction, showToast }) {
 
   const handleFile = async (f) => {
     if (!f) return
-    setFile(f); setError(''); setParsing(true)
+    setFile(f); setError('')
+    const gate = checkUploadFile(f, ['xlsx', 'xls'])
+    if (gate) { setError(gate); return }
+    setParsing(true)
     try {
       const buffer = await f.arrayBuffer()
-      const wb = XLSX.read(buffer, { type: 'array' })
+      const wb = XLSX.read(buffer, { type: 'array', sheetRows: MAX_SHEET_ROWS })
       let allRecords = []
       for (const sheetName of wb.SheetNames) {
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: null })

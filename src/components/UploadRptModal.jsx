@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { CheckCircle2, XCircle, FileSpreadsheet, Upload, AlertTriangle, X } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { parse114 } from '../utils/importEngine'
+import { checkUploadFile, MAX_SHEET_ROWS } from '../utils/uploadLimits'
 import { upsertRpt114 } from '../utils/uploadService'
 
 function formatFileSize(bytes) {
@@ -75,9 +76,11 @@ export default function UploadRptModal({ onClose, onSaved, showToast }) {
   const handleFile = async (f) => {
     if (!f) return
     setFile(f); setError(''); setPreview(null); setRpt114Rows(null); setRpt114ParseError(null)
+    const gate = checkUploadFile(f, ['xlsx', 'xls'])
+    if (gate) { setError(gate); return }
     try {
       const buffer = await f.arrayBuffer()
-      const wb = XLSX.read(buffer, { type: 'array' })
+      const wb = XLSX.read(buffer, { type: 'array', sheetRows: MAX_SHEET_ROWS })
       const sheetName = wb.SheetNames.find(n => n.includes('RPT') || n.includes('114')) || wb.SheetNames[0]
       const sheet = wb.Sheets[sheetName]
       const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null })

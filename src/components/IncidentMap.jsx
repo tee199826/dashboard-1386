@@ -10,6 +10,7 @@ import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import { buildOuterMask } from '../utils/worldMask'
+import { escapeHtml } from '../utils/escapeHtml'
 
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({ iconUrl: markerIcon, iconRetinaUrl: markerIcon2x, shadowUrl: markerShadow })
@@ -220,9 +221,9 @@ export default function IncidentMap({
           onEachFeature={(feature, layer) => {
             const name = feature.properties?.dname || 'เขต'
             if (permanentDistrictLabels) {
-              layer.bindTooltip(name, { permanent: true, direction: 'center', className: 'district-tooltip-permanent', interactive: false })
+              layer.bindTooltip(escapeHtml(name), { permanent: true, direction: 'center', className: 'district-tooltip-permanent', interactive: false })
             } else {
-              layer.bindTooltip(name, { sticky: true, className: 'district-tooltip' })
+              layer.bindTooltip(escapeHtml(name), { sticky: true, className: 'district-tooltip' })
             }
             layer.on({
               mouseover: e => e.target.setStyle({ fillOpacity: 0.20, weight: 3, color: '#1d4ed8' }),
