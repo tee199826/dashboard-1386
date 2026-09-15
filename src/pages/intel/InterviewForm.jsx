@@ -5,10 +5,9 @@
 //   interview_records_pii  — ข้อมูลส่วนบุคคล
 // ทั้งคู่ล็อก RLS ให้ผู้ดูแลระบบเท่านั้น แต่ยังแยก PII คนละตาราง
 // เผื่อวันหน้าเปิดสถิติแบบซักให้อ่านสาธารณะโดยที่ชื่อ/เลขบัตรไม่หลุดไปด้วย
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { useAuth } from '../../context/AuthContext'
 import { dateToFiscalYear } from '../../utils/fiscalYear'
 import { IntelPage, Card, Field, Input, Select, ChipGroup, RepeatList, SaveBar } from '../../components/intel/FormUI'
 import { DISTRICTS, UNIT_FALLBACK, YEAR_OPTIONS, simpleHash, formatNationalId } from '../../utils/intelOptions'
@@ -41,9 +40,10 @@ const BLANK_SELLER = { full_name: '', alias: '', sex: '', age: '', appearance: '
 
 export default function InterviewForm() {
   const navigate = useNavigate()
-  const { logAction } = useAuth()
   const [status, setStatus] = useState(null)
   const [savedRef, setSavedRef] = useState(null)   // { code, doc_no } ที่ฐานข้อมูลออกให้ตอนบันทึก
+  // idempotency key — สร้างครั้งเดียวต่อการกรอก 1 ใบ : กดบันทึกซ้ำหลัง error ใช้ uid เดิม → ไม่ได้แถวซ้ำ (SEC-12)
+  const recordUidRef = useRef(null)
 
   // ── ส่วนที่ 1 ข้อมูลบุคคล ──
   // เลขที่แบบ (doc_no) ไม่มีช่องกรอก — trigger ฝั่งฐานข้อมูลออกเลข ๑-๑/๐๐๐๑ ให้เอง
@@ -208,11 +208,13 @@ export default function InterviewForm() {
         district: clean(l.district), province: 'กรุงเทพมหานคร', station: clean(l.station), bkn: clean(l.bkn),
       }))
 
-    const hash = simpleHash([
-      tail.interviewed_at, p.national_id, p.first_name, p.last_name, p.age, p.occupation,
-      dealer_locations[0]?.district, regular_drugs.map((d) => `${d.drug}:${d.price}`).join(','), Date.now(),
-    ].map((v) => v ?? '').join('|'))
-    const record_uid = 'h:' + hash
+    if (!recordUidRef.current) {
+      recordUidRef.current = 'h:' + simpleHash([
+        tail.interviewed_at, p.national_id, p.first_name, p.last_name, p.age, p.occupation,
+        dealer_locations[0]?.district, regular_drugs.map((d) => `${d.drug}:${d.price}`).join(','), Date.now(),
+      ].map((v) => v ?? '').join('|'))
+    }
+    const record_uid = recordUidRef.current
 
     // 1) เนื้อหาแบบฟอร์ม
     const row = {
@@ -269,11 +271,6 @@ export default function InterviewForm() {
       note: clean(tail.note),
     }
 
-    const { data: saved, error } = await supabase.from('interview_records')
-      .insert([row]).select('code, doc_no').single()
-    if (error) { setStatus({ error: `บันทึกไม่สำเร็จ: ${error.message}` }); return }
-    setSavedRef({ code: saved?.code || null, doc_no: saved?.doc_no || null })
-
     // 2) ข้อมูลส่วนบุคคล (ตารางแยก — แอดมินเท่านั้น)
     const sellerList = sellers.filter((s) => s.full_name.trim() || s.alias.trim() || s.appearance.trim())
       .map((s) => ({
@@ -297,16 +294,14 @@ export default function InterviewForm() {
     }
     const hasPii = pii.full_name || pii.national_id || pii.phone || pii.address
       || pii.friend_address || sellerList.length || pii.interviewer
-    if (hasPii) {
-      const { error: e2 } = await supabase.from('interview_records_pii').insert([pii])
-      if (e2) {
-        setStatus({ error: `บันทึกสถิติสำเร็จ แต่ข้อมูลส่วนบุคคลไม่สำเร็จ: ${e2.message}` })
-        return
-      }
-    }
+    // บันทึก 2 ตารางในธุรกรรมเดียวผ่าน RPC — ถ้า PII ล้ม เนื้อหาแบบฟอร์มก็ไม่ถูกบันทึกค้าง (SEC-12)
+    // audit 'create' บันทึกฝั่งเซิร์ฟเวอร์ในธุรกรรมเดียวกัน
+    const { data: saved, error } = await supabase.rpc('interview_save', { p_record: row, p_pii: hasPii ? pii : null })
+    if (error) { setStatus({ error: `บันทึกไม่สำเร็จ: ${error.message}` }); return }
+    setSavedRef({ code: saved?.code || null, doc_no: saved?.doc_no || null })
+    recordUidRef.current = null
 
     setStatus('saved')
-    logAction?.('create', 'interview_records', record_uid, { hasPii: !!hasPii })
     setTimeout(() => navigate('/intel/interview'), 3000)   // หน่วงให้อ่าน/จดรหัสอ้างอิงทัน แล้วไปหน้าค้นหา
   }
 
