@@ -145,10 +145,12 @@ function InterviewFormBody({ draftKey, onClear }) {
 
   const [md, setMd] = useState({
     drugs: [], drug_other: '', usage_type: '', usage_with: '', substitute: [], substitute_other: '',
-    years_using: '', amount_per_time: '', max_amount: '', method: '', frequency: '', frequency_other: '',
+    years_using: '', amount_per_time: '', max_amount: '', frequency: '', frequency_other: '',
     style: '', group_size: '', places: [], place_other: '', place_district: '', place_province: '', place_station: '',
     availability: '', availability_reason: '',
     ...d?.md,
+    // วิธีเสพประจำเลือกได้หลายวิธี — ร่างเก่าที่เคยเลือกได้วิธีเดียว (เก็บเป็นข้อความ) แปลงเป็นรายการ ไม่ให้ค่าหาย
+    method: [].concat(d?.md?.method ?? []).filter(Boolean),
   })
   const setMdf = (patch) => setMd((s) => ({ ...s, ...patch }))
 
@@ -257,7 +259,7 @@ function InterviewFormBody({ draftKey, onClear }) {
       md_years_using: !f(md.years_using),
       md_amount_per_time: !f(md.amount_per_time),
       md_max_amount: !f(md.max_amount),
-      md_method: !f(md.method),
+      md_method: md.method.length === 0,
       md_frequency: !f(md.frequency),
       md_frequency_other: md.frequency === 'อื่นๆ' && !f(md.frequency_other),
       md_style: !f(md.style),
@@ -759,8 +761,8 @@ function InterviewFormBody({ draftKey, onClear }) {
               <Field label="ปริมาณที่ใช้ต่อครั้ง/วัน (ระบุหน่วย)" required error={err('md_amount_per_time')}><Input value={md.amount_per_time} onChange={(e) => setMdf({ amount_per_time: e.target.value })} /></Field>
               <Field label="ปริมาณที่เคยใช้มากที่สุดต่อครั้ง/วัน" required error={err('md_max_amount')}><Input value={md.max_amount} onChange={(e) => setMdf({ max_amount: e.target.value })} /></Field>
             </div>
-            <Field label="เสพประจำโดยวิธี" required error={err('md_method') && 'กรุณาเลือก'}>
-              <ChipGroup options={USE_METHOD_OPTIONS} value={md.method} onChange={(v) => setMdf({ method: v })} />
+            <Field label="เสพประจำโดยวิธี (เลือกได้หลายวิธี)" required error={err('md_method') && 'กรุณาเลือกอย่างน้อย 1 วิธี'}>
+              <ChipGroup multi options={USE_METHOD_OPTIONS} value={md.method} onChange={(v) => setMdf({ method: v })} />
             </Field>
             <Field label="ความถี่ในการใช้" required error={err('md_frequency') && 'กรุณาเลือก'}>
               <ChipGroup options={FREQUENCY_OPTIONS} value={md.frequency} onChange={(v) => setMdf({ frequency: v })} />

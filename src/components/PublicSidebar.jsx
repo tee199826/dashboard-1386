@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
 // item ที่ไม่มี `to` = ยังไม่มีหน้า (soon) แสดงเป็นสีจางกดไม่ได้ ไม่ใช่ลิงก์ตาย
 const NAV = [
   {
-    title: 'สถานการณ์ยาเสพติด',
+    title: 'ข้อมูลยาเสพติด',
     groups: [
       { items: [
         { to: '/situation?section=incidents', label: 'ภาพรวม' },
