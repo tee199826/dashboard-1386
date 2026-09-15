@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { clearAllDrafts } from '../utils/interviewDraft'
 
 const AuthContext = createContext(null)
 
@@ -18,7 +19,12 @@ export function AuthProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null)
       if (session?.user) loadProfile(session.user.id)
-      else { setProfile(null); setLoading(false) }
+      else {
+        // ไม่มี session แล้ว (กดออกจากระบบ / session หมดอายุ / ออกจากระบบจากแท็บอื่น)
+        // → ลบร่างแบบซักผู้เสพที่ค้างในแท็บนี้ เพราะมีข้อมูลส่วนบุคคล
+        clearAllDrafts()
+        setProfile(null); setLoading(false)
+      }
     })
 
     return () => subscription.unsubscribe()

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Calendar, ChevronDown, RotateCcw, Check } from 'lucide-react'
 import { useFilter } from '../context/FilterContext'
-import { getFiscalYearRange, dateToFiscalYear } from '../utils/fiscalYear'
+import { getFiscalYearRange, dateToFiscalYear, localDateISO } from '../utils/fiscalYear'
 
 // DateFilter — secondary control, compact-first (pill + popover)
 // default = pill h-8 ; compact = pill h-7 (ใน chart card) ; popover เดียวกัน
@@ -17,8 +17,9 @@ const SELECT = 'border border-slate-300 rounded-md px-3 py-1.5 text-sm bg-white 
 const DISABLED_TIP = 'หน้านี้ใช้ข้อมูลรายปีงบเท่านั้น'
 const POPOVER_W = 288   // = w-72 ของ popover — ใช้คำนวณว่ากางไปทางขวาได้พอไหม
 
-const todayISO = () => new Date().toISOString().slice(0, 10)
-const shiftDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
+// วันที่ตามเวลาเครื่อง (ไทย) — toISOString() เป็น UTC ช่วง 00:00–06:59 จะได้วันของเมื่อวาน
+const todayISO = () => localDateISO(new Date())
+const shiftDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return localDateISO(d) }
 
 function summarize(state) {
   if (state.mode === 'fiscal') {

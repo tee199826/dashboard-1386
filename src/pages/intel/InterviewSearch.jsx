@@ -24,6 +24,8 @@ export default function InterviewSearch() {
   const [error, setError] = useState(null)
   const [detail, setDetail] = useState(null)
   const [busy, setBusy] = useState(false)
+  // ลบ/ส่งออกไม่สำเร็จ — แยกจาก error ตอนโหลด ไม่งั้นตารางผลค้นหาหายทั้งหน้าจนต้องรีเฟรช
+  const [actionError, setActionError] = useState(null)
 
   const [q, setQ] = useState('')
   const [f, setF] = useState({ from: '', to: '', district: '', occupation: '', ageMin: '', ageMax: '' })
@@ -36,11 +38,14 @@ export default function InterviewSearch() {
     let cancelled = false
     ;(async () => {
       try {
-        const su = await fetchAllPages('interview_records', '*', { parallel: true, orderBy: 'record_uid' })
-        // PII อ่านได้เฉพาะแอดมิน — ถ้าไม่มีสิทธิ์/ตารางยังไม่สร้าง ให้แสดงส่วนที่เหลือต่อได้
-        const { data: piiRows } = await supabase.from('interview_records_pii').select('*')
+        // ดึงทั้ง 2 ตารางแบบแบ่งหน้าพร้อมกัน — select ครั้งเดียวติดเพดาน 1,000 แถวของ PostgREST ชื่อจะหายเงียบ ๆ
+        // error ของตารางไหนก็ตามโยนออกไปแสดงผล ไม่กลืนเงียบ
+        const [su, piiRows] = await Promise.all([
+          fetchAllPages('interview_records', '*', { parallel: true, orderBy: 'record_uid' }),
+          fetchAllPages('interview_records_pii', '*', { parallel: true, orderBy: 'record_uid' }),
+        ])
         if (cancelled) return
-        setPii(Object.fromEntries((piiRows || []).map((r) => [r.record_uid, r])))
+        setPii(Object.fromEntries(piiRows.map((r) => [r.record_uid, r])))
         setRows(su)
       } catch (e) {
         if (!cancelled) setError(e.message)
@@ -87,10 +92,12 @@ export default function InterviewSearch() {
     const who = P?.full_name || r.doc_no || r.record_uid
     if (!window.confirm(`ลบรายการนี้ถาวร?\n\n${who}\nวันที่สำรวจ ${formatThaiDate(r.surveyed_at) || '—'}\n\nลบแล้วกู้คืนไม่ได้`)) return
     setBusy(true)
+    setActionError(null)
     try {
-      await supabase.from('interview_records_pii').delete().eq('record_uid', r.record_uid)
+      // ลบแถวหลักอย่างเดียว — FK on delete cascade ลบข้อมูลส่วนบุคคลให้ใน transaction เดียวกัน
+      // (เดิมลบ PII ก่อน ถ้าลบแถวหลักล้มจะเหลือรายการที่ข้อมูลส่วนบุคคลหายไปแล้ว)
       const { error: e } = await supabase.from('interview_records').delete().eq('record_uid', r.record_uid)
-      if (e) { setError(`ลบไม่สำเร็จ: ${e.message}`); return }
+      if (e) { setActionError(`ลบไม่สำเร็จ: ${e.message}`); return }
       logAction?.('delete', 'interview_records', r.record_uid, null)
       setDetail(null)
       setRows((s) => s.filter((x) => x.record_uid !== r.record_uid))
@@ -99,6 +106,7 @@ export default function InterviewSearch() {
 
   const handleExport = async () => {
     setBusy(true)
+    setActionError(null)
     try {
       const ExcelJS = (await import('exceljs')).default
       const wb = new ExcelJS.Workbook()
@@ -126,8 +134,11 @@ export default function InterviewSearch() {
       const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
       const a = document.createElement('a')
       a.href = url; a.download = `interview-records-${new Date().toISOString().slice(0, 10)}.xlsx`; a.click()
-      URL.revokeObjectURL(url)
+      // ปล่อย URL หลังเบราว์เซอร์เริ่มดาวน์โหลดแล้ว — revoke ทันที Firefox/Safari อาจยกเลิกการดาวน์โหลด
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
       logAction?.('view', 'interview_records', null, { action: 'export', count: filtered.length })
+    } catch (e) {
+      setActionError(`ส่งออก Excel ไม่สำเร็จ: ${e.message}`)
     } finally { setBusy(false) }
   }
 
@@ -167,6 +178,15 @@ export default function InterviewSearch() {
 
       {loading && (
         <Card><div className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" /> กำลังโหลด...</div></Card>
+      )}
+
+      {actionError && (
+        <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <span className="flex-1">{actionError}</span>
+          <button type="button" onClick={() => setActionError(null)} title="ปิด"
+            className="p-0.5 rounded text-rose-500 hover:bg-rose-100"><X size={15} /></button>
+        </div>
       )}
 
       {error && (
@@ -307,6 +327,7 @@ function DetailPanel({ row: r, pii: P, onClose, onDelete, busy }) {
         <div className="px-6 py-5">
           <Group title="ส่วนที่ ๑ ข้อมูลบุคคล">
             <Row label="ชื่อ-สกุล" value={P?.full_name} />
+            <Row label="เลขที่แบบเดิม (กรอกเอง)" value={r.doc_no_legacy} />
             <Row label="ชื่ออื่นๆ" value={P?.alias} />
             <Row label="สัญชาติ" value={r.nationality} />
             <Row label="เลขประจำตัวประชาชน" value={formatNationalId(P?.national_id)} />

@@ -42,8 +42,13 @@ export function Card({ title, sub, children, className = '' }) {
 const INVALID = '[&_input]:border-rose-400 [&_select]:border-rose-400 [&_textarea]:border-rose-400 [&_input]:bg-rose-50/50 [&_select]:bg-rose-50/50'
 
 export function Field({ label, required, hint, error, children, className = '' }) {
+  // <label> ส่งคลิกต่อให้ control ตัวแรกข้างใน — ถ้าเป็นปุ่มชิป (ChipGroup) การคลิกหัวข้อ/คำอธิบาย/ช่องว่างระหว่างชิป
+  // จะไปกดเลือกตัวเลือกแรกเอง ; ยกเลิกเฉพาะกรณีนั้น (ช่องพิมพ์ยังคลิกหัวข้อแล้วโฟกัสได้ตามปกติ)
+  const blockChipForward = (e) => {
+    if (e.currentTarget.control?.tagName === 'BUTTON' && !e.target.closest('button')) e.preventDefault()
+  }
   return (
-    <label data-invalid={error ? '1' : undefined}
+    <label data-invalid={error ? '1' : undefined} onClick={blockChipForward}
       className={`block space-y-1 ${error ? INVALID : ''} ${className}`}>
       <span className={`text-xs font-medium ${error ? 'text-rose-600' : 'text-slate-600'}`}>
         {label} {required && <span className="text-rose-500">*</span>}

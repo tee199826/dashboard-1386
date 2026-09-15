@@ -11,9 +11,9 @@ import { RotateCcw } from 'lucide-react'
 import { draftKeyOf, readDraft, writeDraft, removeDraft } from '../../utils/interviewDraft'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
-import { dateToFiscalYear } from '../../utils/fiscalYear'
+import { dateToFiscalYear, localDateISO } from '../../utils/fiscalYear'
 import { IntelPage, Card, Field, Input, Select, ChipGroup, RepeatList, SaveBar } from '../../components/intel/FormUI'
-import { DISTRICTS, UNIT_FALLBACK, YEAR_OPTIONS, simpleHash, formatNationalId } from '../../utils/intelOptions'
+import { DISTRICTS, UNIT_FALLBACK, YEAR_OPTIONS, formatNationalId } from '../../utils/intelOptions'
 import { loadAreaOptions, loadCommunitiesFromData, mergeCommunities } from '../../utils/areaOptions'
 import { loadThaiAddress } from '../../utils/thaiAddress'
 import { STATION_TO_BKN } from '../../utils/bknMapping'
@@ -26,13 +26,17 @@ import {
   NATIONALITY_OPTIONS, NATIONALITY_THAI, EVER_OPTIONS, EVER_YES, LOC_BKK, LOC_SCOPE_OPTIONS, SELLER_CONTACT_OPTIONS,
 } from '../../utils/interviewOptions'
 
-const todayISO = () => new Date().toISOString().slice(0, 10)
+// วันที่วันนี้ตามเวลาเครื่อง (ไทย) — toISOString() เป็น UTC ช่วง 00:00–06:59 จะได้วันของเมื่อวาน
+const todayISO = () => localDateISO(new Date())
 const num = (v) => { const n = parseFloat(String(v ?? '').replace(/,/g, '')); return isNaN(n) ? null : n }
 const clean = (v) => { const s = String(v ?? '').trim(); return s || null }
+// มีค่าจริง (ไม่ใช่ null/undefined/ช่องว่างล้วน) — ใช้ตัวเดียวทั้งไฟล์ ทั้งตรวจช่องบังคับ ตัวกรองตอนบันทึก และ JSX
+const filled = (v) => String(v ?? '').trim() !== ''
+// ตัวเลขคงเป็นตัวเลข (เดิม clean() แปลงทุกค่าเป็นข้อความ → ปี/เดือนถูกเก็บเป็น "1")
 const cleanObj = (o) => {
   const out = {}
   for (const [k, v] of Object.entries(o)) {
-    const val = Array.isArray(v) ? (v.length ? v : null) : clean(v)
+    const val = Array.isArray(v) ? (v.length ? v : null) : typeof v === 'number' ? v : clean(v)
     if (val != null) out[k] = val
   }
   return Object.keys(out).length ? out : null
@@ -195,12 +199,12 @@ function InterviewFormBody({ draftKey, onClear }) {
   // ช่องที่ผูกกับตัวเลือก (ช่อง "ระบุ" ของ อื่นๆ / จำนวนคนตอนเสพเป็นกลุ่ม ฯลฯ)
   // จะบังคับเฉพาะตอนที่ช่องนั้นเปิดใช้งานจริง ไม่งั้นจะกรอกให้ครบไม่ได้เลย
   const bad = useMemo(() => {
-    const f = (v) => String(v ?? '').trim() !== ''
+    const f = filled
     // แหล่งซื้อที่นับว่ากรอกแล้ว: เลือกพื้นที่ก่อน แล้ว
-    //   กรุงเทพฯ    → ระบุอย่างน้อย 1 ช่อง (บริเวณ/ชุมชน/แขวง/เขต)
+    //   กรุงเทพฯ    → ระบุอย่างน้อย 1 ช่อง (บริเวณ/ชุมชน/แขวง/เขต/สน.)
     //   จังหวัดอื่น → ต้องระบุชื่อจังหวัด
     const hasLoc = locations.some((l) => (l.scope === LOC_BKK
-      ? f(l.area) || f(l.community) || f(l.subdistrict) || f(l.district)
+      ? f(l.area) || f(l.community) || f(l.subdistrict) || f(l.district) || f(l.station)
       : f(l.scope) && f(l.province)))
     const e = {
       first_name: !f(p.first_name),
@@ -299,6 +303,14 @@ function InterviewFormBody({ draftKey, onClear }) {
     return () => clearTimeout(t)   // พิมพ์ต่อเนื่อง/ออกจากหน้า/กดล้าง → ยกเลิกรอบที่ค้าง
   }, [snapshotJson, initialJson, savedRef, draftKey])
 
+  // บันทึกสำเร็จ → หน่วง 3 วินาทีให้จดเลขทัน แล้วไปหน้าค้นหา
+  // ผูกกับ savedRef ใน effect — ออกจากหน้า/กดล้างข้อมูลก่อนครบ 3 วินาที timer ถูกยกเลิก ไม่ดึงผู้ใช้กลับมาหน้าค้นหา
+  useEffect(() => {
+    if (!savedRef) return
+    const t = setTimeout(() => navigate('/intel/interview'), 3000)
+    return () => clearTimeout(t)
+  }, [savedRef, navigate])
+
   const handleClear = () => {
     if (!window.confirm('ล้างข้อมูลที่กรอกทั้งหมด?\n\nทุกช่องในฟอร์มและร่างที่บันทึกอัตโนมัติจะถูกลบ กู้คืนไม่ได้')) return
     onClear()
@@ -332,7 +344,7 @@ function InterviewFormBody({ draftKey, onClear }) {
     // แถวที่ยังไม่เลือกกรุงเทพฯ/จังหวัดอื่น ไม่บันทึก ; บก.น. มีเฉพาะกรุงเทพฯ
     // จังหวัดอื่น: อำเภอเก็บที่ district, ตำบลเก็บที่ subdistrict (คีย์เดียวกับเขต/แขวง)
     const dealer_locations = locations
-      .filter((l) => l.scope && [l.area, l.community, l.subdistrict, l.district, l.province].some((v) => String(v ?? '').trim()))
+      .filter((l) => l.scope && [l.area, l.community, l.subdistrict, l.district, l.province, l.station].some(filled))
       .map((l) => {
         const isBkk = l.scope === LOC_BKK
         return {
@@ -342,11 +354,8 @@ function InterviewFormBody({ draftKey, onClear }) {
         }
       })
 
-    const hash = simpleHash([
-      tail.interviewed_at, p.national_id, p.first_name, p.last_name, p.age, p.occupation,
-      dealer_locations[0]?.district, regular_drugs.map((d) => `${d.drug}:${d.price}`).join(','), Date.now(),
-    ].map((v) => v ?? '').join('|'))
-    const record_uid = 'h:' + hash
+    // สุ่ม UUID — เดิมใช้ hash 32 บิตจากข้อมูลฟอร์ม ซึ่งชนกันได้ แล้วบันทึกล้มด้วย duplicate key
+    const record_uid = 'u:' + (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`)
 
     // ระยะเวลาแยก ปี/เดือน → เก็บทั้งตัวเลข (ไว้คำนวณสถิติ) และข้อความอ่านง่าย (แผงรายละเอียดใช้แสดง)
     const afterDur = fu.after === 'เสพต่อ' ? toDuration(fu.after_y, fu.after_m) : null
@@ -384,7 +393,7 @@ function InterviewFormBody({ draftKey, onClear }) {
       first_reason: clean(fu.reason === 'อื่นๆ' ? fu.reason_other : fu.reason),
       first_use: cleanObj({
         community: fu.live_community, district: fu.live_district, province: fu.live_province,
-        source: fu.source === 'อื่นๆ' ? fu.source_other : fu.source, method: fu.method, style: fu.style, group_size: fu.group_size,
+        source: fu.source === 'อื่นๆ' ? fu.source_other : fu.source, method: fu.method, style: fu.style, group_size: num(fu.group_size),
         after: fu.after, after_duration: afterDur?.text, after_years: afterDur?.years, after_months: afterDur?.months,
         quit_duration: fu.never_quit ? 'ไม่เคยหยุด' : quitDur?.text, quit_years: quitDur?.years, quit_months: quitDur?.months,
         quit_reason: fu.never_quit ? null : fu.quit_reason,
@@ -394,7 +403,7 @@ function InterviewFormBody({ draftKey, onClear }) {
         substitute: md.substitute, substitute_other: md.substitute_other, years_using: md.years_using,
         amount_per_time: md.amount_per_time, max_amount: md.max_amount, method: md.method,
         frequency: md.frequency === 'อื่นๆ' ? md.frequency_other : md.frequency,
-        style: md.style, group_size: md.group_size, places: md.places, place_other: md.place_other,
+        style: md.style, group_size: num(md.group_size), places: md.places, place_other: md.place_other,
         place_district: md.place_district, place_province: md.place_province, place_station: md.place_station,
         availability: md.availability, availability_reason: md.availability_reason,
       }),
@@ -410,10 +419,6 @@ function InterviewFormBody({ draftKey, onClear }) {
       note: clean(tail.note),
     }
 
-    const { data: saved, error } = await supabase.from('interview_records')
-      .insert([row]).select('code, doc_no').single()
-    if (error) { setStatus({ error: `บันทึกไม่สำเร็จ: ${error.message}` }); return }
-
     // 2) ข้อมูลส่วนบุคคล (ตารางแยก — แอดมินเท่านั้น)
     // ช่องทางติดต่อ → [{ channel, id }] (เก็บเป็นรายการ เผื่อวันหน้าให้ใส่ได้หลายช่องทาง)
     // รู้แค่ช่องทางแต่ไม่รู้ ID ก็เก็บ — รู้ว่าผู้ขายใช้แอปไหนก็มีประโยชน์
@@ -425,7 +430,7 @@ function InterviewFormBody({ draftKey, onClear }) {
     }
     // เก็บผู้ขายที่มีข้อมูลระบุตัวอย่างน้อย 1 อย่าง — รวมเบอร์โทรและ ID ช่องทางติดต่อ (LINE ID อย่างเดียวก็ใช้สืบต่อได้)
     const sellerList = sellers
-      .filter((s) => [s.full_name, s.alias, s.appearance, s.phone, s.contact_id].some((v) => String(v ?? '').trim()))
+      .filter((s) => [s.full_name, s.alias, s.appearance, s.phone, s.contact_id].some(filled))
       .map((s) => ({
         full_name: clean(s.full_name), alias: clean(s.alias), sex: clean(s.sex), age: num(s.age),
         appearance: clean(s.appearance), type: clean(s.type === 'อื่นๆ' ? s.type_other : s.type),
@@ -447,24 +452,17 @@ function InterviewFormBody({ draftKey, onClear }) {
     }
     const hasPii = pii.full_name || pii.national_id || pii.phone || pii.address
       || pii.friend_address || sellerList.length || pii.interviewer
-    if (hasPii) {
-      const { error: e2 } = await supabase.from('interview_records_pii').insert([pii])
-      if (e2) {
-        // ย้อนแถวหลักออกด้วย — ไม่งั้นจะเหลือแถวกำพร้าที่ไม่มีชื่อเจ้าของ
-        // และกดบันทึกซ้ำจะได้แถวซ้ำ (record_uid สร้างใหม่ทุกครั้งเพราะมี Date.now())
-        const { error: e3 } = await supabase.from('interview_records').delete().eq('record_uid', record_uid)
-        setStatus({ error: e3
-          ? `บันทึกข้อมูลส่วนบุคคลไม่สำเร็จ: ${e2.message} — และย้อนรายการไม่สำเร็จ กรุณาแจ้งผู้ดูแลระบบให้ลบ ${record_uid}`
-          : `บันทึกไม่สำเร็จ: ${e2.message} — ยกเลิกรายการนี้แล้ว ข้อมูลในฟอร์มยังอยู่ครบ กดบันทึกใหม่ได้` })
-        return
-      }
-    }
+    // บันทึก 2 ตารางใน transaction เดียวฝั่งฐานข้อมูล (RPC save_interview) — สำเร็จทั้งคู่หรือไม่เข้าเลย
+    // ไม่มีแถวกำพร้าแม้เน็ตหลุด/ปิดแท็บกลางทาง ; ถ้าล้มเหลวข้อมูลในฟอร์มยังอยู่ครบ กดบันทึกใหม่ได้
+    const { data: saved, error } = await supabase
+      .rpc('save_interview', { p_record: row, p_pii: hasPii ? pii : null })
+      .single()
+    if (error) { setStatus({ error: `บันทึกไม่สำเร็จ: ${error.message}` }); return }
 
-    setSavedRef({ code: saved?.code || null, doc_no: saved?.doc_no || null })
+    setSavedRef({ code: saved?.code || null, doc_no: saved?.doc_no || null })   // effect ด้านบนพาไปหน้าค้นหาใน 3 วินาที
     setStatus('saved')
     removeDraft(draftKey)   // บันทึกเข้าระบบแล้ว ร่างไม่ต้องเก็บต่อ
     logAction?.('create', 'interview_records', record_uid, { hasPii: !!hasPii })
-    setTimeout(() => navigate('/intel/interview'), 3000)   // หน่วงให้อ่าน/จดรหัสอ้างอิงทัน แล้วไปหน้าค้นหา
   }
 
   const unitOptions = UNIT_FALLBACK
@@ -958,18 +956,18 @@ function InterviewFormBody({ draftKey, onClear }) {
 
                     {/* ช่องทางติดต่อ — เลือกจากรายการเท่านั้น ; "อื่นๆ" ต้องระบุ ; ใส่ ID แล้วต้องเลือกช่องทาง */}
                     {(() => {
-                      const hasId = !!String(row.contact_id ?? '').trim()
+                      const hasId = filled(row.contact_id)
                       return (
                         <>
                           <Field label="ช่องทางติดต่อ" required={hasId}
-                            error={Boolean(err('seller_contact_channel') && hasId && !String(row.contact_channel ?? '').trim())}>
+                            error={err('seller_contact_channel') && hasId && !filled(row.contact_channel)}>
                             {/* withCurrent — ร่างเก่าที่เคยพิมพ์ช่องทางเองจะยังเห็นค่าเดิม ไม่หายไปเฉย ๆ */}
                             <Select options={withCurrent(SELLER_CONTACT_OPTIONS, row.contact_channel)} value={row.contact_channel ?? ''}
                               onChange={(e) => patch({ contact_channel: e.target.value })} placeholder="— เลือกช่องทาง —" />
                           </Field>
                           {row.contact_channel === 'อื่นๆ' && (
                             <Field label="ระบุช่องทาง (อื่นๆ)" required
-                              error={Boolean(err('seller_contact_other') && !String(row.contact_other ?? '').trim())}>
+                              error={err('seller_contact_other') && !filled(row.contact_other)}>
                               <Input value={row.contact_other ?? ''} placeholder="เช่น Signal, Discord" autoFocus
                                 onChange={(e) => patch({ contact_other: e.target.value })} />
                             </Field>
