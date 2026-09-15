@@ -308,6 +308,7 @@ function DetailPanel({ row: r, pii: P, onClose, onDelete, busy }) {
           <Group title="ส่วนที่ ๑ ข้อมูลบุคคล">
             <Row label="ชื่อ-สกุล" value={P?.full_name} />
             <Row label="ชื่ออื่นๆ" value={P?.alias} />
+            <Row label="สัญชาติ" value={r.nationality} />
             <Row label="เลขประจำตัวประชาชน" value={formatNationalId(P?.national_id)} />
             <Row label="วันเกิด" value={P?.birth_date && formatThaiDate(P.birth_date)} />
             <Row label="อายุ" value={r.age && `${r.age} ปี`} />
@@ -340,23 +341,20 @@ function DetailPanel({ row: r, pii: P, onClose, onDelete, busy }) {
             <Row label="การแพร่ระบาดในที่ทำงาน" value={[work.outbreak, work.outbreak_detail].filter(Boolean).join(' — ')} />
           </Group>
 
-          {!!(r.arrests || []).length && (
-            <Group title={`๑. ประวัติถูกจับ (${r.arrest_count ?? r.arrests.length} ครั้ง)`}>
-              {r.arrests.map((a, i) => (
-                <Row key={i} label={`ครั้งที่ ${a.seq ?? i + 1}`}
-                  value={[a.charge, a.drug, a.amount && `${a.amount} ${a.unit || ''}`, a.station, a.year && `ปี ${a.year}`].filter(Boolean).join(' · ')} />
-              ))}
-            </Group>
-          )}
+          {/* ฟอร์มบังคับเลือกเคย/ไม่เคย — ไม่มีรายการ = ตอบว่า "ไม่เคย" จึงแสดงคำนั้นแทนการซ่อนทั้งหมวด */}
+          <Group title={`๑. ประวัติถูกจับ${(r.arrests || []).length ? ` (${r.arrest_count ?? r.arrests.length} ครั้ง)` : ''}`}>
+            {(r.arrests || []).length ? r.arrests.map((a, i) => (
+              <Row key={i} label={`ครั้งที่ ${a.seq ?? i + 1}`}
+                value={[a.charge, a.drug, a.amount && `${a.amount} ${a.unit || ''}`, a.station, a.year && `ปี ${a.year}`].filter(Boolean).join(' · ')} />
+            )) : <Row label="เคยถูกจับคดียาเสพติด" value="ไม่เคย" />}
+          </Group>
 
-          {!!(r.rehabs || []).length && (
-            <Group title={`๒. ประวัติบำบัด (${r.rehab_count ?? r.rehabs.length} ครั้ง)`}>
-              {r.rehabs.map((x, i) => (
-                <Row key={i} label={`ครั้งที่ ${x.seq ?? i + 1}`}
-                  value={[x.drug, x.place, x.year && `ปี ${x.year}`].filter(Boolean).join(' · ')} />
-              ))}
-            </Group>
-          )}
+          <Group title={`๒. ประวัติบำบัด${(r.rehabs || []).length ? ` (${r.rehab_count ?? r.rehabs.length} ครั้ง)` : ''}`}>
+            {(r.rehabs || []).length ? r.rehabs.map((x, i) => (
+              <Row key={i} label={`ครั้งที่ ${x.seq ?? i + 1}`}
+                value={[x.drug, x.place, x.year && `ปี ${x.year}`].filter(Boolean).join(' · ')} />
+            )) : <Row label="เคยเข้ารับการบำบัด" value="ไม่เคย" />}
+          </Group>
 
           <Group title="๓. การเสพยาครั้งแรก">
             <Row label="อายุที่เริ่มเสพ" value={r.first_use_age && `${r.first_use_age} ปี`} />
@@ -398,7 +396,7 @@ function DetailPanel({ row: r, pii: P, onClose, onDelete, busy }) {
             <Row label="ช่องทางซื้อ" value={buy.channel ?? buy.channels} />
             {(r.dealer_locations || []).map((l, i) => (
               <Row key={i} label={`แหล่งที่ ${i + 1}`}
-                value={[l.area, l.community, l.subdistrict, l.district, l.station, l.bkn].filter(Boolean).join(' · ')} />
+                value={[l.area, l.community, l.subdistrict, l.district, l.province, l.station, l.bkn].filter(Boolean).join(' · ')} />
             ))}
             <Row label="ที่อยู่เพื่อนที่ฝากซื้อ" value={P?.friend_address} />
             <Row label="วิธีการซื้อ" value={buy.method} />
@@ -412,7 +410,9 @@ function DetailPanel({ row: r, pii: P, onClose, onDelete, busy }) {
               {P.sellers.map((s, i) => (
                 <Row key={i} label={s.full_name || s.alias || `ผู้ขายที่ ${i + 1}`}
                   value={[s.alias && `(${s.alias})`, s.sex, s.age && `${s.age} ปี`, s.type, s.zone,
-                    s.appearance, s.phone, s.weapon === 'มี' && `อาวุธ: ${s.weapon_type || 'มี'}`, s.vehicle]
+                    s.appearance, s.phone,
+                    ...(s.contacts || []).map((c) => (c.id ? `${c.channel}: ${c.id}` : c.channel)),
+                    s.weapon === 'มี' && `อาวุธ: ${s.weapon_type || 'มี'}`, s.vehicle]
                     .filter(Boolean).join(' · ')} />
               ))}
             </Group>

@@ -15,6 +15,7 @@ const MODES = [
 const TH = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 const SELECT = 'border border-slate-300 rounded-md px-3 py-1.5 text-sm bg-white text-slate-700 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none'
 const DISABLED_TIP = 'หน้านี้ใช้ข้อมูลรายปีงบเท่านั้น'
+const POPOVER_W = 288   // = w-72 ของ popover — ใช้คำนวณว่ากางไปทางขวาได้พอไหม
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 const shiftDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
@@ -38,7 +39,7 @@ function summarize(state) {
   return `${a[2]} ${TH[a[1]]} ${a[0] + 543} - ${b[2]} ${TH[b[1]]} ${b[0] + 543}`
 }
 
-function Popover({ availableYears, disabledModes, onClose }) {
+function Popover({ availableYears, disabledModes, onClose, align = 'left' }) {
   const { state, setMode, setFiscalYears, toggleFiscalYear, setMonthYear, setMonth, setCustomFrom, setCustomTo, reset } = useFilter()
   const years = availableYears.length ? availableYears : (state.fiscalYears?.length ? state.fiscalYears : [])
 
@@ -52,7 +53,7 @@ function Popover({ availableYears, disabledModes, onClose }) {
   const safeYears = years.length ? years : [currentFY]
 
   return (
-    <div className="absolute top-full right-0 mt-2 z-50 w-72 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-lg p-4">
+    <div className={`absolute top-full ${align === 'left' ? 'left-0' : 'right-0'} mt-2 z-50 w-72 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-lg p-4`}>
       {/* tab switcher */}
       <div className="flex gap-1 p-1 bg-slate-100 rounded-lg mb-3">
         {MODES.map(m => {
@@ -163,12 +164,24 @@ export default function DateFilter({ availableYears = [], compact = false, disab
     return () => document.removeEventListener('mousedown', onDoc)
   }, [open])
 
+  // เลือกฝั่งที่ popover กางออกตอนกดเปิด — กางไปทางขวาเป็นหลัก
+  // ถ้าปุ่มอยู่ชิดขอบขวาจนที่ไม่พอ ค่อยกางไปทางซ้าย
+  // (เดิม right-0 ตายตัว → ปุ่มที่อยู่ฝั่งซ้ายของหน้า popover ยื่นเลยขอบ <main> แล้วโดนตัด)
+  const [align, setAlign] = useState('left')
+  const toggle = () => {
+    if (!open && ref.current) {
+      const { left } = ref.current.getBoundingClientRect()
+      setAlign(window.innerWidth - left >= POPOVER_W + 16 ? 'left' : 'right')
+    }
+    setOpen(o => !o)
+  }
+
   const h = compact ? 'h-7 px-2 text-xs' : 'h-11 px-4 text-[15px] font-semibold'
   const icon = compact ? 12 : 16
 
   return (
     <div className="relative inline-flex items-center gap-1" ref={ref}>
-      <button onClick={() => setOpen(o => !o)}
+      <button onClick={toggle}
         className={`inline-flex items-center gap-2 ${h} rounded-xl bg-white border border-slate-300 text-slate-700 shadow-sm hover:border-slate-400 hover:bg-slate-50 transition`}>
         <Calendar size={icon} className="text-blue-600" />
         <span>{summarize(state)}</span>
@@ -176,7 +189,7 @@ export default function DateFilter({ availableYears = [], compact = false, disab
         <ChevronDown size={icon} className="text-slate-400" />
       </button>
       <ResetButton />
-      {open && <Popover availableYears={availableYears} disabledModes={disabledModes} onClose={() => setOpen(false)} />}
+      {open && <Popover availableYears={availableYears} disabledModes={disabledModes} align={align} onClose={() => setOpen(false)} />}
     </div>
   )
 }

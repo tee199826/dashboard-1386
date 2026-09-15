@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { LogOut, LogIn, AlertTriangle, Settings } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
+import { clearAllDrafts } from '../utils/interviewDraft'
 import logoOncb from '../assets/logo-oncb.png'
 import { supabase } from '../lib/supabase'
 
@@ -54,6 +55,7 @@ export default function Header() {
   }, [])
 
   const handleLogout = async () => {
+    clearAllDrafts()   // ลบร่างแบบซักผู้เสพที่ค้างในแท็บนี้ — มีข้อมูลส่วนบุคคล
     await signOut()
     navigate('/')
   }

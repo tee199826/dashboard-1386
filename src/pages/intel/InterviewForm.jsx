@@ -7,18 +7,23 @@
 // เผื่อวันหน้าเปิดสถิติแบบซักให้อ่านสาธารณะโดยที่ชื่อ/เลขบัตรไม่หลุดไปด้วย
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { RotateCcw } from 'lucide-react'
+import { draftKeyOf, readDraft, writeDraft, removeDraft } from '../../utils/interviewDraft'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { dateToFiscalYear } from '../../utils/fiscalYear'
 import { IntelPage, Card, Field, Input, Select, ChipGroup, RepeatList, SaveBar } from '../../components/intel/FormUI'
 import { DISTRICTS, UNIT_FALLBACK, YEAR_OPTIONS, simpleHash, formatNationalId } from '../../utils/intelOptions'
 import { loadAreaOptions, loadCommunitiesFromData, mergeCommunities } from '../../utils/areaOptions'
+import { loadThaiAddress } from '../../utils/thaiAddress'
+import { STATION_TO_BKN } from '../../utils/bknMapping'
 import {
   RELIGION_OPTIONS, MARITAL_OPTIONS, RESIDENT_STATUS_OPTIONS, EDUCATION_OPTIONS, OCCUPATION_OPTIONS,
   INCOME_OPTIONS, FIRST_DRUG_OPTIONS, FIRST_SOURCE_OPTIONS, FIRST_REASON_OPTIONS, USE_METHOD_OPTIONS,
   USE_STYLE_OPTIONS, AFTER_FIRST_OPTIONS, MAIN_DRUG_OPTIONS, USAGE_TYPE_OPTIONS, SUBSTITUTE_OPTIONS,
   FREQUENCY_OPTIONS, USE_PLACE_OPTIONS, AVAILABILITY_OPTIONS, PRICE_DRUG_OPTIONS, BUY_CHANNEL_OPTIONS,
   SELLER_TYPE_OPTIONS, SELLER_ZONE_OPTIONS, SEX_OPTIONS, HAS_OPTIONS, CHARGE_OPTIONS, CHANNEL_FRIEND,
+  NATIONALITY_OPTIONS, NATIONALITY_THAI, EVER_OPTIONS, EVER_YES, LOC_BKK, LOC_SCOPE_OPTIONS, SELLER_CONTACT_OPTIONS,
 } from '../../utils/interviewOptions'
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
@@ -33,15 +38,75 @@ const cleanObj = (o) => {
   return Object.keys(out).length ? out : null
 }
 
+const fmtTime = (ms) => new Date(ms).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+
+// ตัวเลือก + ค่าที่มีอยู่แล้วแต่ไม่อยู่ในรายการ (เช่น ร่างเก่าที่เคยพิมพ์เอง) — ไม่ให้ค่าหายจากช่องเฉย ๆ
+const withCurrent = (list, value) => (value && !list.includes(value) ? [value, ...list] : list)
+
+// สน. ในกรุงเทพฯ 88 แห่ง — เลือก สน. แล้วใส่ บก.น. ให้อัตโนมัติ (1 สน. สังกัด 1 บก.น. เสมอ ตามตาราง bknMapping)
+// เก็บชื่อ สน. แบบไม่มีคำนำหน้า ให้ตรงกับ STATION_TO_BKN และคอลัมน์ police_station ของข้อมูลเดิม
+const STATION_OPTIONS = Object.keys(STATION_TO_BKN)
+  .sort((a, b) => a.localeCompare(b, 'th'))
+  .map((s) => [s, `สน.${s} · ${STATION_TO_BKN[s]}`])
+// รองรับพิมพ์ "สน.ลุมพินี" / "สน. ลุมพินี" / "ลุมพินี" ; ไม่ใช่ สน. ในกรุงเทพฯ (เช่น สภ. ต่างจังหวัด) → ''
+const bknOfStation = (v) => STATION_TO_BKN[String(v ?? '').trim().replace(/^สน\.\s*/, '')] || ''
+// ตัวเลือก สน. + ค่าเดิมที่ไม่อยู่ในรายการ (ร่างเก่าที่เคยพิมพ์เอง) — ไม่ให้ค่าหายจากช่อง
+const stationOptions = (current) => (current && !STATION_TO_BKN[current] ? [[current, current], ...STATION_OPTIONS] : STATION_OPTIONS)
+
+// ระยะเวลา ปี + เดือน → { years, months, text } — ว่างทั้งสองช่อง = null
+// เดือนเกิน 11 ปัดขึ้นเป็นปี (0 ปี 18 เดือน → 1 ปี 6 เดือน) ; ปีทศนิยมแปลงเป็นเดือน (1.5 ปี → 1 ปี 6 เดือน)
+const toDuration = (y, m) => {
+  if (!String(y ?? '').trim() && !String(m ?? '').trim()) return null
+  const total = Math.max(0, Math.round((num(y) || 0) * 12 + (num(m) || 0)))
+  const years = Math.floor(total / 12), months = total % 12
+  return { years, months, text: [years && `${years} ปี`, months && `${months} เดือน`].filter(Boolean).join(' ') || '0 เดือน' }
+}
+
+// ช่องระยะเวลาแยก ปี / เดือน — มีหน่วยกำกับท้ายช่อง
+function YearMonth({ y, m, onY, onM, disabled }) {
+  const box = (value, onChange, unit) => (
+    <div className="relative">
+      <Input type="number" min="0" inputMode="numeric" value={value} disabled={disabled}
+        className="!pr-12" onChange={(e) => onChange(e.target.value)} />
+      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">{unit}</span>
+    </div>
+  )
+  return <div className="grid grid-cols-2 gap-2">{box(y, onY, 'ปี')}{box(m, onM, 'เดือน')}</div>
+}
+
 const BLANK_ARREST = { seq: '', charge: '', drug: '', amount: '', unit: '', station: '', year: '' }
 const BLANK_REHAB = { seq: '', drug: '', place: '', year: '' }
 const BLANK_PRICE = { drug: '', price: '', unit: '', period: '' }
-const BLANK_LOC = { area: '', community: '', subdistrict: '', district: '', station: '', bkn: '' }
-const BLANK_SELLER = { full_name: '', alias: '', sex: '', age: '', appearance: '', type: '', type_other: '', zone: '', phone: '', weapon: '', weapon_type: '', vehicle: '' }
+// scope = กรุงเทพมหานคร / จังหวัดอื่น ; province ใช้เฉพาะจังหวัดอื่น (กรุงเทพฯ ใส่ให้ตอนบันทึก)
+const BLANK_LOC = { scope: '', area: '', province: '', community: '', subdistrict: '', district: '', station: '', bkn: '' }
+// contact_channel = ช่องทางติดต่อ (เลือกจากรายการ) ; contact_other = ชื่อช่องทางเมื่อเลือก "อื่นๆ" ; contact_id = ID / ชื่อบัญชี
+const BLANK_SELLER = {
+  full_name: '', alias: '', sex: '', age: '', appearance: '', type: '', type_other: '', zone: '', phone: '',
+  contact_channel: '', contact_other: '', contact_id: '',
+  weapon: '', weapon_type: '', vehicle: '',
+}
 
+// ตัวครอบ — "ล้างข้อมูล" = ลบร่าง แล้วเปลี่ยน key ให้ฟอร์ม mount ใหม่ทั้งก้อน
+// (state ทุกช่องกลับเป็นค่าเริ่มต้นพร้อมกัน ไม่ต้องไล่รีเซ็ตทีละ useState แล้วลืมบางช่อง)
 export default function InterviewForm() {
+  const { user } = useAuth()
+  const draftKey = draftKeyOf(user?.id)
+  const [formKey, setFormKey] = useState(0)
+  const clearAll = () => {
+    removeDraft(draftKey)
+    setFormKey((k) => k + 1)
+    document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  return <InterviewFormBody key={formKey} draftKey={draftKey} onClear={clearAll} />
+}
+
+function InterviewFormBody({ draftKey, onClear }) {
   const navigate = useNavigate()
   const { logAction } = useAuth()
+  // ร่างที่ค้างในแท็บนี้ — อ่านครั้งเดียวตอน mount (กดล้างข้อมูลแล้ว mount ใหม่จะได้ null)
+  // ทุก useState ด้านล่างใช้ค่าจากร่างทับค่าเริ่มต้น — ช่องที่เพิ่มในฟอร์มทีหลังยังได้ค่าเริ่มต้นครบ
+  const [draft] = useState(() => readDraft(draftKey))
+  const d = draft?.data
   const [status, setStatus] = useState(null)
   const [savedRef, setSavedRef] = useState(null)   // { code, doc_no } ที่ฐานข้อมูลออกให้ตอนบันทึก
 
@@ -49,23 +114,28 @@ export default function InterviewForm() {
   // เลขที่แบบ (doc_no) ไม่มีช่องกรอก — trigger ฝั่งฐานข้อมูลออกเลข ๑-๑/๐๐๐๑ ให้เอง
   const [p, setP] = useState({
     first_name: '', last_name: '', alias: '', age: '', birth_date: '', religion: '', religion_other: '',
-    national_id: '', phone: '', contact_phone: '',
+    nationality: '', nationality_other: '', national_id: '', phone: '', contact_phone: '',
     addr_area: '', addr_no: '', addr_moo: '', addr_building: '', addr_floor: '', addr_room: '',
     addr_soi: '', addr_road: '', subdistrict: '', district: '', province: 'กรุงเทพมหานคร',
     station: '', bkn: '', resident_status: '',
     marital_status: '', education: '', education_other: '', education_place: '',
     occupation: '', occupation_other: '', work_place: '', work_district: '', work_province: '',
     income_range: '', work_nature: '', workplace_outbreak: '', workplace_outbreak_detail: '',
+    ...d?.p,
   })
   const setPf = (patch) => setP((s) => ({ ...s, ...patch }))
 
   // ── ส่วนที่ 2 ──
-  const [arrests, setArrests] = useState([])
-  const [rehabs, setRehabs] = useState([])
+  // เคย/ไม่เคย ต้องเลือกก่อน — เลือก "เคย" แล้วถึงจะเปิดให้กรอกรายละเอียด
+  const [arrestEver, setArrestEver] = useState(d?.arrestEver ?? '')
+  const [rehabEver, setRehabEver] = useState(d?.rehabEver ?? '')
+  const [arrests, setArrests] = useState(d?.arrests ?? [])
+  const [rehabs, setRehabs] = useState(d?.rehabs ?? [])
   const [fu, setFu] = useState({
     age: '', drug: '', drug_other: '', live_community: '', live_district: '', live_province: '',
     source: '', source_other: '', reason: '', reason_other: '', method: '', style: '', group_size: '',
-    after: '', after_duration: '', quit_duration: '', quit_reason: '',
+    after: '', after_y: '', after_m: '', quit_y: '', quit_m: '', never_quit: false, quit_reason: '',
+    ...d?.fu,
   })
   const setFuf = (patch) => setFu((s) => ({ ...s, ...patch }))
 
@@ -74,21 +144,23 @@ export default function InterviewForm() {
     years_using: '', amount_per_time: '', max_amount: '', method: '', frequency: '', frequency_other: '',
     style: '', group_size: '', places: [], place_other: '', place_district: '', place_province: '', place_station: '',
     availability: '', availability_reason: '',
+    ...d?.md,
   })
   const setMdf = (patch) => setMd((s) => ({ ...s, ...patch }))
 
-  const [prices, setPrices] = useState([{ ...BLANK_PRICE }])
-  const [slang, setSlang] = useState({ ยาบ้า: '', ไอซ์: '', เฮโรอีน: '', คีตามีน: '', ยาอี: '', อื่นๆ: '' })
+  const [prices, setPrices] = useState(d?.prices ?? [{ ...BLANK_PRICE }])
+  const [slang, setSlang] = useState({ ยาบ้า: '', ไอซ์: '', เฮโรอีน: '', คีตามีน: '', ยาอี: '', อื่นๆ: '', ...d?.slang })
 
   const [buy, setBuy] = useState({
     channel: '', friend_address: '', method: '', known_from: '', why_here: '',
     seller_count: '', seller_count_unknown: false,
+    ...d?.buy,
   })
   const setBuyf = (patch) => setBuy((s) => ({ ...s, ...patch }))
-  const [locations, setLocations] = useState([{ ...BLANK_LOC }])
-  const [sellers, setSellers] = useState([])
+  const [locations, setLocations] = useState(d?.locations ?? [{ ...BLANK_LOC }])
+  const [sellers, setSellers] = useState(d?.sellers ?? [])
 
-  const [tail, setTail] = useState({ note: '', interviewer: '', unit: '', interviewed_at: todayISO(), interviewer_phone: '' })
+  const [tail, setTail] = useState({ note: '', interviewer: '', unit: '', interviewed_at: todayISO(), interviewer_phone: '', ...d?.tail })
   const setTailf = (patch) => setTail((s) => ({ ...s, ...patch }))
 
   // ── ตัวเลือกพื้นที่ (แขวง/ชุมชน ตามเขต) ──
@@ -107,21 +179,53 @@ export default function InterviewForm() {
   const subsOf = (d) => area.subdistricts[d] || []
   const comsOf = (d, s) => area.communities[`${d}|${s}`] || area.communities[`${d}|`] || []
 
+  // รายชื่อจังหวัด/อำเภอ/ตำบลทั่วประเทศ — โหลดเมื่อมีแหล่งซื้อแถวไหนเลือก "จังหวัดอื่น" เท่านั้น
+  // (ไฟล์ใหญ่กว่ารายชื่อกรุงเทพฯ มาก ไม่ได้ใช้ก็ไม่ต้องโหลด)
+  // null = ยังไม่โหลด/กำลังโหลด ; false = โหลดไม่สำเร็จ → ถอยไปใช้ช่องพิมพ์เอง
+  const needThai = locations.some((l) => l.scope && l.scope !== LOC_BKK)
+  const [thai, setThai] = useState(null)
+  useEffect(() => {
+    if (!needThai || thai !== null) return
+    let cancelled = false
+    loadThaiAddress().then((t) => { if (!cancelled) setThai(t || false) })
+    return () => { cancelled = true }
+  }, [needThai, thai])
+
   // ── ช่องบังคับกรอก ──────────────────────────────────────────────────────────
   // ช่องที่ผูกกับตัวเลือก (ช่อง "ระบุ" ของ อื่นๆ / จำนวนคนตอนเสพเป็นกลุ่ม ฯลฯ)
   // จะบังคับเฉพาะตอนที่ช่องนั้นเปิดใช้งานจริง ไม่งั้นจะกรอกให้ครบไม่ได้เลย
   const bad = useMemo(() => {
     const f = (v) => String(v ?? '').trim() !== ''
-    const hasLoc = locations.some((l) => f(l.area) || f(l.community) || f(l.subdistrict) || f(l.district))
+    // แหล่งซื้อที่นับว่ากรอกแล้ว: เลือกพื้นที่ก่อน แล้ว
+    //   กรุงเทพฯ    → ระบุอย่างน้อย 1 ช่อง (บริเวณ/ชุมชน/แขวง/เขต)
+    //   จังหวัดอื่น → ต้องระบุชื่อจังหวัด
+    const hasLoc = locations.some((l) => (l.scope === LOC_BKK
+      ? f(l.area) || f(l.community) || f(l.subdistrict) || f(l.district)
+      : f(l.scope) && f(l.province)))
     const e = {
       first_name: !f(p.first_name),
       last_name: !f(p.last_name),
-      national_id: p.national_id.length !== 13,   // ต้องครบ 13 หลักพอดี (ช่องกรอกกรองให้เหลือเฉพาะตัวเลขแล้ว)
+      nationality: !f(p.nationality),
+      nationality_other: p.nationality === 'อื่นๆ' && !f(p.nationality_other),
+      // เลขบัตร (ช่องกรอกกรองให้เหลือเฉพาะตัวเลขแล้ว):
+      //   ยังไม่เลือกสัญชาติ → ยังไม่ตรวจ (ช่องปิดอยู่ ให้ไปเตือนที่ช่องสัญชาติแทน)
+      //   ไทย              → บังคับ ต้องครบ 13 หลักพอดี
+      //   สัญชาติอื่น       → ไม่บังคับ แต่ถ้ากรอกต้องครบ 13 หลัก กันเลขครึ่ง ๆ กลาง ๆ
+      national_id: p.nationality === NATIONALITY_THAI
+        ? p.national_id.length !== 13
+        : f(p.nationality) && p.national_id.length > 0 && p.national_id.length !== 13,
       education: !f(p.education),
       education_other: p.education === 'อื่นๆ' && !f(p.education_other),
       occupation: !f(p.occupation),
       occupation_other: p.occupation === 'อื่นๆ' && !f(p.occupation_other),
       income_range: !f(p.income_range),
+
+      // ข้อ ๑–๒ : ต้องเลือกเคย/ไม่เคย และถ้า "เคย" ต้องมีรายการอย่างน้อย 1 ครั้ง
+      // (ไม่งั้นได้ข้อมูลขัดกันเอง — ตอบว่าเคย แต่ arrest_count = 0)
+      arrest_ever: !f(arrestEver),
+      arrest_rows: arrestEver === EVER_YES && !arrests.some((a) => f(a.charge) || f(a.drug)),
+      rehab_ever: !f(rehabEver),
+      rehab_rows: rehabEver === EVER_YES && !rehabs.some((r) => f(r.drug) || f(r.place)),
 
       fu_age: !f(fu.age),
       fu_live_community: !f(fu.live_community),
@@ -136,9 +240,9 @@ export default function InterviewForm() {
       fu_style: !f(fu.style),
       fu_group_size: fu.style === 'เสพเป็นกลุ่ม' && !f(fu.group_size),
       fu_after: !f(fu.after),
-      fu_after_duration: fu.after === 'เสพต่อ' && !f(fu.after_duration),
-      fu_quit_duration: !f(fu.quit_duration),
-      fu_quit_reason: !f(fu.quit_reason),
+      // ระยะเวลา: กรอกปี หรือ เดือน อย่างน้อย 1 ช่องก็พอ
+      fu_after_duration: fu.after === 'เสพต่อ' && !f(fu.after_y) && !f(fu.after_m),
+      // ช่วงหยุดสารเสพติด (ปี/เดือน) และสาเหตุที่หยุดได้ — ไม่บังคับกรอก
 
       md_drugs: md.drugs.length === 0,
       md_drug_other: md.drugs.includes('อื่นๆ') && !f(md.drug_other),
@@ -163,6 +267,10 @@ export default function InterviewForm() {
       md_availability_reason: !f(md.availability_reason),
 
       friend_address: buy.channel === CHANNEL_FRIEND && !f(buy.friend_address),
+      // ผู้ขายที่ใส่ ID/ชื่อบัญชีแล้ว ต้องบอกช่องทางด้วย — ID อย่างเดียวไม่รู้ว่าอยู่แอปไหน
+      seller_contact_channel: sellers.some((s) => f(s.contact_id) && !f(s.contact_channel)),
+      // เลือกช่องทาง "อื่นๆ" ต้องระบุชื่อช่องทาง
+      seller_contact_other: sellers.some((s) => s.contact_channel === 'อื่นๆ' && !f(s.contact_other)),
       locations: !hasLoc,
 
       interviewer: !f(tail.interviewer),
@@ -171,11 +279,30 @@ export default function InterviewForm() {
     }
     e.count = Object.values(e).filter(Boolean).length
     return e
-  }, [p, fu, md, buy, locations, tail])
+  }, [p, fu, md, buy, locations, tail, arrestEver, arrests, rehabEver, rehabs, sellers])
 
   // เตือนสีแดงหลังกดบันทึกครั้งแรกเท่านั้น — ไม่งั้นเปิดหน้ามาฟอร์มแดงทั้งใบ
   const [showErrors, setShowErrors] = useState(false)
   const err = (k) => showErrors && bad[k]
+
+  // ── auto save ──────────────────────────────────────────────────────────────
+  // เขียนร่างหลังหยุดพิมพ์ 0.8 วินาที ; ยังไม่ได้แก้อะไรเลย (ตรงกับตอนเปิดหน้า) → ไม่สร้างร่าง
+  const snapshotJson = JSON.stringify({ p, arrestEver, rehabEver, arrests, rehabs, fu, md, prices, slang, buy, locations, sellers, tail })
+  const [initialJson] = useState(snapshotJson)
+  const [draftAt, setDraftAt] = useState(draft?.savedAt ?? null)
+  useEffect(() => {
+    if (savedRef || snapshotJson === initialJson) return   // บันทึกเข้าระบบแล้ว / ยังไม่ได้แก้อะไร
+    const t = setTimeout(() => {
+      writeDraft(draftKey, snapshotJson)
+      setDraftAt(Date.now())
+    }, 800)
+    return () => clearTimeout(t)   // พิมพ์ต่อเนื่อง/ออกจากหน้า/กดล้าง → ยกเลิกรอบที่ค้าง
+  }, [snapshotJson, initialJson, savedRef, draftKey])
+
+  const handleClear = () => {
+    if (!window.confirm('ล้างข้อมูลที่กรอกทั้งหมด?\n\nทุกช่องในฟอร์มและร่างที่บันทึกอัตโนมัติจะถูกลบ กู้คืนไม่ได้')) return
+    onClear()
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -190,23 +317,30 @@ export default function InterviewForm() {
     }
     setStatus('saving')
 
-    const arrestList = arrests.filter((a) => a.charge.trim() || a.drug.trim()).map((a) => ({
+    // เลือก "ไม่เคย" → ไม่บันทึกแถวที่อาจกรอกค้างไว้ก่อนเปลี่ยนใจ
+    const arrestList = (arrestEver === EVER_YES ? arrests : []).filter((a) => a.charge.trim() || a.drug.trim()).map((a) => ({
       seq: num(a.seq), charge: clean(a.charge), drug: clean(a.drug),
       amount: num(a.amount), unit: clean(a.unit), station: clean(a.station), year: num(a.year),
     }))
-    const rehabList = rehabs.filter((r) => r.drug.trim() || r.place.trim()).map((r) => ({
+    const rehabList = (rehabEver === EVER_YES ? rehabs : []).filter((r) => r.drug.trim() || r.place.trim()).map((r) => ({
       seq: num(r.seq), drug: clean(r.drug), place: clean(r.place), year: num(r.year),
     }))
     const regular_drugs = prices.filter((d) => d.drug.trim() && num(d.price) != null && d.unit.trim()).map((d) => ({
       drug: d.drug.trim(), price: num(d.price), unit: d.unit.trim(), period: clean(d.period),
       rawPrice: `${d.price} บาท/${d.unit.trim()}`, amount: 1,
     }))
+    // แถวที่ยังไม่เลือกกรุงเทพฯ/จังหวัดอื่น ไม่บันทึก ; บก.น. มีเฉพาะกรุงเทพฯ
+    // จังหวัดอื่น: อำเภอเก็บที่ district, ตำบลเก็บที่ subdistrict (คีย์เดียวกับเขต/แขวง)
     const dealer_locations = locations
-      .filter((l) => l.district.trim() || l.subdistrict.trim() || l.community.trim() || l.area.trim())
-      .map((l) => ({
-        area: clean(l.area), community: clean(l.community), subdistrict: clean(l.subdistrict),
-        district: clean(l.district), province: 'กรุงเทพมหานคร', station: clean(l.station), bkn: clean(l.bkn),
-      }))
+      .filter((l) => l.scope && [l.area, l.community, l.subdistrict, l.district, l.province].some((v) => String(v ?? '').trim()))
+      .map((l) => {
+        const isBkk = l.scope === LOC_BKK
+        return {
+          area: clean(l.area), community: clean(l.community), subdistrict: clean(l.subdistrict),
+          district: clean(l.district), province: isBkk ? LOC_BKK : clean(l.province),
+          station: clean(l.station), bkn: isBkk ? clean(bknOfStation(l.station) || l.bkn) : null,
+        }
+      })
 
     const hash = simpleHash([
       tail.interviewed_at, p.national_id, p.first_name, p.last_name, p.age, p.occupation,
@@ -214,12 +348,17 @@ export default function InterviewForm() {
     ].map((v) => v ?? '').join('|'))
     const record_uid = 'h:' + hash
 
+    // ระยะเวลาแยก ปี/เดือน → เก็บทั้งตัวเลข (ไว้คำนวณสถิติ) และข้อความอ่านง่าย (แผงรายละเอียดใช้แสดง)
+    const afterDur = fu.after === 'เสพต่อ' ? toDuration(fu.after_y, fu.after_m) : null
+    const quitDur = fu.never_quit ? null : toDuration(fu.quit_y, fu.quit_m)
+
     // 1) เนื้อหาแบบฟอร์ม
     const row = {
       record_uid,
       fiscal_year: dateToFiscalYear(tail.interviewed_at),
       surveyed_at: tail.interviewed_at,
       age: num(p.age),
+      nationality: clean(p.nationality === 'อื่นๆ' ? p.nationality_other : p.nationality),
       religion: clean(p.religion === 'อื่นๆ' ? p.religion_other : p.religion),
       marital_status: clean(p.marital_status),
       education: clean(p.education === 'อื่นๆ' ? p.education_other : p.education),
@@ -227,7 +366,8 @@ export default function InterviewForm() {
       resident_status: clean(p.resident_status),
       residence: cleanObj({
         community: p.addr_building, subdistrict: p.subdistrict, district: p.district,
-        province: p.province, station: p.station, bkn: p.bkn,
+        // บก.น. อิงจาก สน. เสมอ (กันร่างเก่าที่ บก.น. ไม่ตรงกับ สน.)
+        province: p.province, station: p.station, bkn: bknOfStation(p.station) || p.bkn,
       }),
       occupation: clean(p.occupation === 'อื่นๆ' ? p.occupation_other : p.occupation),
       work_info: cleanObj({
@@ -245,8 +385,9 @@ export default function InterviewForm() {
       first_use: cleanObj({
         community: fu.live_community, district: fu.live_district, province: fu.live_province,
         source: fu.source === 'อื่นๆ' ? fu.source_other : fu.source, method: fu.method, style: fu.style, group_size: fu.group_size,
-        after: fu.after, after_duration: fu.after_duration,
-        quit_duration: fu.quit_duration, quit_reason: fu.quit_reason,
+        after: fu.after, after_duration: afterDur?.text, after_years: afterDur?.years, after_months: afterDur?.months,
+        quit_duration: fu.never_quit ? 'ไม่เคยหยุด' : quitDur?.text, quit_years: quitDur?.years, quit_months: quitDur?.months,
+        quit_reason: fu.never_quit ? null : fu.quit_reason,
       }),
       main_drug: cleanObj({
         drugs: md.drugs, drug_other: md.drug_other, usage_type: md.usage_type, usage_with: md.usage_with,
@@ -274,11 +415,21 @@ export default function InterviewForm() {
     if (error) { setStatus({ error: `บันทึกไม่สำเร็จ: ${error.message}` }); return }
 
     // 2) ข้อมูลส่วนบุคคล (ตารางแยก — แอดมินเท่านั้น)
-    const sellerList = sellers.filter((s) => s.full_name.trim() || s.alias.trim() || s.appearance.trim())
+    // ช่องทางติดต่อ → [{ channel, id }] (เก็บเป็นรายการ เผื่อวันหน้าให้ใส่ได้หลายช่องทาง)
+    // รู้แค่ช่องทางแต่ไม่รู้ ID ก็เก็บ — รู้ว่าผู้ขายใช้แอปไหนก็มีประโยชน์
+    // "อื่นๆ" เก็บชื่อช่องทางที่ระบุ ไม่ใช่คำว่า "อื่นๆ"
+    const contactsOf = (s) => {
+      const channel = s.contact_channel === 'อื่นๆ' ? (clean(s.contact_other) || 'อื่นๆ') : clean(s.contact_channel)
+      const id = clean(s.contact_id)
+      return channel || id ? [{ channel, id }] : []
+    }
+    // เก็บผู้ขายที่มีข้อมูลระบุตัวอย่างน้อย 1 อย่าง — รวมเบอร์โทรและ ID ช่องทางติดต่อ (LINE ID อย่างเดียวก็ใช้สืบต่อได้)
+    const sellerList = sellers
+      .filter((s) => [s.full_name, s.alias, s.appearance, s.phone, s.contact_id].some((v) => String(v ?? '').trim()))
       .map((s) => ({
         full_name: clean(s.full_name), alias: clean(s.alias), sex: clean(s.sex), age: num(s.age),
         appearance: clean(s.appearance), type: clean(s.type === 'อื่นๆ' ? s.type_other : s.type),
-        zone: clean(s.zone), phone: clean(s.phone),
+        zone: clean(s.zone), phone: clean(s.phone), contacts: contactsOf(s),
         weapon: clean(s.weapon), weapon_type: clean(s.weapon_type), vehicle: clean(s.vehicle),
       }))
     const pii = {
@@ -311,6 +462,7 @@ export default function InterviewForm() {
 
     setSavedRef({ code: saved?.code || null, doc_no: saved?.doc_no || null })
     setStatus('saved')
+    removeDraft(draftKey)   // บันทึกเข้าระบบแล้ว ร่างไม่ต้องเก็บต่อ
     logAction?.('create', 'interview_records', record_uid, { hasPii: !!hasPii })
     setTimeout(() => navigate('/intel/interview'), 3000)   // หน่วงให้อ่าน/จดรหัสอ้างอิงทัน แล้วไปหน้าค้นหา
   }
@@ -323,6 +475,15 @@ export default function InterviewForm() {
       backTo="/intel/interview">
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        {draft && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-[13px] text-blue-900">
+            <span className="font-semibold">กู้คืนข้อมูลที่กรอกค้างไว้แล้ว</span>
+            {' '}— บันทึกร่างอัตโนมัติล่าสุดเวลา {fmtTime(draft.savedAt)} น.
+            <span className="block mt-0.5 text-[11.5px] text-blue-700/80">
+              ร่างเก็บไว้เฉพาะในแท็บนี้ ปิดแท็บแล้วจะหาย · ถ้าต้องการเริ่มใหม่ กด "ล้างข้อมูล" ด้านล่าง
+            </span>
+          </div>
+        )}
 
         <Card title="ส่วนที่ ๑ ข้อมูลบุคคล" sub="ช่องที่ระบุตัวบุคคลถูกเก็บแยกตาราง เข้าถึงได้เฉพาะผู้ดูแลระบบ">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -334,15 +495,39 @@ export default function InterviewForm() {
             <Field label="ชื่ออื่นๆ / ฉายา"><Input value={p.alias} onChange={(e) => setPf({ alias: e.target.value })} /></Field>
             <Field label="อายุ (ปี)"><Input type="number" min="0" max="120" value={p.age} onChange={(e) => setPf({ age: e.target.value })} /></Field>
             <Field label="วัน เดือน ปีเกิด"><Input type="date" value={p.birth_date} onChange={(e) => setPf({ birth_date: e.target.value })} /></Field>
-            <Field label="เลขประจำตัวประชาชน" required
-              error={err('national_id') && (p.national_id ? `ต้องครบ 13 หลัก (กรอกแล้ว ${p.national_id.length} หลัก)` : 'กรุณากรอกเลข 13 หลัก')}
-              hint={`เลข 13 หลัก กรอกตัวเลขเท่านั้น ระบบจะใส่ขีดให้อัตโนมัติ`}>
-              {/* แสดงเป็น x-xxxx-xxxxx-xx-x แต่เก็บลงฐานข้อมูลเป็นตัวเลขล้วน
-                  ขีดใส่ให้อัตโนมัติ — พิมพ์ตัวอักษร/ขีด/เว้นวรรคเองไม่ติด */}
-              <Input value={formatNationalId(p.national_id)} inputMode="numeric" maxLength={17}
-                placeholder="x-xxxx-xxxxx-xx-x"
-                onChange={(e) => setPf({ national_id: e.target.value.replace(/\D/g, '').slice(0, 13) })} />
+            {/* สัญชาติต้องเลือกก่อน — เป็นตัวกำหนดว่าเลขประจำตัวประชาชนบังคับกรอกหรือไม่ */}
+            <Field label="สัญชาติ" required error={err('nationality') && 'กรุณาเลือกสัญชาติก่อน'}>
+              <ChipGroup options={NATIONALITY_OPTIONS} value={p.nationality} onChange={(v) => setPf({ nationality: v })} />
             </Field>
+            {p.nationality === 'อื่นๆ' && (
+              <Field label="ระบุสัญชาติ" required error={err('nationality_other')}>
+                <Input value={p.nationality_other} placeholder="เช่น เมียนมา ลาว กัมพูชา"
+                  onChange={(e) => setPf({ nationality_other: e.target.value })} autoFocus />
+              </Field>
+            )}
+            {(() => {
+              const picked = !!p.nationality
+              const isThai = p.nationality === NATIONALITY_THAI
+              const n = p.national_id.length
+              return (
+                <Field label={picked && !isThai ? 'เลขประจำตัวประชาชน (ถ้ามี)' : 'เลขประจำตัวประชาชน'} required={isThai}
+                  error={err('national_id') && (
+                    isThai
+                      ? (n ? `ต้องครบ 13 หลัก (กรอกแล้ว ${n} หลัก)` : 'กรุณากรอกเลข 13 หลัก')
+                      : `ต้องครบ 13 หลัก หรือเว้นว่างไว้ (กรอกแล้ว ${n} หลัก)`
+                  )}
+                  hint={!picked ? 'เลือกสัญชาติก่อน'
+                    : isThai ? 'เลข 13 หลัก กรอกตัวเลขเท่านั้น ระบบจะใส่ขีดให้อัตโนมัติ'
+                    : 'ไม่ใช่สัญชาติไทย ไม่บังคับกรอก — ถ้ามีเลข 13 หลักให้กรอกให้ครบ'}>
+                  {/* แสดงเป็น x-xxxx-xxxxx-xx-x แต่เก็บลงฐานข้อมูลเป็นตัวเลขล้วน
+                      ขีดใส่ให้อัตโนมัติ — พิมพ์ตัวอักษร/ขีด/เว้นวรรคเองไม่ติด */}
+                  <Input value={formatNationalId(p.national_id)} inputMode="numeric" maxLength={17}
+                    disabled={!picked}
+                    placeholder={picked ? 'x-xxxx-xxxxx-xx-x' : 'เลือกสัญชาติก่อน'}
+                    onChange={(e) => setPf({ national_id: e.target.value.replace(/\D/g, '').slice(0, 13) })} />
+                </Field>
+              )
+            })()}
             <Field label="โทรศัพท์มือถือ"><Input value={p.phone} onChange={(e) => setPf({ phone: e.target.value })} inputMode="tel" /></Field>
             <Field label="โทรศัพท์ที่ติดต่อได้"><Input value={p.contact_phone} onChange={(e) => setPf({ contact_phone: e.target.value })} inputMode="tel" /></Field>
             <Field label="ศาสนา" className="sm:col-span-3">
@@ -377,8 +562,14 @@ export default function InterviewForm() {
                 <datalist id="dl-p-sub">{subsOf(p.district).map((v) => <option key={v} value={v} />)}</datalist>
               </Field>
               <Field label="กทม./จังหวัด"><Input value={p.province} onChange={(e) => setPf({ province: e.target.value })} /></Field>
-              <Field label="สน./สภ."><Input value={p.station} onChange={(e) => setPf({ station: e.target.value })} /></Field>
-              <Field label="บก.น."><Input value={p.bkn} onChange={(e) => setPf({ bkn: e.target.value })} /></Field>
+              {/* ที่อยู่อาจอยู่ต่างจังหวัด — เลือก สน. จากรายการ หรือพิมพ์ สภ. เองได้ ; ตรงกับ สน. ในกรุงเทพฯ แล้วใส่ บก.น. ให้ */}
+              <Field label="สน./สภ." hint="เลือก สน. จากรายการ หรือพิมพ์ สภ. เอง">
+                <Input list="dl-station" value={p.station} placeholder="เลือกหรือพิมพ์"
+                  onChange={(e) => setPf({ station: e.target.value, bkn: bknOfStation(e.target.value) })} />
+              </Field>
+              <Field label="บก.น." hint="ระบบใส่ให้ตาม สน. ที่เลือก">
+                <Input value={p.bkn} readOnly disabled placeholder={p.station ? 'ไม่ใช่ สน. ในกรุงเทพฯ' : 'เลือก สน. ก่อน'} />
+              </Field>
               <Field label="อาศัยอยู่ในฐานะ" className="sm:col-span-2">
                 <ChipGroup options={RESIDENT_STATUS_OPTIONS} value={p.resident_status} onChange={(v) => setPf({ resident_status: v })} />
               </Field>
@@ -430,33 +621,56 @@ export default function InterviewForm() {
           </div>
         </Card>
 
-        <Card title="๑. เคยถูกจับคดียาเสพติด" sub="ระบุข้อมูล ๒ ครั้งล่าสุด — จำนวนครั้งนับจากรายการที่กรอก">
-          <RepeatList rows={arrests} onChange={setArrests} blank={BLANK_ARREST} cols={4}
-            addLabel="เพิ่มครั้งที่ถูกจับ" empty="ไม่เคยถูกจับ"
-            renderRow={(row, patch) => (
-              <>
-                <Field label="ครั้งที่"><Input type="number" value={row.seq} onChange={(e) => patch({ seq: e.target.value })} /></Field>
-                <Field label="ข้อหา"><Input list="dl-charge" value={row.charge} onChange={(e) => patch({ charge: e.target.value })} /></Field>
-                <Field label="ชนิดยา"><Input list="dl-drug" value={row.drug} onChange={(e) => patch({ drug: e.target.value })} /></Field>
-                <Field label="จำนวน"><Input type="number" step="any" value={row.amount} onChange={(e) => patch({ amount: e.target.value })} /></Field>
-                <Field label="หน่วย"><Input list="dl-unit" value={row.unit} onChange={(e) => patch({ unit: e.target.value })} /></Field>
-                <Field label="สน./สภ."><Input value={row.station} onChange={(e) => patch({ station: e.target.value })} /></Field>
-                <Field label="เมื่อปี (พ.ศ.)"><Input list="dl-year" inputMode="numeric" value={row.year} onChange={(e) => patch({ year: e.target.value })} /></Field>
-              </>
-            )} />
+        <Card title="๑. เคยถูกจับคดียาเสพติด" sub="เลือกก่อนว่าเคยหรือไม่เคย — ถ้าเคย ระบุข้อมูล ๒ ครั้งล่าสุด (จำนวนครั้งนับจากรายการที่กรอก)">
+          <Field label="เคยถูกจับคดียาเสพติดหรือไม่" required error={err('arrest_ever') && 'กรุณาเลือก'}>
+            {/* เลือก "เคย" แล้วเพิ่มแถวว่างให้ 1 แถวทันที จะได้กรอกต่อได้เลย */}
+            <ChipGroup options={EVER_OPTIONS} value={arrestEver}
+              onChange={(v) => { setArrestEver(v); if (v === EVER_YES && arrests.length === 0) setArrests([{ ...BLANK_ARREST }]) }} />
+          </Field>
+          {arrestEver === EVER_YES && (
+            <div className="mt-4" data-invalid={err('arrest_rows') ? '1' : undefined}>
+              {err('arrest_rows') && (
+                <p className="mb-2 text-[11px] font-medium text-rose-600">กรุณากรอกอย่างน้อย 1 ครั้ง (ระบุข้อหา หรือ ชนิดยา)</p>
+              )}
+              <RepeatList rows={arrests} onChange={setArrests} blank={BLANK_ARREST} cols={4}
+                addLabel="เพิ่มครั้งที่ถูกจับ" empty="ยังไม่ได้เพิ่มรายการ — กดปุ่มด้านล่างเพื่อเพิ่ม"
+                renderRow={(row, patch) => (
+                  <>
+                    <Field label="ครั้งที่"><Input type="number" value={row.seq} onChange={(e) => patch({ seq: e.target.value })} /></Field>
+                    <Field label="ข้อหา"><Input list="dl-charge" value={row.charge} onChange={(e) => patch({ charge: e.target.value })} /></Field>
+                    <Field label="ชนิดยา"><Input list="dl-drug" value={row.drug} onChange={(e) => patch({ drug: e.target.value })} /></Field>
+                    <Field label="จำนวน"><Input type="number" step="any" value={row.amount} onChange={(e) => patch({ amount: e.target.value })} /></Field>
+                    <Field label="หน่วย"><Input list="dl-unit" value={row.unit} onChange={(e) => patch({ unit: e.target.value })} /></Field>
+                    <Field label="สน./สภ."><Input value={row.station} onChange={(e) => patch({ station: e.target.value })} /></Field>
+                    <Field label="เมื่อปี (พ.ศ.)"><Input list="dl-year" inputMode="numeric" value={row.year} onChange={(e) => patch({ year: e.target.value })} /></Field>
+                  </>
+                )} />
+            </div>
+          )}
         </Card>
 
-        <Card title="๒. เคยเข้ารับการบำบัด" sub="ระบุข้อมูล ๒ ครั้งล่าสุด">
-          <RepeatList rows={rehabs} onChange={setRehabs} blank={BLANK_REHAB} cols={4}
-            addLabel="เพิ่มครั้งที่บำบัด" empty="ไม่เคยเข้ารับการบำบัด"
-            renderRow={(row, patch) => (
-              <>
-                <Field label="ครั้งที่"><Input type="number" value={row.seq} onChange={(e) => patch({ seq: e.target.value })} /></Field>
-                <Field label="ชนิดยา"><Input list="dl-drug" value={row.drug} onChange={(e) => patch({ drug: e.target.value })} /></Field>
-                <Field label="สถานที่บำบัด"><Input value={row.place} onChange={(e) => patch({ place: e.target.value })} /></Field>
-                <Field label="เมื่อปี (พ.ศ.)"><Input list="dl-year" inputMode="numeric" value={row.year} onChange={(e) => patch({ year: e.target.value })} /></Field>
-              </>
-            )} />
+        <Card title="๒. เคยเข้ารับการบำบัด" sub="เลือกก่อนว่าเคยหรือไม่เคย — ถ้าเคย ระบุข้อมูล ๒ ครั้งล่าสุด">
+          <Field label="เคยเข้ารับการบำบัดหรือไม่" required error={err('rehab_ever') && 'กรุณาเลือก'}>
+            <ChipGroup options={EVER_OPTIONS} value={rehabEver}
+              onChange={(v) => { setRehabEver(v); if (v === EVER_YES && rehabs.length === 0) setRehabs([{ ...BLANK_REHAB }]) }} />
+          </Field>
+          {rehabEver === EVER_YES && (
+            <div className="mt-4" data-invalid={err('rehab_rows') ? '1' : undefined}>
+              {err('rehab_rows') && (
+                <p className="mb-2 text-[11px] font-medium text-rose-600">กรุณากรอกอย่างน้อย 1 ครั้ง (ระบุชนิดยา หรือ สถานที่บำบัด)</p>
+              )}
+              <RepeatList rows={rehabs} onChange={setRehabs} blank={BLANK_REHAB} cols={4}
+                addLabel="เพิ่มครั้งที่บำบัด" empty="ยังไม่ได้เพิ่มรายการ — กดปุ่มด้านล่างเพื่อเพิ่ม"
+                renderRow={(row, patch) => (
+                  <>
+                    <Field label="ครั้งที่"><Input type="number" value={row.seq} onChange={(e) => patch({ seq: e.target.value })} /></Field>
+                    <Field label="ชนิดยา"><Input list="dl-drug" value={row.drug} onChange={(e) => patch({ drug: e.target.value })} /></Field>
+                    <Field label="สถานที่บำบัด"><Input value={row.place} onChange={(e) => patch({ place: e.target.value })} /></Field>
+                    <Field label="เมื่อปี (พ.ศ.)"><Input list="dl-year" inputMode="numeric" value={row.year} onChange={(e) => patch({ year: e.target.value })} /></Field>
+                  </>
+                )} />
+            </div>
+          )}
         </Card>
 
         <Card title="๓. การเสพยาครั้งแรก">
@@ -498,21 +712,28 @@ export default function InterviewForm() {
               <Field label="หลังจากเสพยาครั้งแรก" required error={err('fu_after') && 'กรุณาเลือก'}>
                 <ChipGroup options={AFTER_FIRST_OPTIONS} value={fu.after} onChange={(v) => setFuf({ after: v })} />
               </Field>
-              <Field label="เสพต่อนาน (ปี/เดือน)" required={fu.after === 'เสพต่อ'} error={err('fu_after_duration')}>
-                <Input value={fu.after_duration} disabled={fu.after !== 'เสพต่อ'}
-                  onChange={(e) => setFuf({ after_duration: e.target.value })} />
+              <Field label="เสพต่อนาน" required={fu.after === 'เสพต่อ'}
+                error={err('fu_after_duration') && 'กรุณากรอกปี หรือ เดือน อย่างน้อย 1 ช่อง'}>
+                <YearMonth y={fu.after_y} m={fu.after_m} disabled={fu.after !== 'เสพต่อ'}
+                  onY={(v) => setFuf({ after_y: v })} onM={(v) => setFuf({ after_m: v })} />
               </Field>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="เคยมีช่วงหยุดสารเสพติด นาน (ปี/เดือน)" required
-                error={err('fu_quit_duration') && 'กรุณากรอก — ไม่เคยหยุดให้กรอก "ไม่เคย"'} hint='ไม่เคยหยุด ให้กรอก "ไม่เคย"'>
-                <Input value={fu.quit_duration} onChange={(e) => setFuf({ quit_duration: e.target.value })} />
+              <Field label="เคยมีช่วงหยุดสารเสพติด นาน">
+                <YearMonth y={fu.quit_y} m={fu.quit_m} disabled={fu.never_quit}
+                  onY={(v) => setFuf({ quit_y: v })} onM={(v) => setFuf({ quit_m: v })} />
               </Field>
-              <Field label="สาเหตุที่หยุดได้" required
-                error={err('fu_quit_reason') && 'กรุณากรอก — ไม่เคยหยุดให้กรอก "-"'} hint='ไม่เคยหยุด ให้กรอก "-"'>
-                <Input value={fu.quit_reason} onChange={(e) => setFuf({ quit_reason: e.target.value })} />
+              <Field label="สาเหตุที่หยุดได้">
+                <Input value={fu.quit_reason} disabled={fu.never_quit}
+                  onChange={(e) => setFuf({ quit_reason: e.target.value })} />
               </Field>
             </div>
+            {/* ช่องปี/เดือนเป็นตัวเลข พิมพ์คำว่า "ไม่เคย" ไม่ได้แล้ว — จึงมีตัวเลือกนี้แทน */}
+            <label className="flex items-center gap-2 text-sm text-slate-700 w-fit cursor-pointer">
+              <input type="checkbox" className="accent-blue-600" checked={fu.never_quit}
+                onChange={(e) => setFuf({ never_quit: e.target.checked })} />
+              ไม่เคยหยุดเสพ
+            </label>
           </div>
         </Card>
 
@@ -618,34 +839,97 @@ export default function InterviewForm() {
                   แหล่งที่ซื้อได้ประจำ <span className="text-rose-500">*</span>
                 </div>
                 {err('locations') && (
-                  <div className="text-[11px] font-medium text-rose-600">กรุณาเพิ่มอย่างน้อย 1 แหล่ง และระบุพื้นที่</div>
+                  <div className="text-[11px] font-medium text-rose-600">
+                    กรุณาเพิ่มอย่างน้อย 1 แหล่ง — เลือกกรุงเทพมหานครหรือจังหวัดอื่น แล้วระบุพื้นที่ (จังหวัดอื่นต้องระบุชื่อจังหวัด)
+                  </div>
                 )}
               </div>
               <RepeatList rows={locations} onChange={setLocations} blank={BLANK_LOC} cols={3} addLabel="เพิ่มแหล่งซื้อ"
-                renderRow={(row, patch) => (
-                  <>
-                    <Field label="บริเวณ/สถานที่/จุดสังเกตุ"><Input value={row.area} onChange={(e) => patch({ area: e.target.value })} /></Field>
-                    <Field label="เขต/อำเภอ">
-                      <Select options={DISTRICTS} value={row.district}
-                        onChange={(e) => patch({ district: e.target.value, subdistrict: '', community: '' })} placeholder="— เลือกเขต —" />
-                    </Field>
-                    <Field label="แขวง/ตำบล">
-                      <Select options={subsOf(row.district)} value={row.subdistrict} disabled={!row.district}
-                        onChange={(e) => patch({ subdistrict: e.target.value, community: '' })}
-                        placeholder={row.district ? '— เลือกแขวง —' : 'เลือกเขตก่อน'} />
-                    </Field>
-                    <Field label="ชุมชน/หมู่บ้าน">
-                      <Input list={`dl-com-${row.district}-${row.subdistrict}`} value={row.community} disabled={!row.district}
-                        placeholder={row.district ? 'เลือกหรือพิมพ์' : 'เลือกเขตก่อน'}
-                        onChange={(e) => patch({ community: e.target.value })} />
-                      <datalist id={`dl-com-${row.district}-${row.subdistrict}`}>
-                        {comsOf(row.district, row.subdistrict).map((v) => <option key={v} value={v} />)}
-                      </datalist>
-                    </Field>
-                    <Field label="สน."><Input value={row.station} onChange={(e) => patch({ station: e.target.value })} /></Field>
-                    <Field label="บก.น."><Input value={row.bkn} onChange={(e) => patch({ bkn: e.target.value })} /></Field>
-                  </>
-                )} />
+                renderRow={(row, patch) => {
+                  const isBkk = row.scope === LOC_BKK
+                  return (
+                    <>
+                      {/* เลือกพื้นที่ก่อน — สลับพื้นที่แล้วล้างช่องเขต/อำเภอ ฯลฯ เพราะใช้คนละชุด (เก็บบริเวณ/สถานที่ไว้) */}
+                      <Field label="แหล่งซื้ออยู่ที่" required className="sm:col-span-3">
+                        <ChipGroup options={LOC_SCOPE_OPTIONS} value={row.scope}
+                          onChange={(v) => patch({ scope: v, province: '', district: '', subdistrict: '', community: '', station: '', bkn: '' })} />
+                      </Field>
+                      {row.scope && (
+                        <Field label="บริเวณ/สถานที่/จุดสังเกตุ"><Input value={row.area} onChange={(e) => patch({ area: e.target.value })} /></Field>
+                      )}
+                      {isBkk && (
+                        <>
+                          <Field label="เขต">
+                            <Select options={DISTRICTS} value={row.district}
+                              onChange={(e) => patch({ district: e.target.value, subdistrict: '', community: '' })} placeholder="— เลือกเขต —" />
+                          </Field>
+                          <Field label="แขวง">
+                            <Select options={subsOf(row.district)} value={row.subdistrict} disabled={!row.district}
+                              onChange={(e) => patch({ subdistrict: e.target.value, community: '' })}
+                              placeholder={row.district ? '— เลือกแขวง —' : 'เลือกเขตก่อน'} />
+                          </Field>
+                          <Field label="ชุมชน/หมู่บ้าน">
+                            <Input list={`dl-com-${row.district}-${row.subdistrict}`} value={row.community} disabled={!row.district}
+                              placeholder={row.district ? 'เลือกหรือพิมพ์' : 'เลือกเขตก่อน'}
+                              onChange={(e) => patch({ community: e.target.value })} />
+                            <datalist id={`dl-com-${row.district}-${row.subdistrict}`}>
+                              {comsOf(row.district, row.subdistrict).map((v) => <option key={v} value={v} />)}
+                            </datalist>
+                          </Field>
+                          <Field label="สน.">
+                            <Select options={stationOptions(row.station)} value={row.station}
+                              onChange={(e) => patch({ station: e.target.value, bkn: bknOfStation(e.target.value) })}
+                              placeholder="— เลือก สน. —" />
+                          </Field>
+                          <Field label="บก.น." hint="ระบบใส่ให้ตาม สน. ที่เลือก">
+                            <Input value={row.bkn} readOnly disabled placeholder="เลือก สน. ก่อน" />
+                          </Field>
+                        </>
+                      )}
+                      {row.scope && !isBkk && (
+                        <>
+                          {thai ? (
+                            // เลือกไล่ลำดับ จังหวัด → อำเภอ → ตำบล ; เปลี่ยนตัวบนแล้วล้างตัวล่าง กันอำเภอไม่ตรงจังหวัด
+                            <>
+                              <Field label="จังหวัด" required>
+                                <Select options={withCurrent(thai.provinces, row.province)} value={row.province}
+                                  onChange={(e) => patch({ province: e.target.value, district: '', subdistrict: '' })}
+                                  placeholder="— เลือกจังหวัด —" />
+                              </Field>
+                              <Field label="อำเภอ">
+                                <Select options={withCurrent(thai.amphoesOf(row.province), row.district)} value={row.district}
+                                  disabled={!row.province}
+                                  onChange={(e) => patch({ district: e.target.value, subdistrict: '' })}
+                                  placeholder={row.province ? '— เลือกอำเภอ —' : 'เลือกจังหวัดก่อน'} />
+                              </Field>
+                              <Field label="ตำบล">
+                                <Select options={withCurrent(thai.tambonsOf(row.province, row.district), row.subdistrict)} value={row.subdistrict}
+                                  disabled={!row.district}
+                                  onChange={(e) => patch({ subdistrict: e.target.value })}
+                                  placeholder={row.district ? '— เลือกตำบล —' : 'เลือกอำเภอก่อน'} />
+                              </Field>
+                            </>
+                          ) : thai === false ? (
+                            // โหลดรายชื่อไม่สำเร็จ — ให้พิมพ์เองได้ ผู้กรอกจะได้ไม่ติดค้าง
+                            <>
+                              <Field label="จังหวัด" required hint="โหลดรายชื่อไม่สำเร็จ — พิมพ์เองได้">
+                                <Input value={row.province} placeholder="เช่น ชลบุรี" onChange={(e) => patch({ province: e.target.value })} />
+                              </Field>
+                              <Field label="อำเภอ"><Input value={row.district} onChange={(e) => patch({ district: e.target.value })} /></Field>
+                              <Field label="ตำบล"><Input value={row.subdistrict} onChange={(e) => patch({ subdistrict: e.target.value })} /></Field>
+                            </>
+                          ) : (
+                            <Field label="จังหวัด / อำเภอ / ตำบล" className="sm:col-span-2">
+                              <Select options={[]} value="" disabled onChange={() => {}} placeholder="กำลังโหลดรายชื่อจังหวัด..." />
+                            </Field>
+                          )}
+                          <Field label="ชุมชน/หมู่บ้าน"><Input value={row.community} onChange={(e) => patch({ community: e.target.value })} /></Field>
+                          <Field label="สภ."><Input value={row.station} onChange={(e) => patch({ station: e.target.value })} /></Field>
+                        </>
+                      )}
+                    </>
+                  )
+                }} />
             </div>
 
             <div>
@@ -671,6 +955,32 @@ export default function InterviewForm() {
                     <Field label="อาวุธ"><Select options={HAS_OPTIONS} value={row.weapon} onChange={(e) => patch({ weapon: e.target.value })} /></Field>
                     <Field label="ประเภทอาวุธ"><Input value={row.weapon_type} disabled={row.weapon !== 'มี'} onChange={(e) => patch({ weapon_type: e.target.value })} /></Field>
                     <Field label="ยานพาหนะ (ยี่ห้อ/สี/ทะเบียน)"><Input value={row.vehicle} onChange={(e) => patch({ vehicle: e.target.value })} /></Field>
+
+                    {/* ช่องทางติดต่อ — เลือกจากรายการเท่านั้น ; "อื่นๆ" ต้องระบุ ; ใส่ ID แล้วต้องเลือกช่องทาง */}
+                    {(() => {
+                      const hasId = !!String(row.contact_id ?? '').trim()
+                      return (
+                        <>
+                          <Field label="ช่องทางติดต่อ" required={hasId}
+                            error={Boolean(err('seller_contact_channel') && hasId && !String(row.contact_channel ?? '').trim())}>
+                            {/* withCurrent — ร่างเก่าที่เคยพิมพ์ช่องทางเองจะยังเห็นค่าเดิม ไม่หายไปเฉย ๆ */}
+                            <Select options={withCurrent(SELLER_CONTACT_OPTIONS, row.contact_channel)} value={row.contact_channel ?? ''}
+                              onChange={(e) => patch({ contact_channel: e.target.value })} placeholder="— เลือกช่องทาง —" />
+                          </Field>
+                          {row.contact_channel === 'อื่นๆ' && (
+                            <Field label="ระบุช่องทาง (อื่นๆ)" required
+                              error={Boolean(err('seller_contact_other') && !String(row.contact_other ?? '').trim())}>
+                              <Input value={row.contact_other ?? ''} placeholder="เช่น Signal, Discord" autoFocus
+                                onChange={(e) => patch({ contact_other: e.target.value })} />
+                            </Field>
+                          )}
+                          <Field label="ID / ชื่อบัญชี">
+                            <Input value={row.contact_id ?? ''} placeholder="เช่น @abc123"
+                              onChange={(e) => patch({ contact_id: e.target.value })} />
+                          </Field>
+                        </>
+                      )
+                    })()}
                   </>
                 )} />
             </div>
@@ -711,7 +1021,18 @@ export default function InterviewForm() {
           </div>
         </Card>
 
-        <SaveBar status={status} label="บันทึกข้อมูล" />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <SaveBar status={status} label="บันทึกข้อมูล" />
+          <div className="flex flex-wrap items-center gap-3">
+            {draftAt && !savedRef && (
+              <span className="text-[12px] text-slate-400">บันทึกร่างอัตโนมัติ {fmtTime(draftAt)} น. · เก็บเฉพาะในแท็บนี้</span>
+            )}
+            <button type="button" onClick={handleClear} disabled={status === 'saving'}
+              className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50 disabled:cursor-not-allowed transition">
+              <RotateCcw size={15} /> ล้างข้อมูล
+            </button>
+          </div>
+        </div>
         {savedRef && (
           <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3">
             <div className="text-[12px] font-medium text-emerald-800">บันทึกแล้ว — จดเลขทั้งสองนี้ไว้บนแบบฟอร์มกระดาษ</div>
@@ -730,7 +1051,7 @@ export default function InterviewForm() {
       </form>
 
       <datalist id="dl-income">{INCOME_OPTIONS.map((v) => <option key={v} value={v} />)}</datalist>
-      <datalist id="dl-year">{YEAR_OPTIONS.map((v) => <option key={v} value={v} />)}</datalist>
+      <datalist id="dl-station">{STATION_OPTIONS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}</datalist>      <datalist id="dl-year">{YEAR_OPTIONS.map((v) => <option key={v} value={v} />)}</datalist>
       <datalist id="dl-unit">{unitOptions.map((v) => <option key={v} value={v} />)}</datalist>
       <datalist id="dl-charge">{CHARGE_OPTIONS.map((v) => <option key={v} value={v} />)}</datalist>
       <datalist id="dl-drug">{FIRST_DRUG_OPTIONS.map((v) => <option key={v} value={v} />)}</datalist>
