@@ -385,6 +385,12 @@ function formatThaiDate(dateStr) {
 
 function Modal({ children, onClose, title, size = 'md' }) {
   const sizes = { sm: 'max-w-md', md: 'max-w-2xl', lg: 'max-w-4xl' }
+  // ปิดด้วย Esc — เดิมปิดได้แค่ปุ่ม X / คลิกนอกกล่อง
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div className={`bg-white rounded-2xl shadow-2xl ${sizes[size]} w-full max-h-[90vh] overflow-hidden flex flex-col`}
@@ -593,6 +599,9 @@ function ManualForm({ onSaved, onClose, logAction, showToast }) {
   const [saving, setSaving] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  // วันที่รับเรื่อง + เขต บังคับกรอก — เดิมกดเพิ่มได้ทั้งที่ว่างทุกช่อง ทำให้มีแถวเปล่า (มีแค่กลุ่ม) หลุดเข้าฐาน
+  // และแถวที่ไม่มีวันที่จะไม่ถูกนับในทุกปีงบ (ตัวเลข "ทุกปี" กับ "ปีงบ" ไม่ตรงกัน)
+  const missing = [!form.date && 'วันที่รับเรื่อง', !form.district.trim() && 'เขต'].filter(Boolean)
 
   const handleSave = async () => {
     setSaving(true)
@@ -616,8 +625,8 @@ function ManualForm({ onSaved, onClose, logAction, showToast }) {
             {GROUPS.map(g => <option key={g.v} value={g.v}>{g.l}</option>)}
           </select>
         </FormField>
-        <FormField label="วันที่รับเรื่อง">
-          <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className="form-input" />
+        <FormField label="วันที่รับเรื่อง *">
+          <input type="date" value={form.date} onChange={e => set('date', e.target.value)} className="form-input" required />
         </FormField>
         <FormField label="ช่องทาง">
           <select value={form.channel} onChange={e => set('channel', e.target.value)} className="form-input">
@@ -629,8 +638,8 @@ function ManualForm({ onSaved, onClose, logAction, showToast }) {
             {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </FormField>
-        <FormField label="เขต">
-          <input value={form.district} onChange={e => set('district', e.target.value)} className="form-input" placeholder="เช่น เขตทุ่งครุ" />
+        <FormField label="เขต *">
+          <input value={form.district} onChange={e => set('district', e.target.value)} className="form-input" placeholder="เช่น เขตทุ่งครุ" required />
         </FormField>
         <FormField label="แขวง">
           <input value={form.subdistrict} onChange={e => set('subdistrict', e.target.value)} className="form-input" />
@@ -644,9 +653,12 @@ function ManualForm({ onSaved, onClose, logAction, showToast }) {
           </select>
         </FormField>
       </div>
-      <div className="flex gap-3 justify-end px-6 py-4 border-t border-slate-200 bg-slate-50 flex-shrink-0">
+      <div className="flex gap-3 justify-end items-center px-6 py-4 border-t border-slate-200 bg-slate-50 flex-shrink-0">
+        {missing.length > 0 && <span className="text-xs text-rose-600 mr-auto">กรุณากรอก {missing.join(' และ ')}</span>}
         <button onClick={onClose} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-white">ยกเลิก</button>
-        <button onClick={() => setConfirmOpen(true)} disabled={saving} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
+        <button onClick={() => setConfirmOpen(true)} disabled={saving || missing.length > 0}
+          title={missing.length ? `กรุณากรอก ${missing.join(' และ ')}` : undefined}
+          className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50">
           {saving ? 'กำลังบันทึก...' : 'เพิ่มข้อมูล'}
         </button>
       </div>

@@ -504,7 +504,8 @@ export default function SubstanceRadar() {
                   ${drugRows}
                 </div>
               </div>
-            `).openPopup()
+            `, { autoPanPaddingTopLeft: [20, 80], autoPanPaddingBottomRight: [20, 60] }).openPopup()
+            // padding กัน popup ไปโผล่ใต้แถบปุ่มลอย (Export/กลับหน้าหลัก) ด้านบนแผนที่ — overlay z>400 ทับ popup pane เสมอ
           },
         })
       }

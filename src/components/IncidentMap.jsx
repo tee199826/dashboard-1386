@@ -222,7 +222,8 @@ export default function IncidentMap({
   // ชุดจุดเปลี่ยน (กรองใหม่) → แสดง popup เฉพาะเมื่อจุดนั้นยังอยู่ในชุดปัจจุบัน (ไม่ค้าง popup ของจุดที่ถูกกรองออก)
   const active = activePoint && points.includes(activePoint) ? activePoint : null
   const pointPopup = active && renderPopup && (
-    <Popup position={[active.lat, active.lng]} eventHandlers={{ remove: () => setActivePoint(null) }}>
+    <Popup position={[active.lat, active.lng]} eventHandlers={{ remove: () => setActivePoint(null) }}
+      autoPanPaddingTopLeft={[20, 80]} autoPanPaddingBottomRight={[20, 60]}>
       {renderPopup(active)}<CoordRow lat={active.lat} lng={active.lng} />
     </Popup>
   )
