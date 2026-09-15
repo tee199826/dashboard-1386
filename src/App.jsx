@@ -75,7 +75,11 @@ export default function App() {
             <Route path="/districts/behavior-table" element={<MainLayout><FilterProvider><BehaviorTable /></FilterProvider></MainLayout>} />
             <Route path="/operations" element={<MainLayout><FilterProvider><Operations /></FilterProvider></MainLayout>} />
             <Route path="/bkn" element={<MainLayout><FilterProvider><BknPage /></FilterProvider></MainLayout>} />
-            <Route path="/substance-users" element={<MainLayout><FilterProvider><SubstanceUsers /></FilterProvider></MainLayout>} />
+            {/* ข้อมูลผู้เสพรายคน (อายุ/อาชีพ/รายได้/ประวัติจับกุม-บำบัด/แหล่งซื้อ) — อยู่ในหมวด "ฐานข้อมูลการข่าว"
+                ของ sidebar ที่ซ่อนจากคนทั่วไปอยู่แล้ว แต่ route เดิมไม่ได้ห่อ guard → เข้าตรงด้วย URL ได้ */}
+            <Route path="/substance-users" element={
+              <ProtectedRoute><MainLayout><FilterProvider><SubstanceUsers /></FilterProvider></MainLayout></ProtectedRoute>
+            } />
             <Route path="/complaints" element={<MainLayout><FilterProvider><ComplaintsPage /></FilterProvider></MainLayout>} />
             <Route path="/situation" element={<MainLayout><FilterProvider><SituationPage /></FilterProvider></MainLayout>} />
 
