@@ -5,6 +5,8 @@ import { ComposedChart, Area, ReferenceDot, XAxis, YAxis, CartesianGrid, Tooltip
 import { THAI_MONTHS, DNAME_TO_GROUP } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
 import { enrichDrugRow } from '../utils/drugWide'
+import { DRUG_INCIDENT_PUBLIC_COLUMNS } from '../utils/drugFlags'
+import { escapeHtml } from '../utils/escapeHtml'
 import { thaiDateRange } from '../utils/formatDate'
 import { exportDrugIncidentReport } from '../utils/exportReport'
 import { exportMapImage } from '../utils/exportMapImage'
@@ -209,7 +211,7 @@ export default function SubstanceRadar() {
       setLoading(true)
       setLoadError(null)
       try {
-        const all = await fetchAllPages('drug_incidents', '*')
+        const all = await fetchAllPages('drug_incidents', DRUG_INCIDENT_PUBLIC_COLUMNS)
         setIncidents(all.map(enrichDrugRow))  // wide one-hot → primary_drug/behaviors/primary_action
       } catch {
         setLoadError('ไม่สามารถโหลดข้อมูลแผนที่ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือลองใหม่')
@@ -462,7 +464,7 @@ export default function SubstanceRadar() {
         : g
         ? { color: g.border, weight: 2, fillColor: g.fill, fillOpacity: 0.55, opacity: 1 }
         : { color: '#94a3b8', weight: 1.5, fillColor: '#e2e8f0', fillOpacity: 0.35, opacity: 0.7 }
-      layer.bindTooltip(dname, { sticky: true, className: 'district-tooltip' })
+      layer.bindTooltip(escapeHtml(dname), { sticky: true, className: 'district-tooltip' })
       if (!isOtherGroup) {
         layer.on({
           mouseover: () => layer.setStyle({ fillOpacity: 0.82, weight: 3 }),
@@ -476,7 +478,7 @@ export default function SubstanceRadar() {
                   return `<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0">
                     <div style="display:flex;align-items:center;gap:6px">
                       <span style="width:9px;height:9px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0"></span>
-                      <span style="color:#334155">${drug}</span>
+                      <span style="color:#334155">${escapeHtml(drug)}</span>
                     </div>
                     <span style="font-weight:700;color:#1e293b">${count}</span>
                   </div>`
@@ -486,11 +488,11 @@ export default function SubstanceRadar() {
               <div style="font-family:Sarabun,sans-serif;min-width:210px">
                 <div style="font-weight:700;font-size:14px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
                   <span style="width:10px;height:10px;border-radius:50%;background:${g?.border || '#dc2626'};display:inline-block;flex-shrink:0"></span>
-                  ${dname}
+                  ${escapeHtml(dname)}
                 </div>
                 <div style="font-size:12px;margin-bottom:8px">
                   <div style="display:flex;justify-content:space-between;padding:2px 0">
-                    <span style="color:#64748b">กลุ่มพื้นที่</span><span style="font-weight:600">${group || '-'}</span>
+                    <span style="color:#64748b">กลุ่มพื้นที่</span><span style="font-weight:600">${escapeHtml(group || '-')}</span>
                   </div>
                   <div style="display:flex;justify-content:space-between;padding:2px 0">
                     <span style="color:#64748b">เรื่องยาเสพติด</span>

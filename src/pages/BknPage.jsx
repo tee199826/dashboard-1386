@@ -7,6 +7,8 @@ import BknDrilldown from '../components/BknDrilldown'
 import { getBknByDistrict, BKN_ORDER, BKN_COLORS } from '../utils/bknMapping'
 import { fetchAllPages } from '../utils/supabasePagination'
 import { enrichDrugRow } from '../utils/drugWide'
+import { DRUG_INCIDENT_PUBLIC_COLUMNS } from '../utils/drugFlags'
+import { escapeHtml } from '../utils/escapeHtml'
 import { formatThaiDateShort as formatThaiDate } from '../utils/formatDate'
 import { usePresentation } from '../context/PresentationContext'
 import PresentationBar from '../components/PresentationBar'
@@ -35,7 +37,7 @@ export default function BknPage() {
     setLoading(true)
     setLoadError(null)
     try {
-      const all = await fetchAllPages('drug_incidents', '*')
+      const all = await fetchAllPages('drug_incidents', DRUG_INCIDENT_PUBLIC_COLUMNS)
       setIncidents(all.map(enrichDrugRow))  // wide one-hot → primary_drug/behaviors/primary_action
     } catch {
       setLoadError('ไม่สามารถโหลดข้อมูลได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือลองใหม่')
@@ -136,7 +138,7 @@ export default function BknPage() {
     const c = districtCounts[normDist(name)] || 0
     const bkn = getBknByDistrict(name)
     layer.bindTooltip(
-      `${name} · ${c.toLocaleString()} เรื่อง${bkn !== 'ไม่ระบุ' ? ' · ' + bkn : ''}`,
+      `${escapeHtml(name)} · ${c.toLocaleString()} เรื่อง${bkn !== 'ไม่ระบุ' ? ' · ' + escapeHtml(bkn) : ''}`,
       { sticky: true, className: 'district-tooltip' })
   }, [districtCounts])
 

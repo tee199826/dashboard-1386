@@ -89,8 +89,10 @@ export default function App() {
               <ProtectedRoute><MainLayout><InterviewForm /></MainLayout></ProtectedRoute>
             } />
 
-            {/* Admin · Data Health (public ก่อน — auth ทีหลัง) */}
-            <Route path="/admin" element={<MainLayout><Admin /></MainLayout>} />
+            {/* Admin · Data Health — ผู้ดูแลระบบเท่านั้น (SEC-07: เดิมเปิด public ชั่วคราว) */}
+            <Route path="/admin" element={
+              <ProtectedRoute><MainLayout><Admin /></MainLayout></ProtectedRoute>
+            } />
 
             <Route path="/upload" element={
               <ProtectedRoute><MainLayout><UploadPage /></MainLayout></ProtectedRoute>
