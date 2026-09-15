@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase'
 import { fetchAllPages } from '../utils/supabasePagination'
 import { formatThaiDate } from '../utils/heroMeta'
 import { dateToFiscalYear } from '../utils/fiscalYear'
+import { downloadBlob } from '../utils/downloadBlob'
 
 const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev'
 const BUILD_DATE = typeof __BUILD_DATE__ !== 'undefined' ? __BUILD_DATE__ : ''
@@ -127,9 +128,7 @@ export default function Admin() {
       lines.push([t.id, t.name, counts[t.id] ?? '', formatThaiDate(lu) || '', d ?? '', statusOf(d).label].map(esc).join(','))
     }
     const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = 'data-health-snapshot.csv'; a.click()
-    URL.revokeObjectURL(url)
+    downloadBlob(blob, 'data-health-snapshot.csv')
   }
 
   return (

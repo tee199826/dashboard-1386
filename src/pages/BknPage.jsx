@@ -86,13 +86,19 @@ export default function BknPage() {
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
+  // ป้ายช่วงเวลาของ "ข้อมูลเหตุการณ์" ที่ส่งออก — หน้านี้ใช้ drug_incidents ทุกปีงบ (BknDrugStats แสดง ปีงบ 2563–2569)
+  // ส่วน bannerPeriod เป็นงวดของ RPT 115_B เท่านั้น ห้ามเอามาติดป้าย export (เดิมบอก "ปีงบ 2569" แต่ไฟล์มีทุกปี)
+  const incidentPeriodLabel = useMemo(() => {
+    const fys = [...new Set(incidents.map(r => r.fiscal_year).filter(Boolean))].sort()
+    return fys.length ? `ทุกปีงบ (${fys[0]}–${fys[fys.length - 1]})` : 'ทุกปีงบ'
+  }, [incidents])
   const handleExportConfirm = useCallback(async ({ mode, dateRange, zoneDetail, statusFilter }) => {
     setExporting(true)
     try {
       const scoped = selectedBkn ? incidents.filter(r => getBknByDistrict(r.district) === selectedBkn) : incidents
       const periodLabel = dateRange
         ? `กำหนดเอง (${fmtHeroDate(dateRange.from)} - ${fmtHeroDate(dateRange.to)})`
-        : (bannerPeriod || 'ปีงบ 2569')
+        : incidentPeriodLabel
       await exportDrugIncidentReport({
         incidentRows: scoped,
         dealerRows,
@@ -107,7 +113,7 @@ export default function BknPage() {
     } finally {
       setExporting(false)
     }
-  }, [incidents, selectedBkn, dealerRows, bannerPeriod])
+  }, [incidents, selectedBkn, dealerRows, incidentPeriodLabel])
 
   const incidentsDateRange = useMemo(() => minMaxDate(incidents, 'received_date'), [incidents])
 
@@ -191,7 +197,7 @@ export default function BknPage() {
       <ExportDialog
         open={exportDialogOpen} onClose={() => setExportDialogOpen(false)} onConfirm={handleExportConfirm}
         busy={exporting}
-        currentPeriodLabel={bannerPeriod || 'ปีงบ 2569'}
+        currentPeriodLabel={incidentPeriodLabel}
         defaultFrom={incidentsDateRange.min ?? ''} defaultTo={incidentsDateRange.max ?? ''}
       />
 

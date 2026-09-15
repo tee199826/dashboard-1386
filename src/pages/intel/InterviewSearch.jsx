@@ -13,6 +13,7 @@ import { Link } from 'react-router-dom'
 import { Search, Plus, AlertTriangle, Loader2, Trash2, X, Download, FileText } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatThaiDate } from '../../utils/heroMeta'
+import { downloadBlob, XLSX_MIME } from '../../utils/downloadBlob'
 import { IntelPage, Card, Field, Input, Select } from '../../components/intel/FormUI'
 import { DISTRICTS, formatNationalId } from '../../utils/intelOptions'
 
@@ -128,10 +129,7 @@ export default function InterviewSearch() {
       })
       header.forEach((h, i) => { ws.getColumn(i + 1).width = Math.max(12, h.length + 6) })
       const buf = await wb.xlsx.writeBuffer()
-      const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
-      const a = document.createElement('a')
-      a.href = url; a.download = `interview-records-${new Date().toISOString().slice(0, 10)}.xlsx`; a.click()
-      URL.revokeObjectURL(url)
+      downloadBlob(new Blob([buf], { type: XLSX_MIME }), `interview-records-${new Date().toISOString().slice(0, 10)}.xlsx`)
     } finally { setBusy(false) }
   }
 

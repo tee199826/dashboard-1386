@@ -1,6 +1,7 @@
 // exportReport.js — multi-sheet Excel export ของรายงาน drug_incidents (ใช้ร่วม /districts, /bkn, /radar)
 // รับ "แถวที่ filter ตาม view ปัจจุบันแล้ว" จากหน้าที่เรียก (ไม่ query เอง) — รับประกันตัวเลขตรงกับที่ user เห็นบนจอ
 import ExcelJS from 'exceljs'
+import { downloadBlob, XLSX_MIME } from './downloadBlob'
 import { formatThaiDate } from './heroMeta'
 import { DNAME_TO_GROUP } from './constants'
 
@@ -509,13 +510,8 @@ export async function exportDrugIncidentReport({
   }
 
   const buffer = await wb.xlsx.writeBuffer()
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${filenamePrefix}${mode === 'zone' ? '-zone' : ''}-${new Date().toISOString().slice(0, 10)}.xlsx`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(new Blob([buffer], { type: XLSX_MIME }),
+    `${filenamePrefix}${mode === 'zone' ? '-zone' : ''}-${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
 
 /**
@@ -546,11 +542,5 @@ export async function exportBehaviorTable({ rows = [], periodLabel = 'ทั้�
   writeSheet(wb, 'พฤติการณ์รายเขต', meta, ['เขต', 'กลุ่มโซน', 'เสพ', 'ค้า', 'เสพ-ค้า', 'ผลิต', 'รวม'], dataRows)
 
   const buffer = await wb.xlsx.writeBuffer()
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${filenamePrefix}-${new Date().toISOString().slice(0, 10)}.xlsx`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(new Blob([buffer], { type: XLSX_MIME }), `${filenamePrefix}-${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
