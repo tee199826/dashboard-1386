@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   MapContainer, TileLayer, CircleMarker, Popup, Tooltip as MapTooltip,
   GeoJSON, useMap, Pane, Marker,
@@ -165,6 +165,15 @@ export default function IncidentMap({
   const [districts, setDistricts] = useState(null)
   const [outerMask, setOuterMask] = useState(null)
   const [zoom, setZoom] = useState(11)
+  // popup/tooltip ของจุด — ใช้ตัวเดียวร่วมกันทุกจุด (เดิม bind Popup+Tooltip ต่อ marker → 15k จุด = 30k layer object
+  // + SVG node ต่อจุด ทำให้หน้า /radar ค้าง 4–5 วิ) ; marker วาดบน canvas ผ่าน preferCanvas
+  const [activePoint, setActivePoint] = useState(null)
+  const [hoverPoint, setHoverPoint] = useState(null)
+  // canvas เดียววาดตามลำดับที่ add — layer เขตที่มาทีหลัง (geojson โหลด async/สลับโหมด) จะทับจุดและแย่ง hit-test
+  // → เก็บ instance ของจุดไว้ แล้ว bringToFront ทุกครั้งที่ layer เขตถูกเพิ่ม
+  const markerRefs = useRef(new Set())
+  const raiseMarkers = useCallback(() => { for (const m of markerRefs.current) m.bringToFront() }, [])
+  const districtLayerEvents = useMemo(() => ({ add: raiseMarkers }), [raiseMarkers])
 
   useEffect(() => {
     fetch('/bangkok-districts.geojson')
@@ -178,10 +187,51 @@ export default function IncidentMap({
   const showPoints = viewMode === 'point'
   const showHeatmap = viewMode === 'heatmap'
 
+  // marker list memo — ไม่ผูกกับ hover/active state : hover ทีหนึ่งไม่ต้อง re-render 15k marker
+  // (setState จาก useState มี identity คงที่ จึงใส่ใน closure ได้โดยไม่ต้องอยู่ใน deps)
+  const markerRadius = zoom >= 15 ? 10 : zoom >= 13 ? 7 : 5
+  const pointMarkers = useMemo(() => showPoints ? points.map(p => (
+    <CircleMarker
+      key={p.id}
+      center={[p.lat, p.lng]}
+      pane="vector-pane"
+      radius={markerRadius}
+      pathOptions={{ fillColor: getColor(p), fillOpacity: 0.85, color: '#fff', weight: 2 }}
+      eventHandlers={{
+        add: (e) => { markerRefs.current.add(e.target); e.target.bringToFront() },
+        remove: (e) => markerRefs.current.delete(e.target),
+        click: () => setActivePoint(p), mouseover: () => setHoverPoint(p), mouseout: () => setHoverPoint(null),
+      }}
+    />
+  )) : null, [showPoints, points, markerRadius, getColor])
+  const heatRadius = zoom >= 16 ? 9 : 6
+  const heatMarkers = useMemo(() => (showHeatmap && zoom >= 14) ? points.map(p => (
+    <CircleMarker
+      key={'hm-' + p.id}
+      center={[p.lat, p.lng]}
+      pane="vector-pane"
+      radius={heatRadius}
+      pathOptions={{ fillColor: '#fff', fillOpacity: 0.25, color: '#fff', weight: 1.5, opacity: 0.7 }}
+      eventHandlers={{
+        add: (e) => { markerRefs.current.add(e.target); e.target.bringToFront() },
+        remove: (e) => markerRefs.current.delete(e.target),
+        click: () => setActivePoint(p),
+      }}
+    />
+  )) : null, [showHeatmap, zoom, points, heatRadius])
+  // ชุดจุดเปลี่ยน (กรองใหม่) → แสดง popup เฉพาะเมื่อจุดนั้นยังอยู่ในชุดปัจจุบัน (ไม่ค้าง popup ของจุดที่ถูกกรองออก)
+  const active = activePoint && points.includes(activePoint) ? activePoint : null
+  const pointPopup = active && renderPopup && (
+    <Popup position={[active.lat, active.lng]} eventHandlers={{ remove: () => setActivePoint(null) }}>
+      {renderPopup(active)}<CoordRow lat={active.lat} lng={active.lng} />
+    </Popup>
+  )
+
   return (
     <MapContainer
       center={[13.7563, 100.5018]}
       zoom={11}
+      preferCanvas
       minZoom={10}
       maxZoom={18}
       maxBounds={[[13.49, 100.32], [13.96, 100.94]]}
@@ -207,16 +257,17 @@ export default function IncidentMap({
       <ZoomTracker onZoom={handleZoom} />
       <FlyController target={flyTarget} />
       <DistrictFocus districts={districts} dname={highlightDistrict} />
-      <Pane name="districts-pane" style={{ zIndex: 350 }} />
-      <Pane name="markers-pane" style={{ zIndex: 600 }} />
+      {/* vector ทั้งหมด (เขต/mask/จุด) อยู่ pane เดียว = canvas เดียว — ถ้าแยก pane จะได้ canvas ซ้อนกัน
+          และ canvas บน (จุด) จะกิน click/hover ของเขตข้างล่างทั้งหมด (Leaflet hit-test ต่อ canvas) */}
+      <Pane name="vector-pane" style={{ zIndex: 450 }} />
 
       {outerMask && (
-        <GeoJSON key="outer-mask" data={outerMask} pane="districts-pane"
+        <GeoJSON key="outer-mask" data={outerMask} pane="vector-pane" eventHandlers={districtLayerEvents}
           style={{ fillColor: '#0f172a', fillOpacity: 0.65, weight: 0, interactive: false }} />
       )}
 
       {districts && (
-        <GeoJSON key={`district-borders-${permanentDistrictLabels}`} data={districts} pane="districts-pane"
+        <GeoJSON key={`district-borders-${permanentDistrictLabels}`} data={districts} pane="vector-pane" eventHandlers={districtLayerEvents}
           style={{ color: '#1e3a8a', weight: 1.8, fillColor: '#3b82f6', fillOpacity: 0.05, opacity: 1 }}
           onEachFeature={(feature, layer) => {
             const name = feature.properties?.dname || 'เขต'
@@ -238,7 +289,8 @@ export default function IncidentMap({
         <GeoJSON
           key={districtLayerKey}
           data={districts}
-          pane="districts-pane"
+          pane="vector-pane"
+          eventHandlers={districtLayerEvents}
           style={districtLayerStyle}
           onEachFeature={districtLayerOnEachFeature || undefined}
         />
@@ -248,7 +300,7 @@ export default function IncidentMap({
       {highlightDistrict && districts && (() => {
         const f = districts.features.find(ft => ft.properties?.dname === highlightDistrict)
         return f ? (
-          <GeoJSON key={`hl-${highlightDistrict}`} data={f} pane="districts-pane" interactive={false}
+          <GeoJSON key={`hl-${highlightDistrict}`} data={f} pane="vector-pane" interactive={false} eventHandlers={districtLayerEvents}
             style={{ color: '#7c3aed', weight: 3, fillColor: '#a78bfa', fillOpacity: 0.25, opacity: 1 }} />
         ) : null
       })()}
@@ -261,31 +313,15 @@ export default function IncidentMap({
         </Marker>
       )}
 
-      {showPoints && points.map(p => (
-        <CircleMarker
-          key={p.id}
-          center={[p.lat, p.lng]}
-          pane="markers-pane"
-          radius={zoom >= 15 ? 10 : zoom >= 13 ? 7 : 5}
-          pathOptions={{ fillColor: getColor(p), fillOpacity: 0.85, color: '#fff', weight: 2 }}
-        >
-          {renderPopup && <Popup>{renderPopup(p)}<CoordRow lat={p.lat} lng={p.lng} /></Popup>}
-          {tooltipText && <MapTooltip>{tooltipText(p)}</MapTooltip>}
-        </CircleMarker>
-      ))}
+      {pointMarkers}
 
       {showHeatmap && <HeatmapLayer points={points} />}
-      {showHeatmap && zoom >= 14 && points.map(p => (
-        <CircleMarker
-          key={'hm-' + p.id}
-          center={[p.lat, p.lng]}
-          pane="markers-pane"
-          radius={zoom >= 16 ? 9 : 6}
-          pathOptions={{ fillColor: '#fff', fillOpacity: 0.25, color: '#fff', weight: 1.5, opacity: 0.7 }}
-        >
-          {renderPopup && <Popup>{renderPopup(p)}<CoordRow lat={p.lat} lng={p.lng} /></Popup>}
-        </CircleMarker>
-      ))}
+      {heatMarkers}
+
+      {(showPoints || (showHeatmap && zoom >= 14)) && pointPopup}
+      {showPoints && tooltipText && hoverPoint && !active && (
+        <MapTooltip position={[hoverPoint.lat, hoverPoint.lng]} offset={[0, -8]} direction="top">{tooltipText(hoverPoint)}</MapTooltip>
+      )}
     </MapContainer>
   )
 }

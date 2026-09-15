@@ -181,13 +181,6 @@ export default function AllDistricts() {
     if (d) { setSelectedDistrict(d); mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const heroPeriod = useMemo(() => {
-    const c = minMaxDate(records, 'date'), i = minMaxDate(incidents, 'received_date')
-    const mins = [c.min, i.min].filter(Boolean).sort()
-    const maxs = [c.max, i.max].filter(Boolean).sort()
-    return formatPeriod(mins[0], maxs[maxs.length - 1])
-  }, [records, incidents])
-
   const { getDateRange, state } = useFilter()
   const range = getDateRange()
   const rFrom = range?.from  // ช่วงครอบ (min→max) — ใช้กับ comparison/trend ; หลายปีงบใช้ span
@@ -203,6 +196,14 @@ export default function AllDistricts() {
   const fRecords = useMemo(() => filterByDateColumn(records, 'date', range), [records, range])
   const fIncidents = useMemo(() => filterByDateColumn(incidents, 'received_date', range), [incidents, range])
   const fDealers = useMemo(() => filterByDateColumn(dealerRows, 'surveyed_at', range), [dealerRows, range])
+
+  // ช่วงวันที่บน hero = ชุดที่กรองแล้ว ให้ตรงกับป้ายปีงบ (เดิมใช้ข้อมูลดิบ → "ปีงบ 2569" แต่โชว์ 2562–2569)
+  const heroPeriod = useMemo(() => {
+    const c = minMaxDate(fRecords, 'date'), i = minMaxDate(fIncidents, 'received_date')
+    const mins = [c.min, i.min].filter(Boolean).sort()
+    const maxs = [c.max, i.max].filter(Boolean).sort()
+    return formatPeriod(mins[0], maxs[maxs.length - 1])
+  }, [fRecords, fIncidents])
 
   // ── YTD comparison (จาก incidents raw) ──
   const comparison = useMemo(() => {

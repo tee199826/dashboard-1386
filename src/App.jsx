@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { DataProvider } from './context/DataContext'
 import { AuthProvider } from './context/AuthContext'
 import { PresentationProvider, usePresentation } from './context/PresentationContext'
@@ -27,6 +27,14 @@ import InterviewForm from './pages/intel/InterviewForm'
 import InterviewSearch from './pages/intel/InterviewSearch'
 import Admin from './pages/Admin'
 import { Menu } from 'lucide-react'
+
+// เปลี่ยน route ผ่าน sidebar แล้วเลื่อนขึ้นบนสุด — SPA ไม่รีเซ็ต scroll ให้เอง (เดิมเปลี่ยนหน้าแล้วค้างที่ตำแหน่งเดิม)
+// เปลี่ยนเฉพาะ pathname (query เปลี่ยน เช่น /situation?section= ไม่เลื่อน เพราะเป็นแท็บในหน้าเดียวกัน)
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => { window.scrollTo(0, 0) }, [pathname])
+  return null
+}
 
 // โครง tree เดียวทั้ง 2 โหมด — presentation แค่ซ่อน Header/Sidebar
 // (ถ้า return tree คนละชุด React จะ remount children → state ของหน้า/FilterProvider หายตอนเข้า-ออกโหมดนำเสนอ)
@@ -65,6 +73,7 @@ export default function App() {
       <DataProvider>
         <PresentationProvider>
         <BrowserRouter>
+          <ScrollToTop />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/radar" element={<MainLayout><SubstanceRadar /></MainLayout>} />
