@@ -9,6 +9,7 @@ import LayerPanel from '../components/pixel-map/LayerPanel'
 import StylePanel from '../components/pixel-map/StylePanel'
 import MapCanvas from '../components/pixel-map/MapCanvas'
 import CompareGrid from '../components/pixel-map/CompareGrid'
+import ImportDataModal from '../components/pixel-map/ImportDataModal'
 import YearPicker from '../components/pixel-map/YearPicker'
 import AccordionSection from '../components/pixel-map/AccordionSection'
 
@@ -48,7 +49,7 @@ export default function PixelMap() {
     toggleDistrict, toggleSubdistrict, toggleCommunity,
     selectDistricts, clearSelection,
     expandedDistricts, toggleExpanded, expandedSubdistricts, toggleSubExpanded,
-    layers, updateLayer, toggleLayerVisible, addDataLayer, removeDataLayer, reorderDataLayers,
+    layers, updateLayer, toggleLayerVisible, addDataLayer, addImportedLayer, replaceLayerImport, removeDataLayer, reorderDataLayers,
     compareSlots, addComparePanel, removeComparePanel, toggleCompareSlotDistrict, setCompareSlotDistricts, setCompareSlotColor,
     style, updateStyle,
     labelsConfig, updateLabelsConfig, toggleLabelsVisible, toggleLabelsLevel,
@@ -85,18 +86,32 @@ export default function PixelMap() {
   const dataLayers = useMemo(() => layers.filter(l => l.type === 'data'), [layers])
 
   // ── data overlay fetch — key เฉพาะ field ที่กระทบ query จริง กัน refetch ตอนแก้แค่สี/opacity ──
+  // layer ที่นำเข้าจากไฟล์ (source 'import') ไม่ query Supabase — ใช้ importData ที่อยู่ใน layer เลย (importStamp = ตัวบอกว่าไฟล์เปลี่ยน)
   const dataFetchKey = useMemo(
-    () => dataLayers.map(l => `${l.id}:${l.source}:${l.substance}:${l.behavior}:${l.fiscalYear}:${l.bkn}`).join('|'),
+    () => dataLayers.map(l => `${l.id}:${l.source}:${l.substance}:${l.behavior}:${l.fiscalYear}:${l.bkn}:${l.importStamp ?? ''}`).join('|'),
     [dataLayers]
   )
   const [layerCounts, setLayerCounts] = useState({})
   useEffect(() => {
     let cancelled = false
-    Promise.all(dataLayers.map(async (l) => [l.id, await getDistrictCounts({ source: l.source, substance: l.substance, behavior: l.behavior, fiscalYear: l.fiscalYear, bkn: l.bkn })]))
+    Promise.all(dataLayers.map(async (l) => [
+      l.id,
+      l.source === 'import'
+        ? (l.importData ?? { counts: {}, max: 0 })
+        : await getDistrictCounts({ source: l.source, substance: l.substance, behavior: l.behavior, fiscalYear: l.fiscalYear, bkn: l.bkn }),
+    ]))
       .then(entries => { if (!cancelled) setLayerCounts(Object.fromEntries(entries)) })
       .catch(err => console.error('[pixel-map] data layer fetch failed:', err))
     return () => { cancelled = true }
   }, [dataFetchKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── นำเข้าไฟล์เป็น data overlay — 'new' = สร้าง layer ใหม่, layer id = เปลี่ยนไฟล์ของ layer นั้น ──
+  const [importTarget, setImportTarget] = useState(null)
+  const handleImportConfirm = useCallback((payload) => {
+    if (importTarget && importTarget !== 'new') replaceLayerImport(importTarget, payload)
+    else addImportedLayer(payload)
+    setImportTarget(null)
+  }, [importTarget, addImportedLayer, replaceLayerImport])
 
   const [fiscalYearsBySource, setFiscalYearsBySource] = useState({})
   useEffect(() => {
@@ -212,7 +227,7 @@ export default function PixelMap() {
           <AccordionSection title="Layers" icon={<LayersIcon size={14} className="text-slate-400" />} defaultOpen>
             <LayerPanel
               layers={layers} updateLayer={updateLayer} toggleLayerVisible={toggleLayerVisible}
-              addDataLayer={addDataLayer} removeDataLayer={removeDataLayer} reorderDataLayers={reorderDataLayers}
+              addDataLayer={addDataLayer} onImport={setImportTarget} removeDataLayer={removeDataLayer} reorderDataLayers={reorderDataLayers}
               labelsConfig={labelsConfig} toggleLabelsLevel={toggleLabelsLevel} updateLabelsConfig={updateLabelsConfig}
             />
           </AccordionSection>
@@ -220,7 +235,7 @@ export default function PixelMap() {
             style={style} updateStyle={updateStyle}
             labelsConfig={labelsConfig} updateLabelsConfig={updateLabelsConfig}
             toggleLabelsVisible={toggleLabelsVisible} toggleLabelsLevel={toggleLabelsLevel}
-            dataLayers={dataLayers} updateLayer={updateLayer} fiscalYearsBySource={fiscalYearsBySource}
+            dataLayers={dataLayers} updateLayer={updateLayer} fiscalYearsBySource={fiscalYearsBySource} onImport={setImportTarget}
             onExportSvg={handleExportSvg} onExportPng={handleExportPng} onCopyEmbed={handleCopyEmbed}
             compareActive={mode === 'compare'}
             zoomTransform={zoomTransform} onZoomChange={setZoomTransform}
@@ -229,6 +244,11 @@ export default function PixelMap() {
           />
         </div>
       </div>
+
+      <ImportDataModal
+        open={importTarget !== null} onClose={() => setImportTarget(null)} onConfirm={handleImportConfirm}
+        replacingLabel={importTarget && importTarget !== 'new' ? layers.find(l => l.id === importTarget)?.label : null}
+      />
     </div>
   )
 }

@@ -30,6 +30,11 @@ function makeDataLayer(label) {
     colorFrom: '#d1fae5', colorTo: '#10b981', opacity: 80, visible: true,
   }
 }
+// layer จากไฟล์ที่ผู้ใช้นำเข้า — source 'import' ไม่ query Supabase แต่ใช้ importData ที่แนบมากับ layer ตรง ๆ
+// importStamp เปลี่ยนทุกครั้งที่นำเข้าใหม่ เพื่อให้ effect ที่ดึงข้อมูลใน PixelMap รู้ว่าต้องคำนวณใหม่
+function importPatch({ label, counts, max, meta }) {
+  return { source: 'import', label, importData: { counts, max }, importMeta: meta, importStamp: Date.now() }
+}
 function makeCompareSlots(n, startAt = 1) {
   return Array.from({ length: n }, (_, i) => ({
     id: `panel-${startAt + i}`, label: `Panel ${startAt + i}`,
@@ -128,13 +133,19 @@ export function usePixelMapState() {
     setLayers(ls => ls.map(l => (l.id === id ? { ...l, visible: !l.visible } : l)))
   }, [])
 
-  const addDataLayer = useCallback(() => {
+  const appendDataLayer = useCallback((imported) => {
     setLayers(ls => {
       const dataCount = ls.filter(l => l.type === 'data').length
       const layer = makeDataLayer(`Data ${dataCount + 1}`)
       layer.colorTo = DATA_PALETTE[dataCount % DATA_PALETTE.length]
-      return [...ls, layer]
+      return [...ls, imported ? { ...layer, ...importPatch(imported) } : layer]
     })
+  }, [])
+  const addDataLayer = useCallback(() => appendDataLayer(null), [appendDataLayer])
+  const addImportedLayer = useCallback((imported) => appendDataLayer(imported), [appendDataLayer])
+  // นำเข้าไฟล์ใหม่ทับ layer เดิม — เก็บสี/opacity/ลำดับไว้เหมือนเดิม เปลี่ยนแค่ข้อมูลกับชื่อ
+  const replaceLayerImport = useCallback((id, imported) => {
+    setLayers(ls => ls.map(l => (l.id === id ? { ...l, ...importPatch(imported) } : l)))
   }, [])
   const removeDataLayer = useCallback((id) => {
     setLayers(ls => ls.filter(l => l.id !== id))
@@ -178,7 +189,7 @@ export function usePixelMapState() {
     toggleDistrict, toggleSubdistrict, toggleCommunity,
     selectDistricts, clearSelection,
     expandedDistricts, toggleExpanded, expandedSubdistricts, toggleSubExpanded,
-    layers, updateLayer, toggleLayerVisible, addDataLayer, removeDataLayer, reorderDataLayers,
+    layers, updateLayer, toggleLayerVisible, addDataLayer, addImportedLayer, replaceLayerImport, removeDataLayer, reorderDataLayers,
     compareSlots, addComparePanel, removeComparePanel, toggleCompareSlotDistrict, setCompareSlotDistricts, setCompareSlotColor,
     style, updateStyle,
     labelsConfig, updateLabelsConfig, toggleLabelsVisible, toggleLabelsLevel,

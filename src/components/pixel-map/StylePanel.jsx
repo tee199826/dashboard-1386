@@ -1,4 +1,4 @@
-import { Palette, Download, Hash, Database } from 'lucide-react'
+import { Palette, Download, Hash, Database, Upload, FileSpreadsheet } from 'lucide-react'
 import FilterPill from '../FilterPill'
 import { DATA_SOURCES, DRUG_SUBSTANCES, BEHAVIOR_FLAGS, BKN_FILTER_OPTIONS, METRIC_OPTIONS } from '../../utils/pixelMapData'
 import { SHAPES } from '../../utils/pixelMapStyle'
@@ -31,10 +31,32 @@ function Field({ label, children }) {
   )
 }
 
+// layer ที่มาจากไฟล์นำเข้า — ไม่มี filter ของฐานข้อมูลให้ปรับ โชว์ที่มาของข้อมูลกับปุ่มเปลี่ยนไฟล์แทน
+function ImportLayerInfo({ layer, onImport }) {
+  const m = layer.importMeta ?? {}
+  return (
+    <div className="space-y-2">
+      <div className="flex items-start gap-1.5 text-[11px] text-slate-500">
+        <FileSpreadsheet size={13} className="shrink-0 mt-0.5 text-slate-400" />
+        <span className="min-w-0 break-words">
+          {m.fileName ?? 'ไฟล์นำเข้า'}{m.sheetName ? ` · ${m.sheetName}` : ''}
+          <br />
+          {m.valueCol ? `รวมค่าใน "${m.valueCol}"` : 'นับจำนวนแถว'} · จับคู่ได้ {m.districtCount ?? 0} เขต
+          {m.unmatchedCount ? ` · ข้าม ${m.unmatchedCount} ชื่อที่ไม่ใช่เขต กทม.` : ''}
+        </span>
+      </div>
+      <button type="button" onClick={() => onImport?.(layer.id)}
+        className="h-8 px-2.5 rounded-lg ring-1 ring-slate-200 text-[11px] font-medium text-slate-600 hover:bg-slate-50 inline-flex items-center gap-1">
+        <Upload size={11} /> เปลี่ยนไฟล์
+      </button>
+    </div>
+  )
+}
+
 export default function StylePanel({
   style, updateStyle,
   labelsConfig, updateLabelsConfig, toggleLabelsVisible, toggleLabelsLevel,
-  dataLayers, updateLayer, fiscalYearsBySource,
+  dataLayers, updateLayer, fiscalYearsBySource, onImport,
   onExportSvg, onExportPng, onCopyEmbed, compareActive,
   zoomTransform, onZoomChange,
   exportFullMap, setExportFullMap,
@@ -112,38 +134,48 @@ export default function StylePanel({
       </AccordionSection>
 
       <AccordionSection title="Data" icon={<Database size={14} className="text-slate-400" />}>
+        <button type="button" onClick={() => onImport?.('new')}
+          className="w-full h-9 rounded-lg ring-1 ring-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-1.5">
+          <Upload size={13} /> นำเข้าไฟล์ Excel/CSV
+        </button>
         {dataLayers.length === 0 && (
-          <p className="text-xs text-slate-400">ยังไม่มี data overlay — กด "+ ข้อมูล" ในส่วน Layers ด้านบนก่อน</p>
+          <p className="text-xs text-slate-400">ยังไม่มี data overlay — นำเข้าไฟล์ของคุณ หรือกด "+ ข้อมูล" ในส่วน Layers ด้านบนเพื่อใช้ข้อมูลในระบบ</p>
         )}
         {dataLayers.map(layer => (
           <div key={layer.id} className="space-y-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
             <div className="text-xs font-semibold text-slate-600">{layer.label}</div>
-            <Field label="แหล่งข้อมูล">
-              <FilterPill value={layer.source} onChange={v => updateLayer(layer.id, { source: v, substance: null, behavior: null, fiscalYear: 'all' })}
-                options={DATA_SOURCES.map(s => [s.id, s.label])} />
-            </Field>
-            {layer.source === 'drug_incidents' && (
+            {layer.source === 'import' ? (
+              <ImportLayerInfo layer={layer} onImport={onImport} />
+            ) : (
               <>
-                <Field label="ชนิดยา">
-                  <FilterPill value={layer.substance ?? 'all'} onChange={v => updateLayer(layer.id, { substance: v === 'all' ? null : v })}
-                    options={[['all', 'ทั้งหมด'], ...DRUG_SUBSTANCES.map(([col, lbl]) => [col, lbl])]} />
+                <Field label="แหล่งข้อมูล">
+                  <FilterPill value={layer.source} onChange={v => updateLayer(layer.id, { source: v, substance: null, behavior: null, fiscalYear: 'all' })}
+                    options={DATA_SOURCES.map(s => [s.id, s.label])} />
                 </Field>
-                <Field label="พฤติการณ์">
-                  <FilterPill value={layer.behavior ?? 'all'} onChange={v => updateLayer(layer.id, { behavior: v === 'all' ? null : v })}
-                    options={[['all', 'ทั้งหมด'], ...BEHAVIOR_FLAGS.map(([col, lbl]) => [col, lbl])]} />
+                {layer.source === 'drug_incidents' && (
+                  <>
+                    <Field label="ชนิดยา">
+                      <FilterPill value={layer.substance ?? 'all'} onChange={v => updateLayer(layer.id, { substance: v === 'all' ? null : v })}
+                        options={[['all', 'ทั้งหมด'], ...DRUG_SUBSTANCES.map(([col, lbl]) => [col, lbl])]} />
+                    </Field>
+                    <Field label="พฤติการณ์">
+                      <FilterPill value={layer.behavior ?? 'all'} onChange={v => updateLayer(layer.id, { behavior: v === 'all' ? null : v })}
+                        options={[['all', 'ทั้งหมด'], ...BEHAVIOR_FLAGS.map(([col, lbl]) => [col, lbl])]} />
+                    </Field>
+                  </>
+                )}
+                {layer.source !== 'bkn_summary' && (
+                  <Field label="ปีงบประมาณ">
+                    <FilterPill value={String(layer.fiscalYear)} onChange={v => updateLayer(layer.id, { fiscalYear: v })}
+                      options={[['all', 'ทุกปี'], ...(fiscalYearsBySource[layer.source] ?? []).map(y => [String(y), String(y)])]} />
+                  </Field>
+                )}
+                <Field label="บก.น.">
+                  <FilterPill value={layer.bkn} onChange={v => updateLayer(layer.id, { bkn: v })}
+                    options={[['all', 'ทั้งหมด'], ...BKN_FILTER_OPTIONS.map(b => [b, b])]} />
                 </Field>
               </>
             )}
-            {layer.source !== 'bkn_summary' && (
-              <Field label="ปีงบประมาณ">
-                <FilterPill value={String(layer.fiscalYear)} onChange={v => updateLayer(layer.id, { fiscalYear: v })}
-                  options={[['all', 'ทุกปี'], ...(fiscalYearsBySource[layer.source] ?? []).map(y => [String(y), String(y)])]} />
-              </Field>
-            )}
-            <Field label="บก.น.">
-              <FilterPill value={layer.bkn} onChange={v => updateLayer(layer.id, { bkn: v })}
-                options={[['all', 'ทั้งหมด'], ...BKN_FILTER_OPTIONS.map(b => [b, b])]} />
-            </Field>
             <p className="text-[11px] text-slate-400">ปรับสีไล่โทน (min → max) ได้ที่แถว layer นี้ใน Layers</p>
           </div>
         ))}

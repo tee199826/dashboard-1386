@@ -723,7 +723,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
           <div className="mx-auto h-0 w-0 border-x-4 border-t-4 border-x-transparent border-t-slate-900/90" />
         </div>
       )}
-      {style.showZoomControls && (
+      {style.showZoomControls && !exporting && (
         <ZoomControls onZoomIn={zoomIn} onZoomOut={zoomOut} onReset={resetZoom} onCenter={centerOnSelected} />
       )}
     </div>
