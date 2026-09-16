@@ -10,7 +10,7 @@ import { useAuth } from '../../context/AuthContext'
 import { fetchAllPages } from '../../utils/supabasePagination'
 import { formatThaiDate } from '../../utils/heroMeta'
 import { IntelPage, Card, Field, Input, Select } from '../../components/intel/FormUI'
-import { DISTRICTS, formatNationalId } from '../../utils/intelOptions'
+import { DISTRICTS, formatNationalId, displayNationalId } from '../../utils/intelOptions'
 
 const PAGE_SIZE = 50
 const txt = (v) => (v == null || v === '' ? '—' : String(v))
@@ -122,7 +122,7 @@ export default function InterviewSearch() {
         const P = pii[r.record_uid] || {}
         ws.addRow([
           r.code || '', formatThaiDate(r.surveyed_at) || '', r.doc_no || '', P.full_name || '',
-          formatNationalId(P.national_id) || '',
+          displayNationalId(P.national_id) || '',
           P.phone || '', r.age ?? '', r.religion || '', r.occupation || '', r.income_range || '',
           r.education || '', r.residence?.district || '', r.residence?.subdistrict || '',
           (r.main_drug?.drugs || []).join(', ') || (r.regular_drugs || []).map((d) => d.drug).join(', '),
@@ -330,7 +330,7 @@ function DetailPanel({ row: r, pii: P, onClose, onDelete, busy }) {
             <Row label="เลขที่แบบเดิม (กรอกเอง)" value={r.doc_no_legacy} />
             <Row label="ชื่ออื่นๆ" value={P?.alias} />
             <Row label="สัญชาติ" value={r.nationality} />
-            <Row label="เลขประจำตัวประชาชน" value={formatNationalId(P?.national_id)} />
+            <Row label="เลขประจำตัวประชาชน" value={displayNationalId(P?.national_id)} />
             <Row label="วันเกิด" value={P?.birth_date && formatThaiDate(P.birth_date)} />
             <Row label="อายุ" value={r.age && `${r.age} ปี`} />
             <Row label="ศาสนา" value={r.religion} />

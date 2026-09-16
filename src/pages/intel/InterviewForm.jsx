@@ -216,10 +216,8 @@ function InterviewFormBody({ draftKey, onClear }) {
       // เลขบัตร (ช่องกรอกกรองให้เหลือเฉพาะตัวเลขแล้ว):
       //   ยังไม่เลือกสัญชาติ → ยังไม่ตรวจ (ช่องปิดอยู่ ให้ไปเตือนที่ช่องสัญชาติแทน)
       //   ไทย              → บังคับ ต้องครบ 13 หลักพอดี
-      //   สัญชาติอื่น       → ไม่บังคับ แต่ถ้ากรอกต้องครบ 13 หลัก กันเลขครึ่ง ๆ กลาง ๆ
-      national_id: p.nationality === NATIONALITY_THAI
-        ? p.national_id.length !== 13
-        : f(p.nationality) && p.national_id.length > 0 && p.national_id.length !== 13,
+      //   สัญชาติอื่น       → ไม่บังคับ และไม่ต้องครบ 13 หลัก (เอกสารต่างด้าวเลขไม่เท่ากัน) กรอกเท่าที่มีได้
+      national_id: p.nationality === NATIONALITY_THAI && p.national_id.length !== 13,
       education: !f(p.education),
       education_other: p.education === 'อื่นๆ' && !f(p.education_other),
       occupation: !f(p.occupation),
@@ -497,7 +495,12 @@ function InterviewFormBody({ draftKey, onClear }) {
             <Field label="วัน เดือน ปีเกิด"><Input type="date" value={p.birth_date} onChange={(e) => setPf({ birth_date: e.target.value })} /></Field>
             {/* สัญชาติต้องเลือกก่อน — เป็นตัวกำหนดว่าเลขประจำตัวประชาชนบังคับกรอกหรือไม่ */}
             <Field label="สัญชาติ" required error={err('nationality') && 'กรุณาเลือกสัญชาติก่อน'}>
-              <ChipGroup options={NATIONALITY_OPTIONS} value={p.nationality} onChange={(v) => setPf({ nationality: v })} />
+              {/* เปลี่ยนเป็นสัญชาติไทย → ตัดตัวอักษรออกจากเลขบัตร ให้เหลือเฉพาะตัวเลขตามรูปแบบไทย */}
+              <ChipGroup options={NATIONALITY_OPTIONS} value={p.nationality}
+                onChange={(v) => setPf({
+                  nationality: v,
+                  national_id: v === NATIONALITY_THAI ? p.national_id.replace(/\D/g, '').slice(0, 13) : p.national_id,
+                })} />
             </Field>
             {p.nationality === 'อื่นๆ' && (
               <Field label="ระบุสัญชาติ" required error={err('nationality_other')}>
@@ -511,20 +514,19 @@ function InterviewFormBody({ draftKey, onClear }) {
               const n = p.national_id.length
               return (
                 <Field label={picked && !isThai ? 'เลขประจำตัวประชาชน (ถ้ามี)' : 'เลขประจำตัวประชาชน'} required={isThai}
-                  error={err('national_id') && (
-                    isThai
-                      ? (n ? `ต้องครบ 13 หลัก (กรอกแล้ว ${n} หลัก)` : 'กรุณากรอกเลข 13 หลัก')
-                      : `ต้องครบ 13 หลัก หรือเว้นว่างไว้ (กรอกแล้ว ${n} หลัก)`
-                  )}
+                  error={err('national_id') && (n ? `ต้องครบ 13 หลัก (กรอกแล้ว ${n} หลัก)` : 'กรุณากรอกเลข 13 หลัก')}
                   hint={!picked ? 'เลือกสัญชาติก่อน'
                     : isThai ? 'เลข 13 หลัก กรอกตัวเลขเท่านั้น ระบบจะใส่ขีดให้อัตโนมัติ'
-                    : 'ไม่ใช่สัญชาติไทย ไม่บังคับกรอก — ถ้ามีเลข 13 หลักให้กรอกให้ครบ'}>
-                  {/* แสดงเป็น x-xxxx-xxxxx-xx-x แต่เก็บลงฐานข้อมูลเป็นตัวเลขล้วน
-                      ขีดใส่ให้อัตโนมัติ — พิมพ์ตัวอักษร/ขีด/เว้นวรรคเองไม่ติด */}
-                  <Input value={formatNationalId(p.national_id)} inputMode="numeric" maxLength={17}
+                    : 'ไม่ใช่สัญชาติไทย ไม่บังคับกรอก — กรอกเท่าที่มี ไม่ต้องครบ 13 หลัก'}>
+                  {/* ไทย: ตัวเลขล้วน 13 หลัก แสดงเป็น x-xxxx-xxxxx-xx-x ขีดใส่ให้อัตโนมัติ พิมพ์ตัวอักษรไม่ติด
+                      สัญชาติอื่น: พิมพ์ได้ทั้งตัวเลขและตัวอักษร (เลขเอกสารต่างด้าว/หนังสือเดินทาง) เก็บตามที่พิมพ์ */}
+                  <Input value={isThai ? formatNationalId(p.national_id) : p.national_id}
+                    inputMode={isThai ? 'numeric' : 'text'} maxLength={isThai ? 17 : 30}
                     disabled={!picked}
-                    placeholder={picked ? 'x-xxxx-xxxxx-xx-x' : 'เลือกสัญชาติก่อน'}
-                    onChange={(e) => setPf({ national_id: e.target.value.replace(/\D/g, '').slice(0, 13) })} />
+                    placeholder={!picked ? 'เลือกสัญชาติก่อน' : isThai ? 'x-xxxx-xxxxx-xx-x' : 'เลขบัตร/เลขเอกสาร เช่น MM1234567'}
+                    onChange={(e) => setPf({
+                      national_id: isThai ? e.target.value.replace(/\D/g, '').slice(0, 13) : e.target.value.slice(0, 30),
+                    })} />
                 </Field>
               )
             })()}
