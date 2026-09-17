@@ -207,6 +207,12 @@ export function buildDotGrid(geojson, { width, height, spacing = 12, padding = 2
   return { dots, project }
 }
 
+// ชื่อเขต (dname) ที่จุด [lng, lat] ตกอยู่ — ไม่ตกในเขตไหนเลย (ทะเล/นอก กทม.) คืน null
+export function districtContaining(features, lngLat) {
+  const pt = point(lngLat)
+  return features.find(f => booleanPointInPolygon(pt, f))?.properties.dname ?? null
+}
+
 // เลือก index แบบกระจายสม่ำเสมอ (deterministic, ไม่สุ่ม) — ใช้ทำ Density mode thinning ต่อเขต
 export function thinnedIndices(count, ratio) {
   const keep = new Set()

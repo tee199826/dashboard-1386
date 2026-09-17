@@ -61,6 +61,7 @@ export default function StylePanel({
   zoomTransform, onZoomChange,
   exportFullMap, setExportFullMap,
   showExportNumbers, setShowExportNumbers,
+  showExportDetail, setShowExportDetail,
 }) {
   return (
     <>
@@ -235,6 +236,13 @@ export default function StylePanel({
           <input type="checkbox" checked={showExportNumbers} onChange={e => setShowExportNumbers(e.target.checked)} className="accent-violet-600" />
           แสดงตัวเลขจำนวนเรื่องของพื้นที่ที่เลือก
         </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={showExportDetail} onChange={e => setShowExportDetail(e.target.checked)} className="accent-violet-600" />
+          แนบการ์ด &quot;รายละเอียดพื้นที่&quot; ลงในรูป
+        </label>
+        <p className="text-[11.5px] leading-relaxed text-slate-400 -mt-1">
+          วางเป็นแผงข้างขวาของแผนที่ ไม่ทับแผนที่ (รูปกว้างขึ้น) — ใช้พื้นที่ที่คลิกเลือกไว้ ถ้าไม่ได้เลือกใช้เขตกลางแผนที่ (ไม่ใช้ในโหมด Compare)
+        </p>
         <div className="grid grid-cols-3 gap-1.5">
           <button type="button" onClick={() => onExportPng(1)} className="h-9 rounded-lg ring-1 ring-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50">PNG 1x</button>
           <button type="button" onClick={() => onExportPng(2)} className="h-9 rounded-lg ring-1 ring-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50">PNG 2x</button>

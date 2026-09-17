@@ -3,14 +3,15 @@ import { select } from 'd3-selection'
 import { zoom as d3zoom, zoomIdentity } from 'd3-zoom'
 import {
   districtPathD, buildDotGrid, BKK_BBOX, makeProjection,
-  ringPathD, featurePathD, lookupSubdistrict, lookupCommunity, communityCellRing,
+  ringPathD, featurePathD, lookupSubdistrict, lookupCommunity, communityCellRing, districtContaining,
 } from '../../utils/pixelMapGeometry'
 import { interpolateHex, getContrastText } from '../../utils/pixelMapStyle'
-import { nodeMetricValue } from '../../utils/pixelMapData'
+import { nodeMetricValue, nodeDetail, sameArea, resolveAreaNode } from '../../utils/pixelMapData'
 import { subKey, ROSE_DEFAULT } from '../../hooks/usePixelMapState'
 import { fitToBoundsTransform, estimateLabelBox, layoutLabels, boxOf } from '../../utils/pixelMapZoom'
 import { TILE_SOURCES, visibleTiles } from '../../utils/pixelMapTiles'
 import ZoomControls from './ZoomControls'
+import ExportDetailCard from './ExportDetailCard'
 
 const FONT = "Inter, 'Noto Sans Thai', sans-serif"
 const SCALE_EXTENT = [1, 24] // ซูมเข้าได้ลึกถึงระดับถนน (tile รองรับถึง z18)
@@ -27,6 +28,8 @@ const THEMES = {
 // hover: ฟ้าอ่อน + ขอบน้ำเงินสด ตามพฤติกรรม mouseover ของ IncidentMap
 const HOVER_FILL = '#3b82f6'
 const HOVER_STROKE = '#1d4ed8'
+const EXPORT_SIDE_W = 302      // แผงรายละเอียดข้างแผนที่ในรูป export (การ์ด 262 + ขอบซ้ายขวา 20)
+const PINNED_STROKE = '#0891b2' // กรอบพื้นที่ที่คลิกเลือกไว้ — ฟ้าอมเขียว ไม่ซ้ำสีเขต(ม่วง)/แขวง(ส้ม)/ชุมชน(ชมพู)/hover(น้ำเงิน)
 const FOCUS_LAND = '#e2e8f0' // สีพื้นของเขตในโหมดโฟกัสเมื่อไม่ได้เปิดภาพแผนที่
 const FOCUS_DISTRICT_FILL_OPACITY = 0.22 // ระบายเขตที่เลือกแบบจางๆ ให้ยังเห็นภาพแผนที่/แขวงที่ทับอยู่ข้างบน
 const AREA_FILL_OPACITY = 0.28 // แขวง/ชุมชน — ข้างในใสจางๆ (เห็นแผนที่ทะลุ) ขอบทึบสีเข้ม
@@ -103,7 +106,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
   width, height, geojson, hierarchy, subdistrictIndex, communityIndex,
   checkedDistricts, checkedSubdistricts, checkedCommunities = EMPTY_SET,
   layers, layerCounts, labelsConfig, style, panelLabel, exporting = false, showExportNumbers = true,
-  zoomTransform, onZoomChange,
+  zoomTransform, onZoomChange, onAreaHover, onCenterArea, onAreaClick, pinnedArea = null, exportDetailArea = null,
 }, ref) {
   const theme = THEMES[style.background] ?? THEMES.map
   const bg = theme.bg
@@ -143,7 +146,8 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
     // ถ้า setState ทุก event เฟรมเดียวจะ re-render ซ้ำหลายรอบเปล่า ๆ = หน่วง ; เก็บ transform ล่าสุดแล้วแจ้งเฟรมละครั้ง
     let rafId = 0, pending = null
     const flush = () => { rafId = 0; if (pending) onZoomChangeRef.current?.(pending) }
-    const behavior = d3zoom().scaleExtent(SCALE_EXTENT).on('zoom', (e) => {
+    // clickDistance 4px — ค่าเริ่มต้นของ d3 คือ 0 ทำให้มือสั่นแค่ 1px ระหว่างกดก็ถูกนับเป็นลาก แล้ว click (เลือกพื้นที่) โดนกลืนทิ้ง
+    const behavior = d3zoom().scaleExtent(SCALE_EXTENT).clickDistance(4).on('zoom', (e) => {
       lastAppliedRef.current = e.transform
       pending = { x: e.transform.x, y: e.transform.y, k: e.transform.k }
       if (!rafId) rafId = requestAnimationFrame(flush)
@@ -167,6 +171,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
   }, [t.x, t.y, t.k]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [hover, setHover] = useState(null) // { dname, x, y } — x/y เป็น px ในกรอบ svg สำหรับวาง tooltip
+  const lastAreaRef = useRef(null)         // พื้นที่ล่าสุดที่ส่งออกไปแล้ว — กันยิงซ้ำทุก mousemove
 
   // throttle ด้วย requestAnimationFrame แทน debounce 150ms — label placement (cull + collision) อัปเดต
   // "ทุกเฟรม" ระหว่างซูม/แพน จึงตามการเคลื่อนไหวแบบเรียลไทม์ ลื่นขึ้น (เดิมรอ 150ms หลังหยุดถึงค่อยขยับ = หน่วง/กระตุก)
@@ -252,6 +257,34 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
     return out
   }, [geojson, project])
 
+  // ── เขตที่อยู่กลางมุมมองปัจจุบัน — แผงรายละเอียด/การ์ด export ใช้ค่านี้ตอนเมาส์ไม่ได้ชี้บนแผนที่ ──
+  // เลื่อน/ซูมให้เขตไหนอยู่กลางจอ ก็ได้เขตนั้น ; กลางจอตกทะเลหรือนอก กทม. → เอาเขตที่จุดกึ่งกลางใกล้ที่สุด
+  const centerDistrict = useMemo(() => {
+    if (!geojson || visibleDistrictPaths.length === 0) return null
+    const cx = (width / 2 - debouncedT.x) / debouncedT.k
+    const cy = (height / 2 - debouncedT.y) / debouncedT.k
+    const visible = new Set(visibleDistrictPaths.map(f => f.dname)) // โหมดโฟกัส: คิดเฉพาะเขตที่ยังเห็นบนจอ
+    const features = geojson.features.filter(f => visible.has(f.properties.dname))
+    const hit = districtContaining(features, unproject([cx, cy]))
+    if (hit) return hit
+    let nearest = null
+    let best = Infinity
+    for (const name of visible) {
+      const c = districtCentroids[name]
+      if (!c) continue
+      const d = (c.x - cx) ** 2 + (c.y - cy) ** 2
+      if (d < best) { best = d; nearest = name }
+    }
+    return nearest
+  }, [geojson, visibleDistrictPaths, districtCentroids, debouncedT, width, height, unproject])
+
+  // แจ้งออกไปเฉพาะตอนเขตกลางจอเปลี่ยน — ไม่แจ้งระหว่าง export เพราะ "ส่งออกเต็มแผนที่" รีเซ็ตซูมชั่วคราว
+  // ถ้าแจ้งตอนนั้นการ์ดในรูปจะกลายเป็นเขตกลางแผนที่ทั้งกรุงเทพ แทนที่จะเป็นเขตที่ผู้ใช้เลื่อนมาไว้ตรงกลาง
+  useEffect(() => {
+    if (exporting || !onCenterArea) return
+    onCenterArea(centerDistrict ? { level: 'district', dname: centerDistrict, label: centerDistrict, source: 'center' } : null)
+  }, [centerDistrict, exporting, onCenterArea])
+
   const dotGrid = useMemo(() => {
     if (!geojson || !dataLayers.some(l => l.visible)) return null
     return buildDotGrid(geojson, { width, height, spacing: style.spacing, padding: 24 })
@@ -294,7 +327,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
       const xs = pts.map(p => p[0]); const ys = pts.map(p => p[1])
       out.push({
         key, dname: district, text: sub, value: nodeMetricValue(node.meta, labelsConfig.metric),
-        count: nodeMetricValue(node.meta, 'count'),
+        count: nodeMetricValue(node.meta, 'count'), meta: node.meta,
         x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2,
         bottom: Math.max(...ys), d, approx,
       })
@@ -398,7 +431,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
       const x = pts.length ? (Math.min(...xs) + Math.max(...xs)) / 2 : px
       const y = pts.length ? (Math.min(...ys) + Math.max(...ys)) / 2 : py
       const bottom = pts.length ? Math.max(...ys) : py
-      out.push({ key, dname: district, text: name, x, y, bottom, d, approx, value: nodeMetricValue(c, labelsConfig.metric), count: nodeMetricValue(c, 'count') })
+      out.push({ key, dname: district, sub, text: name, x, y, bottom, d, approx, value: nodeMetricValue(c, labelsConfig.metric), count: nodeMetricValue(c, 'count'), meta: c })
     }
     return out
   }, [checkedCommunities, hierarchy, communityIndex, subdistrictIndex, districtFeatureByName, project, labelsConfig.metric])
@@ -499,14 +532,39 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
     const rect = svgInternalRef.current?.getBoundingClientRect()
     return rect ? { x: e.clientX - rect.left, y: e.clientY - rect.top } : null
   }, [])
+  // node = meta ของพื้นที่นั้นใน hierarchy — ใช้กาง "ในชุมชน/นอกชุมชน + พฤติการณ์" ทั้งใน tooltip และแผงรายละเอียด
+  // ส่งออกให้แผงรายละเอียดเฉพาะตอนเปลี่ยนพื้นที่ (ไม่ใช่ทุก mousemove)
+  const reportArea = useCallback((area) => {
+    const key = `${area.level}|${area.dname}|${area.sub ?? ''}|${area.label}`
+    if (lastAreaRef.current === key) return
+    lastAreaRef.current = key
+    onAreaHover?.({ ...area, source: 'hover' })
+  }, [onAreaHover])
+  // เมาส์ออกนอกกรอบแผนที่ → ล้างพื้นที่ที่ชี้ แผงกลับไปแสดงเขตกลางแผนที่
+  // (ไม่งั้นทางที่เมาส์ลากผ่านไปหาปุ่ม export จะเปลี่ยนแผงเป็นเขตสุดท้ายที่บังเอิญผ่าน)
+  const handleCanvasLeave = useCallback(() => {
+    setHover(null)
+    if (lastAreaRef.current === null) return
+    lastAreaRef.current = null
+    onAreaHover?.(null)
+  }, [onAreaHover])
   const handleHoverMove = useCallback((dname) => (e) => {
     const pos = posOf(e); if (!pos) return
-    setHover({ level: 'district', dname, label: dname, count: hoverCountOf(dname), ...pos })
-  }, [posOf, hoverCountOf])
-  const handleAreaHover = useCallback((level, dname, label, count) => (e) => {
+    const node = hierarchy[dname]?.meta
+    setHover({ level: 'district', dname, label: dname, count: hoverCountOf(dname), node, ...pos })
+    reportArea({ level: 'district', dname, label: dname, node })
+  }, [posOf, hoverCountOf, hierarchy, reportArea])
+  const handleAreaHover = useCallback((level, dname, label, count, node, sub) => (e) => {
     const pos = posOf(e); if (!pos) return
-    setHover({ level, dname, label, count, ...pos })
-  }, [posOf])
+    setHover({ level, dname, label, count, node, sub, ...pos })
+    reportArea({ level, dname, label, node, sub })
+  }, [posOf, reportArea])
+  // คลิกพื้นที่ = เลือกไว้ใช้กับแผงรายละเอียดและการ์ดในรูป export (คลิกซ้ำที่เดิม = ยกเลิก — ตัดสินที่ PixelMap)
+  // ctrl+click สงวนไว้รีเซ็ตซูมตามเดิม ; ลากแพนแล้วปล่อย d3-zoom กลืน click ให้เอง จึงไม่เลือกผิดตอนเลื่อนแผนที่
+  const handleAreaClick = useCallback((area) => (e) => {
+    if (e.ctrlKey || !onAreaClick) return
+    onAreaClick({ ...area, source: 'pinned' })
+  }, [onAreaClick])
 
 
   // ── เลเยอร์รูปทรง (พื้น/เส้นขอบ/พื้นที่เลือก/hover zone) — memo แยกจาก transform ──
@@ -597,32 +655,58 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
     )
   }, [checkedCommunityPoints, labelsConfig.communityColor])
 
-  const hoverZones = useMemo(() => (
+  // โซนรับเมาส์ — ชั้นบนสุดชนะ: คลิกในแขวง/ชุมชนที่ติ๊กไว้ = เลือกแขวง/ชุมชนนั้น ไม่ใช่ทั้งเขต
+  const hoverZones = useMemo(() => {
+    const zoneCursor = onAreaClick ? { cursor: 'pointer' } : undefined
+    return (
     <>
-      <g fill="transparent" stroke="none">
+      <g fill="transparent" stroke="none" style={zoneCursor}>
         {visibleDistrictPaths.map(f => (
-          <path key={f.dcode} d={f.d} onMouseMove={handleHoverMove(f.dname)} onMouseLeave={() => setHover(null)} />
+          <path key={f.dcode} d={f.d} onMouseMove={handleHoverMove(f.dname)} onMouseLeave={() => setHover(null)}
+            onClick={handleAreaClick({ level: 'district', dname: f.dname, label: f.dname })} />
         ))}
       </g>
-      <g fill="transparent" stroke="none">
+      <g fill="transparent" stroke="none" style={zoneCursor}>
         {subdistrictShapes.map(s => (s.d
-          ? <path key={s.key} d={s.d} onMouseMove={handleAreaHover('subdistrict', s.dname, s.text, s.count)} onMouseLeave={() => setHover(null)} />
+          ? <path key={s.key} d={s.d} onMouseMove={handleAreaHover('subdistrict', s.dname, s.text, s.count, s.meta)} onMouseLeave={() => setHover(null)}
+            onClick={handleAreaClick({ level: 'subdistrict', dname: s.dname, label: s.text })} />
           : null))}
       </g>
-      <g fill="transparent" stroke="none">
+      <g fill="transparent" stroke="none" style={zoneCursor}>
         {checkedCommunityPoints.map(p => (p.d
-          ? <path key={p.key} d={p.d} onMouseMove={handleAreaHover('community', p.dname, p.text, p.count)} onMouseLeave={() => setHover(null)} />
+          ? <path key={p.key} d={p.d} onMouseMove={handleAreaHover('community', p.dname, p.text, p.count, p.meta, p.sub)} onMouseLeave={() => setHover(null)}
+            onClick={handleAreaClick({ level: 'community', dname: p.dname, sub: p.sub, label: p.text, node: p.meta })} />
           : null))}
       </g>
     </>
-  ), [visibleDistrictPaths, subdistrictShapes, checkedCommunityPoints, handleHoverMove, handleAreaHover])
+    )
+  }, [visibleDistrictPaths, subdistrictShapes, checkedCommunityPoints, handleHoverMove, handleAreaHover, handleAreaClick, onAreaClick])
+
+  // กรอบพื้นที่ที่คลิกเลือกไว้ — หา path ตามระดับ (แขวง/ชุมชนต้องยังติ๊กอยู่บนแผนที่ถึงจะมีรูปทรงให้วาด)
+  const pinnedPathD = useMemo(() => {
+    if (!pinnedArea) return null
+    if (pinnedArea.level === 'district') return districtPathById[pinnedArea.dname] ?? null
+    if (pinnedArea.level === 'subdistrict') {
+      return subdistrictShapes.find(s => s.dname === pinnedArea.dname && s.text === pinnedArea.label)?.d ?? null
+    }
+    return checkedCommunityPoints.find(p => p.dname === pinnedArea.dname && p.sub === pinnedArea.sub && p.text === pinnedArea.label)?.d ?? null
+  }, [pinnedArea, districtPathById, subdistrictShapes, checkedCommunityPoints])
 
   // พื้นหลังใต้ตัวอักษร = สีพื้นที่จริงที่ตัวอักษรทับอยู่ (ใช้เทียบ contrast + สี halo)
   const backgroundColorFor = () => (focusActive && !tileLayer ? FOCUS_LAND : land)
 
+  // รายละเอียดใต้ชื่อพื้นที่ใน tooltip — มาจากข้อมูลเหตุการณ์ยาเสพติดเสมอ (ปีที่ติ๊กไว้)
+  const hoverDetail = hover ? nodeDetail(hover.node) : null
+
+  // ตอน export: การ์ดรายละเอียดวางเป็นแผง "ข้างขวา" ของแผนที่ ไม่ทับตัวแผนที่ — ขยายความกว้างภาพเพิ่มเฉพาะตอนนั้น
+  // (เฉพาะแผนที่เดี่ยว และเฉพาะเมื่อพื้นที่นั้นมีข้อมูลจริง ไม่งั้นจะได้แผงเปล่า)
+  const showExportSide = exporting && panelLabel == null && !!exportDetailArea &&
+    (nodeDetail(resolveAreaNode(hierarchy, exportDetailArea))?.count ?? 0) > 0
+  const canvasW = width + (showExportSide ? EXPORT_SIDE_W : 0)
+
   return (
-    <div className="relative" style={{ width, height }}>
-      <svg ref={svgInternalRef} width={width} height={height} viewBox={`0 0 ${width} ${height}`} xmlns="http://www.w3.org/2000/svg">
+    <div className="relative" style={{ width: canvasW, height }} onMouseLeave={handleCanvasLeave}>
+      <svg ref={svgInternalRef} width={canvasW} height={height} viewBox={`0 0 ${canvasW} ${height}`} xmlns="http://www.w3.org/2000/svg">
         <rect x={0} y={0} width={width} height={height} fill={bg} />
 
         {focusActive && (
@@ -654,6 +738,14 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
           {/* Layer 2: แขวง / ชุมชน — ข้างในใส ขอบทึบ */}
           {subdistrictFill}
           {communityFill}
+
+          {/* พื้นที่ที่คลิกเลือกไว้ — เส้นหนามีขอบขาว (แสดงบนจออย่างเดียว ไม่ติดไปในรูป export) */}
+          {pinnedPathD && !exporting && (
+            <g fill="none" strokeLinejoin="round" pointerEvents="none">
+              <path d={pinnedPathD} stroke="#ffffff" strokeWidth={7} vectorEffect="non-scaling-stroke" />
+              <path d={pinnedPathD} stroke={PINNED_STROKE} strokeWidth={4} vectorEffect="non-scaling-stroke" />
+            </g>
+          )}
 
           {/* hover: ไฮไลต์เขตใต้เมาส์ (live) แล้วโซนรับ event (memo) — วางท้ายสุดให้จับ event ได้ทั้งพื้นที่ */}
           {hover && (
@@ -689,6 +781,16 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
           </g>
         ))}
 
+        {/* แผงรายละเอียดข้างแผนที่ (เฉพาะตอน export) — พื้นทึบวาดทับหลังตัวแผนที่ทั้งหมด
+            เพราะตอนซูมเข้า เส้นเขต/ภาพแผนที่ยื่นเกินขอบขวา 900px อยู่แล้ว ต้องปิดไม่ให้ล้นเข้ามาในแผง */}
+        {showExportSide && (
+          <g pointerEvents="none">
+            <rect x={width} y={0} width={EXPORT_SIDE_W} height={height} fill="#f8fafc" />
+            <line x1={width + 0.5} y1={0} x2={width + 0.5} y2={height} stroke="#e2e8f0" strokeWidth={1} />
+            <ExportDetailCard area={exportDetailArea} hierarchy={hierarchy} x={width + 20} centerInHeight={height} />
+          </g>
+        )}
+
         {/* เครดิตแหล่งภาพแผนที่ — ต้องแสดงตามเงื่อนไขการใช้ tile ของ OpenStreetMap */}
         {tileLayer && (
           <text x={width - 6} y={height - 6} textAnchor="end" fontSize={9} fontFamily={FONT} fill="#334155" opacity={0.85}>
@@ -706,19 +808,32 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
           </g>
         )}
       </svg>
-      {/* tooltip ชื่อเขต + จำนวนเคสตามเมาส์ — พิลดำหางล่าง เหมือน .district-tooltip ของแผนที่ leaflet */}
-      {hover && (
+      {/* tooltip ชื่อเขต + จำนวนเคสตามเมาส์ — พิลดำหางล่าง เหมือน .district-tooltip ของแผนที่ leaflet
+          ซ่อนตอน export เหมือนปุ่มซูม: เป็น UI ระหว่างใช้งาน ไม่ใช่เนื้อหาของภาพ */}
+      {hover && !exporting && (
         <div className="absolute pointer-events-none z-10 -translate-x-1/2 -translate-y-full"
           style={{ left: hover.x, top: hover.y - 10 }}>
-          <div className="rounded-md bg-slate-900/90 px-2.5 py-1 text-white whitespace-nowrap shadow-lg text-center">
-            <div className="text-xs font-semibold">
+          <div className="rounded-lg bg-slate-900/90 px-3 py-1.5 text-white whitespace-nowrap shadow-lg text-center">
+            <div className="text-sm font-semibold">
               {hover.level === 'subdistrict' && <span className="text-slate-400 font-normal">แขวง </span>}
               {hover.level === 'community' && <span className="text-slate-400 font-normal">ชุมชน </span>}
               {hover.level === 'district' ? hover.label : hover.label.replace(/^(แขวง|ชุมชน)\s*/, '')}
             </div>
-            <div className="text-[11px] text-slate-200">
+            <div className="text-[13px] text-slate-200">
               <span className="font-bold text-amber-300 tabular-nums">{(hover.count ?? 0).toLocaleString()}</span> เรื่อง
             </div>
+            {/* tooltip เอาแค่ "พื้นที่ไหน กี่เรื่อง ในชุมชนเท่าไร" — รายละเอียดเต็มอยู่ที่แผง "รายละเอียดพื้นที่" ข้างแผนที่ ซึ่งอ่านง่ายกว่าและไม่บังแผนที่ */}
+            {hoverDetail && hoverDetail.count > 0 && hover.level !== 'community' && (
+              <div className="mt-0.5 text-[12px] text-slate-300 tabular-nums">
+                ในชุมชน <span className="font-semibold text-rose-300">{hoverDetail.inCommunity.toLocaleString()}</span>
+                {' · '}นอกชุมชน <span className="font-semibold text-white">{hoverDetail.outCommunity.toLocaleString()}</span>
+              </div>
+            )}
+            {onAreaClick && (
+              <div className="mt-0.5 text-[11px] text-cyan-300">
+                {sameArea(pinnedArea, hover) ? 'คลิกอีกครั้งเพื่อยกเลิกการเลือก' : 'คลิกเพื่อเลือกพื้นที่นี้'}
+              </div>
+            )}
           </div>
           <div className="mx-auto h-0 w-0 border-x-4 border-t-4 border-x-transparent border-t-slate-900/90" />
         </div>

@@ -70,7 +70,13 @@ export async function exportPng(node, scale = 1, filename = 'pixel-map.png') {
   let timer
   const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('export timeout')), EXPORT_TIMEOUT_MS) })
   try {
-    const dataUrl = await Promise.race([toPng(node, { pixelRatio: scale, cacheBust: false }), timeout])
+    // ถ่ายเต็มขนาดเนื้อหา (scrollWidth/Height) ไม่ใช่แค่ส่วนที่มองเห็น — html-to-image ใช้ clientWidth เป็นค่าเริ่มต้น
+    // กล่องแผนที่เป็น overflow-auto: จอแคบกว่าแผนที่ 900px รูปจะโดนตัดขอบขวา และแผงรายละเอียดข้างแผนที่ตอน export ก็จะหายไปทั้งแผง
+    const size = { width: node.scrollWidth, height: node.scrollHeight }
+    const dataUrl = await Promise.race([
+      toPng(node, { pixelRatio: scale, cacheBust: false, ...size, style: { overflow: 'visible' } }),
+      timeout,
+    ])
     downloadUrl(dataUrl, filename)
   } finally {
     clearTimeout(timer)

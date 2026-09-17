@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Layers as LayersIcon } from 'lucide-react'
+import { Layers as LayersIcon, Users, Info } from 'lucide-react'
 import { loadDistrictGeoJSON, loadSubdistrictIndex, loadCommunityIndex } from '../utils/pixelMapGeometry'
-import { getDistrictCounts, getCommunityHierarchy, getAvailableFiscalYears, getLevelMaxes } from '../utils/pixelMapData'
+import { getDistrictCounts, getCommunityHierarchy, getAvailableFiscalYears, getLevelMaxes, sameArea } from '../utils/pixelMapData'
 import { exportSvg, exportPng, copyEmbedHtml } from '../utils/pixelMapExport'
 import { usePixelMapState } from '../hooks/usePixelMapState'
 import SelectionTree from '../components/pixel-map/SelectionTree'
@@ -10,6 +10,8 @@ import StylePanel from '../components/pixel-map/StylePanel'
 import MapCanvas from '../components/pixel-map/MapCanvas'
 import CompareGrid from '../components/pixel-map/CompareGrid'
 import ImportDataModal from '../components/pixel-map/ImportDataModal'
+import CommunityPanel from '../components/pixel-map/CommunityPanel'
+import AreaDetailPanel from '../components/pixel-map/AreaDetailPanel'
 import YearPicker from '../components/pixel-map/YearPicker'
 import AccordionSection from '../components/pixel-map/AccordionSection'
 
@@ -125,8 +127,20 @@ export default function PixelMap() {
   // max ต่อระดับ (เขต/แขวง/ชุมชน) ของ metric ที่เลือก — คำนวณจาก hierarchy ทั้งหมด ให้ font-size คงที่/แฟร์ทุก panel
   const levelMaxes = useMemo(() => getLevelMaxes(hierarchy, labelsConfig.metric), [hierarchy, labelsConfig.metric])
 
+  // แผง "รายละเอียดพื้นที่": เมาส์ชี้อยู่ → พื้นที่ที่ชี้ ; ไม่ได้ชี้ → พื้นที่ที่คลิกเลือกไว้ ; ไม่ได้เลือก → เขตกลางแผนที่
+  // การ์ดในรูป export: ที่คลิกเลือกไว้ ไม่งั้นเขตกลางแผนที่ (ไม่สนเมาส์ชี้ — ทางที่เมาส์ผ่านไปหาปุ่ม export ต้องไม่มีผล)
+  // โหมด compare มีหลาย panel หลายจุดกึ่งกลาง จึงไม่มีเขตกลางแผนที่ ใช้เฉพาะชี้/คลิก
+  const [hoverArea, setHoverArea] = useState(null)
+  const [centerArea, setCenterArea] = useState(null)
+  const [pinnedArea, setPinnedArea] = useState(null)
+  const togglePinnedArea = useCallback((area) => setPinnedArea(prev => (sameArea(prev, area) ? null : area)), [])
+  const clearPinnedArea = useCallback(() => setPinnedArea(null), [])
+  const fallbackArea = pinnedArea ?? (mode === 'compare' ? null : centerArea)
+  const detailArea = hoverArea ?? fallbackArea
+
   const [exportFullMap, setExportFullMap] = useState(false)
   const [showExportNumbers, setShowExportNumbers] = useState(true) // โชว์ตัวเลขจำนวนเรื่องของพื้นที่ที่เลือกในภาพ export
+  const [showExportDetail, setShowExportDetail] = useState(true)   // แนบการ์ด "รายละเอียดพื้นที่" (พื้นที่ล่าสุดที่ชี้) ลงในภาพ export
 
   // โหมด export — ใช้ทั้ง multi และ compare: compare ซ่อนแถบเครื่องมือ, ทุกโหมดโชว์ตัวเลขจำนวนเคสของพื้นที่ที่เลือกในรูป
   const [exporting, setExporting] = useState(false)
@@ -208,7 +222,8 @@ export default function PixelMap() {
               toggleCompareSlotDistrict={toggleCompareSlotDistrict} setCompareSlotDistricts={setCompareSlotDistricts}
               setCompareSlotColor={setCompareSlotColor}
               addComparePanel={addComparePanel} removeComparePanel={removeComparePanel}
-              exporting={exporting} showExportNumbers={showExportNumbers}
+              exporting={exporting} showExportNumbers={showExportNumbers} onAreaHover={setHoverArea}
+              onAreaClick={togglePinnedArea} pinnedArea={pinnedArea}
             />
           ) : (
             <MapCanvas
@@ -219,16 +234,28 @@ export default function PixelMap() {
               layers={layers} layerCounts={layerCounts} levelMaxes={levelMaxes} labelsConfig={labelsConfig}
               style={style} exporting={exporting} showExportNumbers={showExportNumbers}
               zoomTransform={zoomTransform} onZoomChange={setZoomTransform}
+              onAreaHover={setHoverArea} onCenterArea={setCenterArea}
+              onAreaClick={togglePinnedArea} pinnedArea={pinnedArea}
+              exportDetailArea={showExportDetail ? fallbackArea : null}
             />
           )}
         </div>
 
         <div className="w-full lg:w-[260px] shrink-0 space-y-4">
+          <AccordionSection title="รายละเอียดพื้นที่" icon={<Info size={14} className="text-slate-400" />} defaultOpen>
+            <AreaDetailPanel area={detailArea} pinnedArea={pinnedArea} onClearPin={clearPinnedArea} hierarchy={hierarchy} />
+          </AccordionSection>
           <AccordionSection title="Layers" icon={<LayersIcon size={14} className="text-slate-400" />} defaultOpen>
             <LayerPanel
               layers={layers} updateLayer={updateLayer} toggleLayerVisible={toggleLayerVisible}
               addDataLayer={addDataLayer} onImport={setImportTarget} removeDataLayer={removeDataLayer} reorderDataLayers={reorderDataLayers}
               labelsConfig={labelsConfig} toggleLabelsLevel={toggleLabelsLevel} updateLabelsConfig={updateLabelsConfig}
+            />
+          </AccordionSection>
+          <AccordionSection title="ชุมชน" icon={<Users size={14} className="text-slate-400" />}>
+            <CommunityPanel
+              hierarchy={hierarchy} checkedDistricts={checkedDistricts} checkedSubdistricts={checkedSubdistricts}
+              checkedCommunities={checkedCommunities} toggleCommunity={toggleCommunity}
             />
           </AccordionSection>
           <StylePanel
@@ -241,6 +268,7 @@ export default function PixelMap() {
             zoomTransform={zoomTransform} onZoomChange={setZoomTransform}
             exportFullMap={exportFullMap} setExportFullMap={setExportFullMap}
             showExportNumbers={showExportNumbers} setShowExportNumbers={setShowExportNumbers}
+            showExportDetail={showExportDetail} setShowExportDetail={setShowExportDetail}
           />
         </div>
       </div>

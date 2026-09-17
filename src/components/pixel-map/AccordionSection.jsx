@@ -10,7 +10,7 @@ export default function AccordionSection({ title, icon, defaultOpen = false, chi
         className="w-full flex items-center gap-2 px-5 py-3.5 hover:bg-slate-50 transition">
         <span className="w-1 h-4 rounded-full bg-violet-500 shrink-0" />
         {icon}
-        <span className="flex-1 text-left text-[11px] font-semibold uppercase tracking-widest text-slate-500">{title}</span>
+        <span className="flex-1 text-left text-[12.5px] font-semibold uppercase tracking-widest text-slate-600">{title}</span>
         <ChevronDown size={14} className={`text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && <div className="px-5 pb-5 space-y-3">{children}</div>}

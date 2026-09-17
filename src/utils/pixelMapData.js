@@ -119,12 +119,22 @@ export async function getDistrictCounts({ source, substance = null, behavior = n
   return getIncidentCounts({ substance, behavior, fiscalYear, bkn })
 }
 
-const HIERARCHY_FLAG_COLS = [...DRUG_FLAGS, ...ACTION_FLAGS].map(([col]) => col)
-const makeMeta = () => ({ count: 0, bySubstance: {}, byAction: {} })
+const HIERARCHY_FLAG_COLS = [...DRUG_FLAGS, ...ACTION_FLAGS, ...BEHAVIOR_FLAGS].map(([col]) => col)
+const makeMeta = () => ({ count: 0, bySubstance: {}, byAction: {}, byBehavior: {}, inCommunity: 0 })
+
+// ชุมชนว่างหรือเป็นค่าแทนความว่าง ('-', 'ไม่ระบุ') = เหตุการณ์นอกชุมชน
+const NO_COMMUNITY_RE = /^(-+|–|—|ไม่ระบุ|ไม่มี|n\/?a|null)$/i
+export const hasCommunity = (v) => {
+  const s = String(v ?? '').trim()
+  return !!s && !NO_COMMUNITY_RE.test(s)
+}
+
 function bumpFlags(target, r) {
   target.count++
   for (const [col] of DRUG_FLAGS) if (r[col]) target.bySubstance[col] = (target.bySubstance[col] || 0) + 1
   for (const [col] of ACTION_FLAGS) if (r[col]) target.byAction[col] = (target.byAction[col] || 0) + 1
+  for (const [col] of BEHAVIOR_FLAGS) if (r[col]) target.byBehavior[col] = (target.byBehavior[col] || 0) + 1
+  if (hasCommunity(r.community)) target.inCommunity++
 }
 
 // แถวดิบสำหรับสร้าง hierarchy — ดึงจาก Supabase ครั้งเดียวต่อ session แล้ว cache ไว้
@@ -189,6 +199,51 @@ export async function getCommunityHierarchy(years = 'all') {
     }
   }
   return tree
+}
+
+// รายละเอียดของ node หนึ่งๆ สำหรับ tooltip บนแผนที่ — ในชุมชน/นอกชุมชน + พฤติการณ์ที่พบ (เฉพาะที่มีจริง)
+// พฤติการณ์แต่ละอย่างนับแยกกัน รวมกันแล้วไม่จำเป็นต้องเท่า count (บางแถวไม่ระบุ/ติ๊กได้หลายอย่าง)
+export function nodeDetail(node) {
+  if (!node) return null
+  const inCommunity = node.inCommunity ?? 0
+  return {
+    count: node.count,
+    inCommunity,
+    outCommunity: Math.max(0, node.count - inCommunity),
+    behaviors: BEHAVIOR_FLAGS
+      .map(([col, label]) => ({ label, n: node.byBehavior?.[col] ?? 0 }))
+      .filter(b => b.n > 0)
+      .sort((a, b) => b.n - a.n), // เรียงมาก→น้อย ให้อ่านเป็นลำดับได้ทันที
+  }
+}
+
+// ข้อมูล (meta) ของพื้นที่ — อ่านสดจาก hierarchy ทุกครั้ง ตัวเลขจึงตามปีงบที่เปลี่ยนทีหลังได้ ไม่ค้างค่าเก่า
+// ชุมชนต้องรู้แขวงด้วย (area.sub) เพราะชื่อชุมชนซ้ำข้ามแขวงได้ — ไม่มี sub ค่อยใช้ node ที่แนบมา
+export function resolveAreaNode(hierarchy, area) {
+  if (!area) return null
+  const district = hierarchy?.[area.dname]
+  if (area.level === 'district') return district?.meta ?? null
+  if (area.level === 'subdistrict') return district?.subdistricts?.[area.label]?.meta ?? null
+  return district?.subdistricts?.[area.sub]?.communities?.[area.label] ?? area.node ?? null
+}
+
+// พื้นที่เดียวกันไหม (ไม่สนว่ามาจากเมาส์ชี้/คลิก/กลางแผนที่) — ใช้ตัดสินว่าคลิกซ้ำ = ยกเลิกการเลือก
+export function sameArea(a, b) {
+  return !!a && !!b && a.level === b.level && a.dname === b.dname && a.label === b.label && (a.sub ?? '') === (b.sub ?? '')
+}
+
+// รายชื่อชุมชนในพื้นที่ (ทั้งเขต หรือเจาะแขวงเดียว) เรียงจำนวนเรื่องมาก→น้อย
+// นับเฉพาะชุมชนที่มีพิกัดในข้อมูล (เหมือนที่วาดบนแผนที่ได้) — เรื่องที่ระบุชุมชนแต่ไม่มีพิกัดจะไม่อยู่ในรายการนี้
+export function communityList(hierarchy, district, subdistrict = null) {
+  const all = hierarchy?.[district]?.subdistricts ?? {}
+  const subs = subdistrict ? (all[subdistrict] ? [[subdistrict, all[subdistrict]]] : []) : Object.entries(all)
+  const out = []
+  for (const [subName, sub] of subs) {
+    for (const [name, c] of Object.entries(sub.communities ?? {})) {
+      out.push({ name, subdistrict: subName, count: c.count })
+    }
+  }
+  return out.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'th'))
 }
 
 // นับ metric ที่เลือกของ node หนึ่งๆ (เขต.meta / แขวง.meta / ชุมชน — shape เดียวกันหมด) — 'count' = รวม, อื่นๆ = bySubstance/byAction (0 ถ้าไม่มี)
