@@ -1,6 +1,11 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { MapPin, ArrowLeft, Search, Menu, AlertTriangle, Plus, X, SlidersHorizontal, Lightbulb, Info, BarChart3, Printer, Download, Camera } from 'lucide-react'
+import { MapPin, ArrowLeft, Search, Menu, AlertTriangle, Plus, X, SlidersHorizontal, Lightbulb, Info, BarChart3, Printer, Download, Camera, Table2, RotateCcw } from 'lucide-react'
+import { usePersistedState } from '../hooks/usePersistedState'
+import MultiSelect from '../components/radar/MultiSelect'
+import AreaStatsPanel from '../components/radar/AreaStatsPanel'
+import { exportAreaStats } from '../utils/exportAreaStats'
+import { summarizeRows, areaName, BEHAVIOR_COLS, DRUG_NAME_TO_COL } from '../utils/areaStats'
 import { ComposedChart, Area, ReferenceDot, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, Legend } from 'recharts'
 import { THAI_MONTHS, DNAME_TO_GROUP } from '../utils/constants'
 import { fetchAllPages } from '../utils/supabasePagination'
@@ -82,6 +87,15 @@ const fiscalYearOf = (r) => {
   return ce + 543 + (m >= 10 ? 1 : 0)
 }
 
+// row มียาชนิดนี้ไหม — flag one-hot ; ยาที่ไม่มีคอลัมน์ (แฮปปี้วอเตอร์) ดูจาก drug_others (ชื่อในไฟล์มีเว้นวรรค)
+const squash = (s) => String(s ?? '').replace(/\s/g, '')
+const rowHasDrug = (r, name) => {
+  const col = DRUG_NAME_TO_COL[name]
+  if (col) return !!r[col]
+  return Array.isArray(r.drug_others) && r.drug_others.some(o => squash(o) === squash(name))
+}
+const asArray = (v) => (Array.isArray(v) ? v : [])
+
 const DISTRICT_GROUPS = {
   'กรุงเทพเหนือ':     { border: '#a16207', fill: '#fde047', emoji: '🟡', count: 7 },
   'กรุงเทพใต้':      { border: '#1e40af', fill: '#93c5fd', emoji: '🔵', count: 10 },
@@ -146,10 +160,11 @@ function SearchPopupContent({ popup }) {
           </div>
         )}
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-          <span style={{ color: '#64748b' }}>พบทั้งหมด</span>
-          <span style={{ fontWeight: 700, color: '#dc2626' }}>{popup.count} เรื่อง</span>
+          <span style={{ color: '#64748b' }}>ร้องเรียนทั้งหมด</span>
+          <span style={{ fontWeight: 700, color: '#be123c' }}>{popup.count.toLocaleString()} ครั้ง</span>
         </div>
       </div>
+      {popup.beh && <BehaviorChips beh={popup.beh} />}
       <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '6px' }}>
         <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
           จำแนกตามชนิดยา
@@ -170,21 +185,93 @@ function SearchPopupContent({ popup }) {
   )
 }
 
+// ชิปพฤติการณ์ (เสพ/ค้า/เสพ-ค้า/ผลิต + จำนวน) ใช้ใน popup พื้นที่และ popup ก้อน cluster
+const BEH_CHIP = { 'เสพ': ['#fffbeb', '#b45309'], 'ค้า': ['#fff1f2', '#be123c'], 'เสพ/ค้า': ['#ffe4e6', '#9f1239'], 'ผลิต': ['#f1f5f9', '#0f172a'] }
+function BehaviorChips({ beh }) {
+  const items = BEHAVIOR_COLS.map(([, l]) => [l, beh[l] || 0]).filter(([, n]) => n > 0)
+  return (
+    <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '6px', marginBottom: '6px' }}>
+      <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>พฤติการณ์</div>
+      {items.length === 0 ? <div style={{ fontSize: '11px', color: '#94a3b8' }}>ไม่ระบุ</div> : (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+          {items.map(([l, n]) => (
+            <span key={l} style={{ fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: '6px', background: BEH_CHIP[l][0], color: BEH_CHIP[l][1] }}>
+              {l} <span style={{ fontWeight: 700 }}>{n.toLocaleString()}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// popup ก้อน cluster — สรุปเขต/แขวง/ชุมชน + จำนวนครั้ง + พฤติการณ์ + ยาเด่น ของจุดในก้อน
+function ClusterPopupContent({ summary: s }) {
+  const list = (title, rows, suffix = '') => rows.length > 0 && (
+    <div style={{ marginBottom: '5px' }}>
+      <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, marginBottom: '2px' }}>{title}</div>
+      {rows.map(([name, n]) => (
+        <div key={name} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '12px', padding: '1px 0' }}>
+          <span style={{ color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+          <span style={{ fontWeight: 700, color: '#0f172a', flexShrink: 0 }}>{n.toLocaleString()}{suffix}</span>
+        </div>
+      ))}
+    </div>
+  )
+  return (
+    <div style={{ minWidth: '230px', maxWidth: '290px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px', marginBottom: '8px' }}>
+        <span style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>กลุ่มจุดใกล้กัน</span>
+        <span style={{ fontWeight: 700, fontSize: '15px', color: '#be123c' }}>{s.total.toLocaleString()} ครั้ง</span>
+      </div>
+      {list(s.districtCount > 1 ? `เขต (${s.districtCount} เขต)` : 'เขต', s.districts)}
+      {list('แขวง', s.subdistricts)}
+      {list('ชุมชน', s.communities)}
+      <BehaviorChips beh={s.beh} />
+      {s.drugs.length > 0 && (
+        <div>
+          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, marginBottom: '3px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>ชนิดยา</div>
+          {s.drugs.map(([d, n]) => (
+            <div key={d} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 0', fontSize: '12px' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: DRUG_COLORS[d] || '#94A3B8', display: 'inline-block' }} />{d}
+              </span>
+              <span style={{ fontWeight: 700 }}>{n.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '6px' }}>ซูมเข้าเพื่อแยกดูแต่ละจุด</div>
+    </div>
+  )
+}
+
 export default function SubstanceRadar() {
   const { isPresentation } = usePresentation()
   const [incidents, setIncidents] = useState([])
   const [loading, setLoading] = useState(true)
-  const [category, setCategory] = useState('all')
   const [drugExpanded, setDrugExpanded] = useState(false)
-  const [year, setYear] = useState('all')
-  const [month, setMonth] = useState('all')
-  const [selectedDistrict, setSelectedDistrict] = useState('all')   // Feature 1
-  const [selectedKhwaeng, setSelectedKhwaeng] = useState('all')     // Feature 2 (cascade)
+  // ── ตัวกรอง — จำค่าไว้ (localStorage) ไม่ reset เอง ; เขต/แขวง/พฤติการณ์/ตัวยา เลือกได้หลายค่า ([] = ทั้งหมด) ──
+  const [year, setYear] = usePersistedState('radar.year', 'latest')   // 'latest' = ปีงบล่าสุดใน DB (resolve หลังโหลด)
+  const [month, setMonth] = usePersistedState('radar.month', 'all')
+  const [selectedDrugsRaw, setSelectedDrugs] = usePersistedState('radar.drugs', [])
+  const [selectedDistrictsRaw, setSelectedDistricts] = usePersistedState('radar.districts', [])
+  const [selectedKhwaengsRaw, setSelectedKhwaengs] = usePersistedState('radar.khwaengs', [])
+  const [selectedBehaviorsRaw, setSelectedBehaviors] = usePersistedState('radar.behaviors', [])
+  const [clusterOn, setClusterOn] = usePersistedState('radar.cluster', true)
+  const [viewMode, setViewMode] = usePersistedState('radar.viewMode', 'point')
+  const [statsLevel, setStatsLevel] = usePersistedState('radar.statsLevel', 'district')
+  const selectedDrugs = useMemo(() => asArray(selectedDrugsRaw), [selectedDrugsRaw])
+  const selectedDistricts = useMemo(() => asArray(selectedDistrictsRaw), [selectedDistrictsRaw])
+  const selectedKhwaengs = useMemo(() => asArray(selectedKhwaengsRaw), [selectedKhwaengsRaw])
+  const selectedBehaviors = useMemo(() => asArray(selectedBehaviorsRaw), [selectedBehaviorsRaw])
+  const [statsOpen, setStatsOpen] = useState(false)                 // แผงสถิติรายพื้นที่
+  const [statsExporting, setStatsExporting] = useState(false)
+  const [areaFocusKey, setAreaFocusKey] = useState(null)            // แถวที่คลิกใน panel (highlight)
   const [districtPanel, setDistrictPanel] = useState(null)          // Bug 2: floating detail panel (dname)
   const [compareOpen, setCompareOpen] = useState(false)             // Phase 3: compare modal
   const [compareA, setCompareA] = useState(null)
   const [compareB, setCompareB] = useState(null)
-  const [viewMode, setViewMode] = useState('point')
   const [groupFilter, setGroupFilter] = useState('all')
   const [groupOverlay, setGroupOverlay] = useState('point')
   const [groupDisplayMode, setGroupDisplayMode] = useState('all')
@@ -203,8 +290,18 @@ export default function SubstanceRadar() {
 
   // เลือกกลุ่มเขต → ถ้า 'all' reset displayMode (แทน effect เพื่อเลี่ยง set-state-in-effect)
   const pickGroup = (v) => { setGroupFilter(v); if (v === 'all') setGroupDisplayMode('all') }
-  // เลือกเขต → reset แขวง (cascade) + ปิด floating panel
-  const pickDistrict = (d) => { setSelectedDistrict(d); setSelectedKhwaeng('all'); setDistrictPanel(null) }
+  // เลือกเขต (หลายเขต) → คงแขวงที่ยังอยู่ในเขตที่เลือกไว้ ตัดเฉพาะแขวงของเขตที่เอาออก + ปิด floating panel
+  const pickDistricts = (list) => {
+    setSelectedDistricts(list)
+    if (list.length === 0) setSelectedKhwaengs([])
+    else {
+      const valid = new Set()
+      for (const r of incidents) if (list.includes(r.district) && r.subdistrict?.trim()) valid.add(r.subdistrict.trim())
+      setSelectedKhwaengs(selectedKhwaengs.filter(k => valid.has(k)))
+    }
+    setDistrictPanel(null)
+  }
+  const clearFilters = () => { setSelectedDistricts([]); setSelectedKhwaengs([]); setSelectedBehaviors([]); setSelectedDrugs([]); setYear('latest'); setMonth('all') }   // ปี → กลับเป็นปีงบล่าสุด (ค่าเริ่มต้น)
 
   useEffect(() => {
     const load = async () => {
@@ -223,10 +320,27 @@ export default function SubstanceRadar() {
     fetchAllPages('substance_users', 'dealer_locations, surveyed_at').then(setDealerRows).catch(() => setDealerRows([]))
   }, [retryCount])
 
-  const cfg = category === 'all' ? ALL_VIEW_CFG : DRUG_CATEGORIES[category]
+  // category (หมวดยา) derive จาก selectedDrugs — เลือกครบทั้งหมวดพอดี = หมวดนั้น ; ว่าง = 'all' ; อื่น = 'custom'
+  const category = useMemo(() => {
+    if (!selectedDrugs.length) return 'all'
+    const set = new Set(selectedDrugs)
+    for (const [name, c] of Object.entries(DRUG_CATEGORIES)) if (c.drugs.length === set.size && c.drugs.every(d => set.has(d))) return name
+    return 'custom'
+  }, [selectedDrugs])
+  const cfg = category === 'all' ? ALL_VIEW_CFG
+    : category === 'custom' ? { drugs: selectedDrugs, title: `การกระจายตัวยาที่เลือก (${selectedDrugs.length} ชนิด)`, subtitle: selectedDrugs.join(', ') }
+    : DRUG_CATEGORIES[category]
   const targetDrugs = cfg.drugs
+  const categoryActive = (cat) => DRUG_CATEGORIES[cat].drugs.every(d => selectedDrugs.includes(d))
+  // กดหมวด = toggle ยาทั้งหมวด (ครบอยู่แล้ว → เอาออก) ; กดชนิด = toggle ทีละตัว
+  const toggleCategory = (cat) => {
+    const d = DRUG_CATEGORIES[cat].drugs
+    setSelectedDrugs(categoryActive(cat) ? selectedDrugs.filter(x => !d.includes(x)) : [...new Set([...selectedDrugs, ...d])])
+  }
+  const toggleDrug = (d) => setSelectedDrugs(selectedDrugs.includes(d) ? selectedDrugs.filter(x => x !== d) : [...selectedDrugs, d])
+  const toggleBehavior = (col) => setSelectedBehaviors(selectedBehaviors.includes(col) ? selectedBehaviors.filter(x => x !== col) : [...selectedBehaviors, col])
   // แผงแยกชนิดยาเปิดเมื่อกดเปิดเอง หรือมีการเลือกชนิดยาอยู่ (เพื่อให้เห็นตัวเลือกที่ active เสมอ)
-  const drugPanelOpen = drugExpanded || category !== 'all'
+  const drugPanelOpen = drugExpanded || selectedDrugs.length > 0
 
   const years = useMemo(() => {
     const s = new Set()
@@ -236,21 +350,23 @@ export default function SubstanceRadar() {
     })
     return Array.from(s).sort((a, b) => b - a)   // ปีงบล่าสุดบนสุด
   }, [incidents])
+  // จำนวนตัวกรองที่ต่างจากค่าเริ่มต้น (ปีงบล่าสุด · ทุกเดือน · ทุกพื้นที่/พฤติการณ์/ยา) — โชว์ badge + เปิดปุ่มล้าง
+  const defaultYear = years.length ? String(years[0]) : 'latest'
+  const activeFilterCount = selectedDistricts.length + selectedKhwaengs.length + selectedBehaviors.length + selectedDrugs.length
+    + (year !== defaultYear && year !== 'latest' ? 1 : 0) + (month !== 'all' ? 1 : 0)
+
+  // ค่าเริ่มต้น 'latest' → ปีงบล่าสุดใน DB (ข้อมูลร้องเรียนปีปัจจุบัน) ; ปีที่จำไว้ไม่มีในข้อมูลแล้ว → ปีล่าสุดเช่นกัน
+  useEffect(() => {
+    if (loading || !years.length) return
+    if (year === 'latest' || (year !== 'all' && !years.includes(parseInt(year)))) setYear(String(years[0]))
+  }, [loading, years, year, setYear])
 
   // Phase 2: รายการเขต (50 เขต) + แขวง (cascade ตามเขตที่เลือก, จาก subdistrict)
   const districtOptions = useMemo(() => Object.keys(DNAME_TO_GROUP).sort((a, b) => a.localeCompare(b, 'th')), [])
-  const khwaengOptions = useMemo(() => {
-    if (selectedDistrict === 'all') return []
-    const s = new Set()
-    for (const r of incidents) {
-      if (r.district === selectedDistrict && r.subdistrict && r.subdistrict.trim()) s.add(r.subdistrict.trim())
-    }
-    return [...s].sort((a, b) => a.localeCompare(b, 'th'))
-  }, [incidents, selectedDistrict])
 
-  // เปิด compare modal — pre-fill A (จาก floating panel หรือเขตที่เลือก), B = เขตอื่น
+  // เปิด compare modal — pre-fill A (จาก floating panel หรือเขตแรกที่เลือก), B = เขตอื่น
   const openCompare = (presetA) => {
-    const a = (presetA && presetA !== 'all') ? presetA : (selectedDistrict !== 'all' ? selectedDistrict : districtOptions[0])
+    const a = (presetA && presetA !== 'all') ? presetA : (selectedDistricts[0] || districtOptions[0])
     const b = districtOptions.find(d => d !== a) || districtOptions[1]
     setCompareA(a); setCompareB(b); setCompareOpen(true); setDistrictPanel(null)
   }
@@ -267,23 +383,41 @@ export default function SubstanceRadar() {
     return true
   }), [incidents, year, month])
 
-  const filteredIncidents = useMemo(() => ymFiltered.filter(r => {
-    if (selectedDistrict !== 'all' && r.district !== selectedDistrict) return false
-    if (selectedKhwaeng !== 'all' && r.subdistrict !== selectedKhwaeng) return false
+  // ตัวเลือกเขต (นับครั้งตามปี/เดือน) + แขวง cascade จากเขตที่เลือก
+  const districtCounts = useMemo(() => { const m = {}; for (const r of ymFiltered) if (r.district) m[r.district] = (m[r.district] || 0) + 1; return m }, [ymFiltered])
+  const districtSelectOptions = useMemo(() => districtOptions.map(d => ({ value: d, label: d, count: districtCounts[d] || 0 })), [districtOptions, districtCounts])
+  const khwaengOptions = useMemo(() => {
+    if (!selectedDistricts.length) return []
+    const m = {}
+    for (const r of ymFiltered) {
+      if (!selectedDistricts.includes(r.district) || !r.subdistrict?.trim()) continue
+      const k = r.subdistrict.trim()
+      m[k] = (m[k] || 0) + 1
+    }
+    return Object.keys(m).sort((a, b) => a.localeCompare(b, 'th'))
+      .map(k => ({ value: k, label: selectedDistricts.length > 1 ? `${k}` : k, count: m[k] }))
+  }, [ymFiltered, selectedDistricts])
+
+  // ขอบเขตพื้นที่/พฤติการณ์/ตัวยา (ไม่รวมปี/เดือน) — ใช้ทั้ง filteredIncidents และ export โหมดกำหนดเอง
+  const matchesScope = useCallback((r) => {
+    if (selectedDistricts.length && !selectedDistricts.includes(r.district)) return false
+    if (selectedKhwaengs.length && !selectedKhwaengs.includes((r.subdistrict || '').trim())) return false
+    if (selectedBehaviors.length && !selectedBehaviors.some(col => r[col])) return false
+    if (selectedDrugs.length && !selectedDrugs.some(d => rowHasDrug(r, d))) return false
     return true
-  }), [ymFiltered, selectedDistrict, selectedKhwaeng])
+  }, [selectedDistricts, selectedKhwaengs, selectedBehaviors, selectedDrugs])
+  const filteredIncidents = useMemo(() => ymFiltered.filter(matchesScope), [ymFiltered, matchesScope])
 
-  const points = useMemo(() => filteredIncidents.filter(r => {
-    if (!r.lat || !r.lng) return false
-    if (!r.primary_drug) return false
-    return targetDrugs.includes(r.primary_drug)
-  }), [filteredIncidents, targetDrugs])
+  // ยาที่ใช้แสดงสี/นับ legend ของจุด — ถ้ากรองชนิดยาอยู่ ใช้ยาที่เลือกตัวแรกที่แถวนั้นมี (แถวเดียวมีได้หลายยา)
+  const displayDrug = useCallback((r) => (selectedDrugs.length ? (selectedDrugs.find(d => rowHasDrug(r, d)) || r.primary_drug) : r.primary_drug), [selectedDrugs])
+  const getPointColor = useCallback((p) => DRUG_COLORS[displayDrug(p)] || '#94A3B8', [displayDrug])
 
-  // export ใช้ filteredIncidents (ปี/เดือน/เขต/แขวง) + กรองชนิดยาซ้ำถ้าเลือก category — ไม่บังคับต้องมี lat/lng เหมือน points
-  const exportRows = useMemo(() => {
-    if (category === 'all') return filteredIncidents
-    return filteredIncidents.filter(r => r.primary_drug && targetDrugs.includes(r.primary_drug))
-  }, [filteredIncidents, category, targetDrugs])
+  // จุดบนแผนที่ = ทุกเรื่องที่มีพิกัด (รวมเรื่องที่ไม่ระบุยา — นับเป็น "ครั้ง" เท่ากัน)
+  const points = useMemo(() => filteredIncidents.filter(r => r.lat && r.lng), [filteredIncidents])
+  const noGeoCount = filteredIncidents.length - points.length
+
+  // export ใช้ filteredIncidents ทั้งหมด (ปี/เดือน/เขต/แขวง/พฤติการณ์/ยา) — ไม่บังคับต้องมี lat/lng เหมือน points
+  const exportRows = filteredIncidents
 
   // ตัวกรอง ปี/เดือน ของหน้านี้ — ใช้ทำ periodLabel + ค่าตั้งต้นของ ExportDialog โหมด "กำหนดเอง"
   const currentPeriodRange = useMemo(() => {
@@ -297,6 +431,14 @@ export default function SubstanceRadar() {
     if (month !== 'all') return `${THAI_MONTHS.find(m => m.v === parseInt(month))?.l || ''} ${fy}`
     return `ปีงบ ${fy}`
   }, [year, month])
+  // ข้อความสรุปตัวกรองพื้นที่/พฤติการณ์/ยา — ลง meta ของ Excel ทั้ง 2 แบบ
+  const scopeLabel = useMemo(() => {
+    const parts = [selectedDistricts.length ? selectedDistricts.join(', ') : 'ทุกเขต']
+    if (selectedKhwaengs.length) parts.push(`แขวง ${selectedKhwaengs.join(', ')}`)
+    parts.push(selectedBehaviors.length ? `พฤติการณ์ ${selectedBehaviors.map(c => BEHAVIOR_COLS.find(([col]) => col === c)?.[1] || c).join('/')}` : 'ทุกพฤติการณ์')
+    parts.push(category === 'all' ? 'ทุกชนิดยา' : category === 'custom' ? selectedDrugs.join(', ') : category)
+    return parts.join(' · ')
+  }, [selectedDistricts, selectedKhwaengs, selectedBehaviors, selectedDrugs, category])
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -306,12 +448,7 @@ export default function SubstanceRadar() {
       // กำหนดเอง → ข้ามการกรองปี/เดือนของหน้านี้ (ให้ dateRange เป็นตัวกำหนดช่วงแทน) แต่ยังกรองเขต/แขวง/ชนิดยาตามเดิม
       let rows, periodLabel
       if (dateRange) {
-        rows = incidents.filter(r => {
-          if (selectedDistrict !== 'all' && r.district !== selectedDistrict) return false
-          if (selectedKhwaeng !== 'all' && r.subdistrict !== selectedKhwaeng) return false
-          return true
-        })
-        if (category !== 'all') rows = rows.filter(r => r.primary_drug && targetDrugs.includes(r.primary_drug))
+        rows = incidents.filter(matchesScope)
         periodLabel = `กำหนดเอง (${formatThaiDate(dateRange.from)} - ${formatThaiDate(dateRange.to)})`
       } else {
         rows = exportRows
@@ -319,15 +456,12 @@ export default function SubstanceRadar() {
           ? `${currentPeriodLabel} (${formatThaiDate(currentPeriodRange.from)} - ${formatThaiDate(currentPeriodRange.to)})`
           : currentPeriodLabel
       }
-      const scopeParts = [selectedDistrict !== 'all' ? selectedDistrict : 'ทุกเขต']
-      if (selectedKhwaeng !== 'all') scopeParts.push(selectedKhwaeng)
-      scopeParts.push(category !== 'all' ? category : 'ทุกชนิดยา')
       await exportDrugIncidentReport({
         incidentRows: rows,
         dealerRows,
         mode, dateRange, zoneDetail, statusFilter,
         periodLabel,
-        filterLabel: scopeParts.join(' · '),
+        filterLabel: scopeLabel,
         filenamePrefix: 'radar-report',
       })
       setExportDialogOpen(false)
@@ -336,6 +470,32 @@ export default function SubstanceRadar() {
     } finally {
       setExporting(false)
     }
+  }
+
+  // ── Export Excel สถิติรายพื้นที่ (เขต/แขวง/ชุมชน) — ตัวเลขชุดเดียวกับ panel ──
+  const handleAreaStatsExport = async () => {
+    setStatsExporting(true)
+    try {
+      const periodLabel = currentPeriodRange
+        ? `${currentPeriodLabel} (${formatThaiDate(currentPeriodRange.from)} - ${formatThaiDate(currentPeriodRange.to)})`
+        : currentPeriodLabel
+      await exportAreaStats({ rows: filteredIncidents, periodLabel, filterLabel: scopeLabel, filenamePrefix: 'radar-area-stats' })
+    } catch (err) {
+      console.error('[/radar] area stats export failed:', err)
+    } finally {
+      setStatsExporting(false)
+    }
+  }
+
+  // คลิกแถวใน panel สถิติ → บินไปจุดกึ่งกลางพื้นที่ + เปิด popup สรุปพื้นที่นั้น
+  const focusArea = (a) => {
+    setAreaFocusKey(a.key)
+    if (!a.lat || !a.lng) return
+    const zoomByLevel = { district: 13, subdistrict: 15, community: 16 }
+    // แผงสถิติลอยทับขวาของแผนที่ (~460px บน desktop) → เลื่อนเป้าหมายไปครึ่งซ้าย + กัน popup ถูกดันไปใต้แผง
+    const panelPx = typeof window !== 'undefined' && window.innerWidth >= 640 ? 470 : 0
+    setFlyTarget({ lat: a.lat, lng: a.lng, zoom: zoomByLevel[a.level] || 15, offsetX: panelPx / 2 })
+    setSearchPopup({ label: areaName(a), district: a.level === 'district' ? '' : a.district, subdistrict: a.level === 'community' ? a.subdistrict : '', lat: a.lat, lng: a.lng, count: a.total, drugs: a.drugs, beh: a.beh, padRight: panelPx + 20 })
   }
 
   // ── Export ภาพแผนที่ (JPG/PNG) — capture mapCaptureRef ด้วย html-to-image ──
@@ -365,21 +525,27 @@ export default function SubstanceRadar() {
     }
   }
 
+  // นับจุดตามยาที่แสดง (displayDrug) — 'ไม่ระบุ' = เรื่องที่ไม่มียาใน one-hot
   const drugCounts = useMemo(() => {
     const m = {}
     targetDrugs.forEach(d => { m[d] = 0 })
+    let none = 0
     points.forEach(p => {
-      if (m[p.primary_drug] !== undefined) m[p.primary_drug]++
+      const d = displayDrug(p)
+      if (d == null) none++
+      else if (m[d] !== undefined) m[d]++
+      else m[d] = 1   // ยานอกหมวด (drug_others) ที่ตรงตัวกรอง
     })
+    if (none) m['ไม่ระบุ'] = none
     return m
-  }, [points, targetDrugs])
+  }, [points, targetDrugs, displayDrug])
 
   // ── floating insights (fullscreen) — สรุปจาก points ที่กรองแล้ว (เขตนับเฉพาะ "เขต*") ──
   const insights = useMemo(() => {
     const total = points.length
     if (!total) return null
     const dCounts = {}
-    for (const r of points) { const d = r.primary_drug || 'ไม่ระบุ'; dCounts[d] = (dCounts[d] || 0) + 1 }
+    for (const r of points) { const d = displayDrug(r) || 'ไม่ระบุ'; dCounts[d] = (dCounts[d] || 0) + 1 }
     const td = Object.entries(dCounts).sort((a, b) => b[1] - a[1])[0]
     const distCounts = {}
     for (const r of points) { if (!r.district?.startsWith('เขต')) continue; distCounts[r.district] = (distCounts[r.district] || 0) + 1 }
@@ -391,7 +557,7 @@ export default function SubstanceRadar() {
       districtsCount: Object.keys(distCounts).length,
       drugTypesCount: Object.keys(dCounts).length,
     }
-  }, [points])
+  }, [points, displayDrug])
 
   // ตามปี/เดือน (ไม่กรอง district) — ใช้กับ popup คลิกเขต (Bug 1: เดิมใช้ raw → ไม่ react)
   const districtStats = useMemo(() => {
@@ -406,9 +572,11 @@ export default function SubstanceRadar() {
     return stats
   }, [ymFiltered])
 
+  // ช่วงวันที่จากทุกเรื่องที่กรองแล้ว (รวมเรื่องไม่มีพิกัด) — เดิมใช้เฉพาะ points ทำให้ป้ายค้าง 28 ส.ค. ทั้งที่ข้อมูลถึง 7 ก.ย.
+  //   (เรื่อง ก.ย. 69 ทั้ง 165 แถวยังไม่มีพิกัดในไฟล์ต้นทาง)
   const pointsPeriod = useMemo(
-    () => thaiDateRange(points, 'received_date', { unfiltered: year === 'all' && month === 'all' }),
-    [points, year, month])
+    () => thaiDateRange(filteredIncidents, 'received_date', { unfiltered: year === 'all' && month === 'all' }),
+    [filteredIncidents, year, month])
 
   const searchResults = useMemo(() => {
     if (!searchQuery || searchQuery.trim().length < 2) return []
@@ -590,29 +758,33 @@ export default function SubstanceRadar() {
             className="w-full mb-3 inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white rounded-lg text-sm font-semibold shadow-sm shadow-violet-500/30 transition">
             <BarChart3 size={16} /> เปรียบเทียบเขต
           </button>
-          {/* Phase 2: dropdown เขต + แขวง (cascade) */}
+          {/* ตัวกรองพื้นที่ — เลือกได้หลายเขต/หลายแขวง ค่าค้างไว้จนกว่าจะล้างเอง */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-slate-500 font-semibold">ตัวกรอง {activeFilterCount > 0 && <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold">{activeFilterCount}</span>}</span>
+            <button onClick={clearFilters} disabled={activeFilterCount === 0}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-rose-700 disabled:opacity-40 disabled:hover:text-slate-500">
+              <RotateCcw size={11} /> ล้างทั้งหมด
+            </button>
+          </div>
           <div className="space-y-3 mb-3">
+            <MultiSelect label="เขต (เลือกได้หลายเขต)" options={districtSelectOptions} values={selectedDistricts} onChange={pickDistricts}
+              allLabel="ทุกเขต (50 เขต)" placeholder="ค้นหาเขต..." />
+            <MultiSelect label="แขวง" options={khwaengOptions} values={selectedKhwaengs} onChange={setSelectedKhwaengs}
+              allLabel={selectedDistricts.length ? `ทุกแขวง (${khwaengOptions.length})` : 'เลือกเขตก่อน'} placeholder="ค้นหาแขวง..."
+              disabled={!selectedDistricts.length} disabledHint="เลือกเขตก่อน" />
             <div>
-              <label className="text-xs text-slate-500 font-semibold flex items-center gap-1 mb-1">📍 เลือกเขต</label>
-              <select value={selectedDistrict} onChange={e => pickDistrict(e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 outline-none">
-                <option value="all">ทุกเขต (50 เขต)</option>
-                {districtOptions.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 font-semibold flex items-center gap-1 mb-1">🏘️ เลือกแขวง</label>
-              <select value={selectedKhwaeng} onChange={e => setSelectedKhwaeng(e.target.value)}
-                disabled={selectedDistrict === 'all'}
-                title={selectedDistrict === 'all' ? 'เลือกเขตก่อน' : undefined}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:border-blue-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed">
-                {selectedDistrict === 'all'
-                  ? <option value="all">เลือกเขตก่อน</option>
-                  : <>
-                      <option value="all">ทุกแขวง ({khwaengOptions.length})</option>
-                      {khwaengOptions.map(k => <option key={k} value={k}>{k}</option>)}
-                    </>}
-              </select>
+              <label className="text-xs text-slate-500 font-semibold block mb-1">พฤติการณ์ (เลือกได้หลายค่า)</label>
+              <div className="grid grid-cols-4 gap-1">
+                {BEHAVIOR_COLS.map(([col, label]) => {
+                  const on = selectedBehaviors.includes(col)
+                  return (
+                    <button key={col} onClick={() => toggleBehavior(col)} aria-pressed={on}
+                      className={`px-1 py-1.5 rounded-md text-xs font-medium border transition ${on ? 'bg-slate-900 border-slate-900 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'}`}>
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
           <div className="relative">
@@ -654,7 +826,7 @@ export default function SubstanceRadar() {
               </div>
               <div className="mb-4">
                 {/* ดูทั้งหมด — default (รวมทุกชนิดยา) */}
-                <button onClick={() => setCategory('all')}
+                <button onClick={() => setSelectedDrugs([])}
                   className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition ${
                     category === 'all' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}>
@@ -679,21 +851,35 @@ export default function SubstanceRadar() {
                 }`}>
                   <div className="overflow-hidden">
                     <div className="flex items-center justify-between mb-2 px-0.5">
-                      <span className="text-xs text-slate-500 uppercase font-bold">เลือกชนิดยา</span>
-                      <button onClick={() => { setDrugExpanded(false); setCategory('all') }}
+                      <span className="text-xs text-slate-500 uppercase font-bold">เลือกชนิดยา {selectedDrugs.length > 0 && <span className="text-rose-700">({selectedDrugs.length})</span>}</span>
+                      <button onClick={() => { setDrugExpanded(false); setSelectedDrugs([]) }}
                         className="flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-slate-600 transition">
-                        <X size={12} /> ปิด
+                        <X size={12} /> ล้าง & ปิด
                       </button>
                     </div>
+                    {/* หมวด = เลือกทั้งกลุ่ม (กดซ้ำเอาออก) */}
                     <div className="grid grid-cols-2 gap-2">
                       {Object.keys(DRUG_CATEGORIES).map(cat => (
-                        <button key={cat} onClick={() => setCategory(cat)}
+                        <button key={cat} onClick={() => toggleCategory(cat)} aria-pressed={categoryActive(cat)}
                           className={`px-3 py-2 rounded-lg text-xs font-medium transition ${
-                            category === cat ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                            categoryActive(cat) ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                           }`}>
                           {cat}
                         </button>
                       ))}
+                    </div>
+                    {/* รายชนิด — เลือกได้หลายตัว ข้ามหมวดได้ */}
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {ALL_DRUGS.map(d => {
+                        const on = selectedDrugs.includes(d)
+                        return (
+                          <button key={d} onClick={() => toggleDrug(d)} aria-pressed={on}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border transition ${
+                              on ? 'bg-slate-900 border-slate-900 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'}`}>
+                            <span className="w-2 h-2 rounded-full" style={{ background: DRUG_COLORS[d] || '#94A3B8' }} />{d}
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 </div>
@@ -717,6 +903,15 @@ export default function SubstanceRadar() {
                 </button>
               ))}
             </div>
+            {viewMode !== 'heatmap' && (
+              <label className="mt-2 flex items-center justify-between gap-2 cursor-pointer select-none">
+                <span className="text-xs text-slate-600">รวมกลุ่มจุดใกล้กัน (cluster)</span>
+                <button type="button" role="switch" aria-checked={clusterOn} onClick={() => setClusterOn(!clusterOn)}
+                  className={`relative w-9 h-5 rounded-full transition ${clusterOn ? 'bg-slate-900' : 'bg-slate-300'}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition ${clusterOn ? 'left-[18px]' : 'left-0.5'}`} />
+                </button>
+              </label>
+            )}
           </div>
 
           {viewMode !== 'district' && (
@@ -737,10 +932,19 @@ export default function SubstanceRadar() {
                 <div className="mb-5">
                   <div className="text-xs text-slate-500 uppercase font-bold mb-2">สัญลักษณ์ (LEGEND)</div>
                   {(() => {
-                    const { shown, zero } = splitDrugLegend(targetDrugs, drugCounts)
+                    const { shown, zero } = splitDrugLegend(Object.keys(drugCounts), drugCounts)
                     if (shown.length === 0) return <div className="text-sm text-slate-400 py-2">ไม่มีข้อมูลในช่วงที่เลือก</div>
                     return (
                       <div className="space-y-2">
+                        {clusterOn && (
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 pb-1 border-b border-slate-100">
+                            <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-slate-600" />&lt;10</span>
+                            <span className="inline-flex items-center gap-1"><span className="w-3.5 h-3.5 rounded-full bg-amber-600" />10+</span>
+                            <span className="inline-flex items-center gap-1"><span className="w-4 h-4 rounded-full bg-rose-600" />50+</span>
+                            <span className="inline-flex items-center gap-1"><span className="w-[18px] h-[18px] rounded-full bg-rose-900" />200+</span>
+                            <span className="ml-auto">ครั้ง/ก้อน</span>
+                          </div>
+                        )}
                         {shown.map(([d, c]) => (
                           <div key={d} className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -779,9 +983,15 @@ export default function SubstanceRadar() {
                   <h3 className="font-bold text-slate-800 text-base">สถิติพื้นที่</h3>
                 </div>
                 <div className="text-sm text-slate-600">
-                  พบ <strong className="text-blue-600">{points.length.toLocaleString()}</strong> รายการ ในกลุ่ม <strong>{category}</strong>
+                  ร้องเรียน <strong className="text-rose-700">{filteredIncidents.length.toLocaleString()}</strong> ครั้ง
+                  <span className="text-xs text-slate-400"> · บนแผนที่ {points.length.toLocaleString()}{noGeoCount > 0 ? ` · ไม่มีพิกัด ${noGeoCount.toLocaleString()}` : ''}</span>
                 </div>
+                <div className="text-xs text-slate-500 mt-0.5">{category === 'all' ? 'ทุกชนิดยา' : category === 'custom' ? `ยาที่เลือก ${selectedDrugs.length} ชนิด` : category}</div>
                 <PeriodBadge period={pointsPeriod} className="mt-1.5" />
+                <button onClick={() => { setStatsOpen(true); setDistrictPanel(null) }}
+                  className="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition">
+                  <Table2 size={14} /> ตารางสถิติ เขต / แขวง / ชุมชน
+                </button>
                 {targetDrugs.map(drug => {
                   const count = drugCounts[drug] || 0
                   const color = DRUG_COLORS[drug]
@@ -810,9 +1020,9 @@ export default function SubstanceRadar() {
               </div>
               <div className="grid grid-cols-2 gap-2 mb-4">
                 {Object.keys(DRUG_CATEGORIES).map(cat => (
-                  <button key={cat} onClick={() => setCategory(cat)}
+                  <button key={cat} onClick={() => toggleCategory(cat)} aria-pressed={categoryActive(cat)}
                     className={`px-3 py-2 rounded-lg text-xs font-medium transition ${
-                      category === cat ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      categoryActive(cat) ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}>
                     {cat}
                   </button>
@@ -891,6 +1101,10 @@ export default function SubstanceRadar() {
         {!isPresentation && (
           <div className="absolute top-4 right-4 z-[1000] flex items-center gap-2">
             <PresentationEnterButton />
+            <button onClick={() => { setStatsOpen(v => !v); setDistrictPanel(null) }} aria-pressed={statsOpen}
+              className={`rounded-lg shadow-lg px-4 py-2 border flex items-center gap-2 text-sm font-medium transition ${statsOpen ? 'bg-slate-900 border-slate-900 text-white' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'}`}>
+              <Table2 size={16} /> สถิติพื้นที่
+            </button>
             <button onClick={() => setExportDialogOpen(true)}
               className="bg-white hover:bg-slate-50 rounded-lg shadow-lg px-4 py-2 border border-slate-200 flex items-center gap-2 text-sm font-medium text-slate-700 transition">
               <Download size={16} /> Export Excel
@@ -940,10 +1154,12 @@ export default function SubstanceRadar() {
           <IncidentMap
             className="w-full h-full"
             points={showPoints || showHeatmap ? points : []}
-            getColor={p => DRUG_COLORS[p.primary_drug] || '#94A3B8'}
+            getColor={getPointColor}
             renderPopup={p => <PointPopupContent p={p} />}
-            tooltipText={p => `${p.primary_drug} · ${p.subdistrict || ''}`}
+            tooltipText={p => `${displayDrug(p) || 'ไม่ระบุยา'} · ${p.subdistrict || ''}`}
             viewMode={showHeatmap ? 'heatmap' : 'point'}
+            cluster={clusterOn}
+            renderClusterPopup={c => <ClusterPopupContent summary={summarizeRows(c.members)} />}
             flyTarget={flyTarget}
             searchPopup={searchPopup}
             onSearchPopupClose={() => setSearchPopup(null)}
@@ -952,7 +1168,7 @@ export default function SubstanceRadar() {
             districtLayerStyle={districtLayerStyle}
             districtLayerOnEachFeature={districtLayerOnEachFeature}
             onDistrictClick={setDistrictPanel}
-            highlightDistrict={selectedDistrict === 'all' ? null : selectedDistrict}
+            highlightDistrict={selectedDistricts}
             onZoomChange={setZoom}
             permanentDistrictLabels={!!mapExportOptions?.showDistrictNames}
           />
@@ -1004,8 +1220,17 @@ export default function SubstanceRadar() {
           )}
         </div>
 
+        {/* แผงสถิติรายพื้นที่ (เขต/แขวง/ชุมชน) — ลอยขวาของแผนที่ ; mobile เต็มความกว้าง */}
+        {statsOpen && !isPresentation && (
+          <div className="absolute z-[1150] right-2 left-2 sm:left-auto sm:right-4 top-16 bottom-4 sm:w-[460px] rounded-2xl shadow-2xl ring-1 ring-slate-200 overflow-hidden animate-rise bg-white">
+            <AreaStatsPanel rows={filteredIncidents} level={statsLevel} onLevelChange={setStatsLevel}
+              onFocus={focusArea} onExport={handleAreaStatsExport} exporting={statsExporting}
+              onClose={() => setStatsOpen(false)} activeKey={areaFocusKey} />
+          </div>
+        )}
+
         {/* Bug 2: floating detail panel — คลิกเขตบนแผนที่ */}
-        {districtPanel && (() => {
+        {districtPanel && !statsOpen && (() => {
           const stat = districtStats[districtPanel] || { total: 0, drugs: {} }
           const group = DNAME_TO_GROUP[districtPanel] || '—'
           const drugList = Object.entries(stat.drugs).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1])
@@ -1050,7 +1275,7 @@ export default function SubstanceRadar() {
                   <div className="text-sm text-slate-400 text-center py-3">ไม่มีข้อมูลในช่วงที่เลือก</div>
                 )}
                 <div className="mt-4 grid grid-cols-1 gap-2">
-                  <button onClick={() => { pickDistrict(districtPanel); setDistrictPanel(null) }}
+                  <button onClick={() => { pickDistricts([districtPanel]) }}
                     className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition">
                     <Search size={14} /> filter เฉพาะเขตนี้
                   </button>
@@ -1121,16 +1346,16 @@ export default function SubstanceRadar() {
                       <div>
                         <div className="flex flex-wrap gap-1.5">
                           {Object.keys(DRUG_CATEGORIES).map(k => {
-                            const active = category === k
+                            const active = categoryActive(k)
                             return (
-                              <button key={k} onClick={() => setCategory(active ? 'all' : k)}
+                              <button key={k} onClick={() => toggleCategory(k)}
                                 className={`h-7 px-2.5 text-xs rounded-full transition ${active ? 'bg-cyan-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                                 {k}
                               </button>
                             )
                           })}
                         </div>
-                        <button onClick={() => { setFsDrugDetail(false); setCategory('all') }} className="text-xs text-slate-400 hover:text-slate-600 mt-2">× ปิด</button>
+                        <button onClick={() => { setFsDrugDetail(false); setSelectedDrugs([]) }} className="text-xs text-slate-400 hover:text-slate-600 mt-2">× ปิด</button>
                       </div>
                     )}
                   </div>
