@@ -445,6 +445,18 @@ export default function SubstanceRadar() {
     if (month !== 'all') return `${THAI_MONTHS.find(m => m.v === parseInt(month))?.l || ''} ${fy}`
     return `ปีงบ ${fy}`
   }, [year, month])
+  // ข้อความช่วงเวลาที่ใช้ทั้ง ExportDialog + meta ใน Excel — บอกชัดว่าปีงบที่เลือกมีข้อมูล "วันไหนถึงวันไหน"
+  //   และเตือนถ้ายังไม่ครบช่วงตามปฏิทิน (เช่น ปีงบ 2569 มีถึง 7 ก.ย. ไม่ใช่ 30 ก.ย.)
+  const periodText = useMemo(() => {
+    if (!currentPeriodRange) return `${currentPeriodLabel} (ไม่มีข้อมูล)`
+    let txt = `${currentPeriodLabel} · ข้อมูล ${formatThaiDate(currentPeriodRange.from)} – ${formatThaiDate(currentPeriodRange.to)}`
+    if (year !== 'all') {
+      const fy = parseInt(year)
+      const cal = month !== 'all' ? getMonthRange(fy, parseInt(month)) : getFiscalYearRange(fy)
+      if (currentPeriodRange.to < cal.to || currentPeriodRange.from > cal.from) txt += ` (ยังไม่ครบช่วง — ตามปฏิทินคือ ${formatThaiDate(cal.from)} – ${formatThaiDate(cal.to)})`
+    }
+    return txt
+  }, [currentPeriodRange, currentPeriodLabel, year, month])
   // ข้อความสรุปตัวกรองพื้นที่/พฤติการณ์/ยา — ลง meta ของ Excel ทั้ง 2 แบบ
   const scopeLabel = useMemo(() => {
     const parts = [selectedDistricts.length ? selectedDistricts.join(', ') : 'ทุกเขต']
@@ -466,9 +478,7 @@ export default function SubstanceRadar() {
         periodLabel = `กำหนดเอง (${formatThaiDate(dateRange.from)} - ${formatThaiDate(dateRange.to)})`
       } else {
         rows = exportRows
-        periodLabel = currentPeriodRange
-          ? `${currentPeriodLabel} (${formatThaiDate(currentPeriodRange.from)} - ${formatThaiDate(currentPeriodRange.to)})`
-          : currentPeriodLabel
+        periodLabel = periodText
       }
       await exportDrugIncidentReport({
         incidentRows: rows,
@@ -490,10 +500,7 @@ export default function SubstanceRadar() {
   const handleAreaStatsExport = async () => {
     setStatsExporting(true)
     try {
-      const periodLabel = currentPeriodRange
-        ? `${currentPeriodLabel} (${formatThaiDate(currentPeriodRange.from)} - ${formatThaiDate(currentPeriodRange.to)})`
-        : currentPeriodLabel
-      await exportAreaStats({ rows: filteredIncidents, periodLabel, filterLabel: scopeLabel, filenamePrefix: 'radar-area-stats' })
+      await exportAreaStats({ rows: filteredIncidents, periodLabel: periodText, filterLabel: scopeLabel, filenamePrefix: 'radar-area-stats' })
     } catch (err) {
       console.error('[/radar] area stats export failed:', err)
     } finally {
@@ -1136,7 +1143,7 @@ export default function SubstanceRadar() {
         <ExportDialog
           open={exportDialogOpen} onClose={() => setExportDialogOpen(false)} onConfirm={handleExportConfirm}
           busy={exporting}
-          currentPeriodLabel={currentPeriodRange ? `${currentPeriodLabel} (${formatThaiDate(currentPeriodRange.from)} - ${formatThaiDate(currentPeriodRange.to)})` : currentPeriodLabel}
+          currentPeriodLabel={`${periodText} · ${exportRows.length.toLocaleString()} เรื่อง`}
           defaultFrom={currentPeriodRange?.from ?? ''} defaultTo={currentPeriodRange?.to ?? ''}
         />
         <MapExportDialog
