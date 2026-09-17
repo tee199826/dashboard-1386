@@ -266,7 +266,6 @@ export default function SubstanceRadar() {
   const selectedKhwaengs = useMemo(() => asArray(selectedKhwaengsRaw), [selectedKhwaengsRaw])
   const selectedBehaviors = useMemo(() => asArray(selectedBehaviorsRaw), [selectedBehaviorsRaw])
   const [statsOpen, setStatsOpen] = useState(false)                 // แผงสถิติรายพื้นที่
-  const [statsExporting, setStatsExporting] = useState(false)
   const [areaFocusKey, setAreaFocusKey] = useState(null)            // แถวที่คลิกใน panel (highlight)
   const [districtPanel, setDistrictPanel] = useState(null)          // Bug 2: floating detail panel (dname)
   const [compareOpen, setCompareOpen] = useState(false)             // Phase 3: compare modal
@@ -467,18 +466,27 @@ export default function SubstanceRadar() {
   }, [selectedDistricts, selectedKhwaengs, selectedBehaviors, selectedDrugs, category])
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const [exportDefaultMode, setExportDefaultMode] = useState('district')   // 'area' เมื่อเปิดจากแผงสถิติพื้นที่
   const [exporting, setExporting] = useState(false)
+  const openExport = (mode = 'district') => { setExportDefaultMode(mode); setExportDialogOpen(true) }
+  // รูปแบบรายงานเพิ่มเฉพาะหน้านี้ — สถิติรายพื้นที่ (ไม่มีตัวกรองสถานะ: นับทุกเรื่อง)
+  const EXTRA_EXPORT_MODES = [{ id: 'area', label: 'สถิติรายพื้นที่ (เขต / แขวง / ชุมชน)', desc: 'นับครั้ง + พฤติการณ์ + ชนิดยา ต่อพื้นที่ · 4 sheet', noStatusFilter: true }]
   const handleExportConfirm = async ({ mode, dateRange, zoneDetail, statusFilter }) => {
     setExporting(true)
     try {
-      // กำหนดเอง → ข้ามการกรองปี/เดือนของหน้านี้ (ให้ dateRange เป็นตัวกำหนดช่วงแทน) แต่ยังกรองเขต/แขวง/ชนิดยาตามเดิม
+      // กำหนดเอง → ข้ามการกรองปี/เดือนของหน้านี้ (ให้ dateRange เป็นตัวกำหนดช่วงแทน) แต่ยังกรองเขต/แขวง/พฤติการณ์/ชนิดยาตามเดิม
       let rows, periodLabel
       if (dateRange) {
-        rows = incidents.filter(matchesScope)
-        periodLabel = `กำหนดเอง (${formatThaiDate(dateRange.from)} - ${formatThaiDate(dateRange.to)})`
+        rows = incidents.filter(r => matchesScope(r) && r.received_date && r.received_date >= dateRange.from && r.received_date <= dateRange.to)
+        periodLabel = `กำหนดเอง ${formatThaiDate(dateRange.from)} – ${formatThaiDate(dateRange.to)} · ${rows.length.toLocaleString()} เรื่อง`
       } else {
         rows = exportRows
         periodLabel = periodText
+      }
+      if (mode === 'area') {
+        await exportAreaStats({ rows, periodLabel, filterLabel: scopeLabel, filenamePrefix: 'radar-area-stats' })
+        setExportDialogOpen(false)
+        return
       }
       await exportDrugIncidentReport({
         incidentRows: rows,
@@ -493,18 +501,6 @@ export default function SubstanceRadar() {
       console.error('[/radar] export failed:', err)
     } finally {
       setExporting(false)
-    }
-  }
-
-  // ── Export Excel สถิติรายพื้นที่ (เขต/แขวง/ชุมชน) — ตัวเลขชุดเดียวกับ panel ──
-  const handleAreaStatsExport = async () => {
-    setStatsExporting(true)
-    try {
-      await exportAreaStats({ rows: filteredIncidents, periodLabel: periodText, filterLabel: scopeLabel, filenamePrefix: 'radar-area-stats' })
-    } catch (err) {
-      console.error('[/radar] area stats export failed:', err)
-    } finally {
-      setStatsExporting(false)
     }
   }
 
@@ -1126,7 +1122,7 @@ export default function SubstanceRadar() {
               className={`rounded-lg shadow-lg px-4 py-2 border flex items-center gap-2 text-sm font-medium transition ${statsOpen ? 'bg-slate-900 border-slate-900 text-white' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'}`}>
               <Table2 size={16} /> สถิติพื้นที่
             </button>
-            <button onClick={() => setExportDialogOpen(true)}
+            <button onClick={() => openExport('district')}
               className="bg-white hover:bg-slate-50 rounded-lg shadow-lg px-4 py-2 border border-slate-200 flex items-center gap-2 text-sm font-medium text-slate-700 transition">
               <Download size={16} /> Export Excel
             </button>
@@ -1145,6 +1141,7 @@ export default function SubstanceRadar() {
           busy={exporting}
           currentPeriodLabel={`${periodText} · ${exportRows.length.toLocaleString()} เรื่อง`}
           defaultFrom={currentPeriodRange?.from ?? ''} defaultTo={currentPeriodRange?.to ?? ''}
+          extraModes={EXTRA_EXPORT_MODES} defaultMode={exportDefaultMode}
         />
         <MapExportDialog
           open={mapExportDialogOpen} onClose={() => setMapExportDialogOpen(false)} onConfirm={handleMapExportConfirm}
@@ -1245,7 +1242,7 @@ export default function SubstanceRadar() {
         {statsOpen && !isPresentation && (
           <div className="absolute z-[1150] right-2 left-2 sm:left-auto sm:right-4 top-16 bottom-4 sm:w-[460px] rounded-2xl shadow-2xl ring-1 ring-slate-200 overflow-hidden animate-rise bg-white">
             <AreaStatsPanel rows={filteredIncidents} level={statsLevel} onLevelChange={setStatsLevel}
-              onFocus={focusArea} onExport={handleAreaStatsExport} exporting={statsExporting}
+              onFocus={focusArea} onExport={() => openExport('area')} exporting={exporting}
               onClose={() => setStatsOpen(false)} activeKey={areaFocusKey} />
           </div>
         )}
