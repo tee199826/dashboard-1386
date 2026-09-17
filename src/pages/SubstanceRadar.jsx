@@ -420,11 +420,25 @@ export default function SubstanceRadar() {
   const exportRows = filteredIncidents
 
   // ตัวกรอง ปี/เดือน ของหน้านี้ — ใช้ทำ periodLabel + ค่าตั้งต้นของ ExportDialog โหมด "กำหนดเอง"
+  //   ⚠️ ตัดให้อยู่ในช่วงที่มีข้อมูลจริง — ปีงบตามปฏิทินคือ 1 ต.ค.–30 ก.ย. แต่ข้อมูลถึงแค่วันล่าสุดที่อัป (เช่น 7 ก.ย.)
+  //   ถ้าโชว์ "30 ก.ย." ทั้งที่ยังไม่มีข้อมูลจะเข้าใจผิดว่าครบปี
+  const dataRange = useMemo(() => {
+    let min = null, max = null
+    for (const r of filteredIncidents) {
+      const d = r.received_date
+      if (!d) continue
+      if (!min || d < min) min = d
+      if (!max || d > max) max = d
+    }
+    return min ? { from: min, to: max } : null
+  }, [filteredIncidents])
   const currentPeriodRange = useMemo(() => {
-    if (year === 'all') return null
+    if (year === 'all') return dataRange
     const fy = parseInt(year)
-    return month !== 'all' ? getMonthRange(fy, parseInt(month)) : getFiscalYearRange(fy)
-  }, [year, month])
+    const cal = month !== 'all' ? getMonthRange(fy, parseInt(month)) : getFiscalYearRange(fy)
+    if (!dataRange) return cal
+    return { from: dataRange.from > cal.from ? dataRange.from : cal.from, to: dataRange.to < cal.to ? dataRange.to : cal.to }
+  }, [year, month, dataRange])
   const currentPeriodLabel = useMemo(() => {
     if (year === 'all') return 'ทั้งหมด'
     const fy = parseInt(year)
