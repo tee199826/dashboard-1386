@@ -1,4 +1,4 @@
-import { Palette, Download, Hash, Database, Upload, FileSpreadsheet } from 'lucide-react'
+import { Palette, Download, Hash, Database, Upload, FileSpreadsheet, Loader2 } from 'lucide-react'
 import FilterPill from '../FilterPill'
 import { DATA_SOURCES, DRUG_SUBSTANCES, BEHAVIOR_FLAGS, BKN_FILTER_OPTIONS, METRIC_OPTIONS } from '../../utils/pixelMapData'
 import { SHAPES } from '../../utils/pixelMapStyle'
@@ -62,6 +62,7 @@ export default function StylePanel({
   exportFullMap, setExportFullMap,
   showExportNumbers, setShowExportNumbers,
   showExportDetail, setShowExportDetail,
+  onExportExcel, excelBusy, excelError,
 }) {
   return (
     <>
@@ -253,6 +254,18 @@ export default function StylePanel({
           <button type="button" onClick={onCopyEmbed} className="h-9 rounded-lg ring-1 ring-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50">คัดลอก HTML</button>
         </div>
         {compareActive && <p className="text-[11px] text-slate-400">โหมด Compare: SVG export ได้เฉพาะ panel แรก — PNG export ได้ทั้ง grid</p>}
+
+        <div className="pt-3 border-t border-slate-100 space-y-1.5">
+          <button type="button" onClick={onExportExcel} disabled={excelBusy}
+            className="w-full h-9 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-wait inline-flex items-center justify-center gap-1.5">
+            {excelBusy ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
+            {excelBusy ? 'กำลังสร้างไฟล์…' : 'Export Excel (.xlsx)'}
+          </button>
+          <p className="text-[11.5px] leading-relaxed text-slate-400">
+            ข้อมูลรายเขต / รายแขวง / รายชุมชน ตามปีงบที่เลือก + รายละเอียดพื้นที่ในแผง
+          </p>
+          {excelError && <p className="text-[11.5px] text-rose-600">{excelError}</p>}
+        </div>
       </AccordionSection>
     </>
   )

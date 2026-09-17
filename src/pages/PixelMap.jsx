@@ -3,6 +3,7 @@ import { Layers as LayersIcon, Users, Info } from 'lucide-react'
 import { loadDistrictGeoJSON, loadSubdistrictIndex, loadCommunityIndex } from '../utils/pixelMapGeometry'
 import { getDistrictCounts, getCommunityHierarchy, getAvailableFiscalYears, getLevelMaxes, sameArea } from '../utils/pixelMapData'
 import { exportSvg, exportPng, copyEmbedHtml } from '../utils/pixelMapExport'
+import { exportPixelMapExcel } from '../utils/pixelMapExcel'
 import { usePixelMapState } from '../hooks/usePixelMapState'
 import SelectionTree from '../components/pixel-map/SelectionTree'
 import LayerPanel from '../components/pixel-map/LayerPanel'
@@ -179,6 +180,19 @@ export default function PixelMap() {
     withExportMode(() => withFullMapIfNeeded(() => { exportSvg(svgRef.current, 'pixel-map.svg') }))
       .catch(err => console.error('[pixel-map] SVG export failed:', err))
   }, [withExportMode, withFullMapIfNeeded])
+  // Excel: ข้อมูลรายเขต/แขวง/ชุมชน ตามปีงบที่ติ๊ก + ชีทรายละเอียดของพื้นที่ในแผง (ที่คลิกเลือกไว้ / เขตกลางแผนที่ — ชุดเดียวกับการ์ดในรูป)
+  const [excelState, setExcelState] = useState({ busy: false, error: '' })
+  const handleExportExcel = useCallback(async () => {
+    setExcelState({ busy: true, error: '' })
+    try {
+      await exportPixelMapExcel({ hierarchy, years, detailArea: fallbackArea, checkedDistricts, checkedSubdistricts, checkedCommunities })
+      setExcelState({ busy: false, error: '' })
+    } catch (err) {
+      console.error('[pixel-map] Excel export failed:', err)
+      setExcelState({ busy: false, error: 'ส่งออก Excel ไม่สำเร็จ ลองใหม่อีกครั้ง' })
+    }
+  }, [hierarchy, years, fallbackArea, checkedDistricts, checkedSubdistricts, checkedCommunities])
+
   const handleCopyEmbed = useCallback(() => {
     if (!svgRef.current) return
     copyEmbedHtml(svgRef.current).catch(err => console.error('[pixel-map] copy embed failed:', err))
@@ -269,6 +283,7 @@ export default function PixelMap() {
             exportFullMap={exportFullMap} setExportFullMap={setExportFullMap}
             showExportNumbers={showExportNumbers} setShowExportNumbers={setShowExportNumbers}
             showExportDetail={showExportDetail} setShowExportDetail={setShowExportDetail}
+            onExportExcel={handleExportExcel} excelBusy={excelState.busy} excelError={excelState.error}
           />
         </div>
       </div>
