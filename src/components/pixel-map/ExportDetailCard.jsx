@@ -34,7 +34,7 @@ function truncate(text, fontSize, maxWidth) {
 const pct = (n, total) => (total > 0 ? Math.round((n / total) * 100) : 0)
 
 // centerInHeight: ให้การ์ดอยู่กึ่งกลางแนวตั้งของแผงที่สูงเท่านี้ (ไม่ส่ง = วางที่ y)
-export default function ExportDetailCard({ area, hierarchy, x = 16, y = 16, centerInHeight }) {
+export default function ExportDetailCard({ area, hierarchy, periodLabel, x = 16, y = 16, centerInHeight }) {
   // id ต้องเป็น ASCII ล้วน — ไฟล์ .svg ที่ export อาจถูกเปิดด้วยโปรแกรมอื่น (Illustrator/Inkscape) ที่ไม่ชอบ id ภาษาไทย
   const clipId = `xd-bar-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   const detail = nodeDetail(resolveAreaNode(hierarchy, area))
@@ -171,9 +171,14 @@ export default function ExportDetailCard({ area, hierarchy, x = 16, y = 16, cent
   cy += 4
   body.push(
     <line key="foot-line" x1={PAD} y1={cy} x2={W - PAD} y2={cy} stroke="#e2e8f0" strokeWidth={1} />,
-    <text key="foot" x={PAD} y={cy + 14} fontFamily={FONT} fontSize={10.5} fill="#94a3b8">ข้อมูลเหตุการณ์ยาเสพติดตามช่วงที่เลือก</text>,
+    <text key="foot" x={PAD} y={cy + 14} fontFamily={FONT} fontSize={10.5} fill="#94a3b8">ข้อมูลเหตุการณ์ยาเสพติด</text>,
+    // ช่วงเวลาแยกบรรทัดของตัวเอง — กรองรายเดือน/รายวันได้แล้ว คนอ่านรูปต้องรู้ว่าตัวเลขเป็นของช่วงไหน
+    // (ต่อท้ายบรรทัดเดียวกับข้อความข้างบน วันที่แบบข้ามปีจะยาวจนถูกตัดเหลือ "…" พอดีตรงส่วนที่สำคัญที่สุด)
+    <text key="period" x={PAD} y={cy + 30} fontFamily={FONT} fontSize={11} fontWeight={600} fill="#64748b">
+      {truncate(`ช่วงเวลา: ${periodLabel || 'ทุกปี'}`, 11, innerW)}
+    </text>,
   )
-  cy += 22
+  cy += 38
 
   const H = cy + PAD - 6
   const top = centerInHeight ? Math.max(16, (centerInHeight - H) / 2) : y

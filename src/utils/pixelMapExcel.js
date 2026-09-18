@@ -1,5 +1,5 @@
 // pixelMapExcel.js — Export Excel ของหน้า /pixel-map
-// ตัวเลขมาจาก hierarchy ชุดเดียวกับที่แผนที่และแผงรายละเอียดใช้ (ตามปีงบที่ติ๊ก) จึงตรงกับบนจอเสมอ
+// ตัวเลขมาจาก hierarchy ชุดเดียวกับที่แผนที่และแผงรายละเอียดใช้ (ตามช่วงเวลาที่เลือก) จึงตรงกับบนจอเสมอ
 // ชีท: รายละเอียดพื้นที่ (พื้นที่ในแผง = ที่คลิกเลือกไว้ หรือเขตกลางแผนที่) / รายเขต / รายแขวง / รายชุมชน
 import ExcelJS from 'exceljs'
 import { BEHAVIOR_FLAGS, nodeDetail, communityList, resolveAreaNode } from './pixelMapData'
@@ -117,18 +117,17 @@ function addListSheet(wb, name, { meta, columns, rows }) {
 }
 
 /**
- * hierarchy: จาก getCommunityHierarchy (กรองปีงบแล้ว) ; years: Set ของปีงบที่ติ๊ก (ว่าง = ทุกปี)
+ * hierarchy: จาก getCommunityHierarchy (กรองช่วงเวลาแล้ว) ; periodLabel: ข้อความช่วงเวลาที่เลือก (ปีงบ / เดือน / ช่วงวันที่)
  * detailArea: พื้นที่ในแผงรายละเอียด (ที่คลิกเลือกไว้ / เขตกลางแผนที่) — ไม่มีหรือไม่มีข้อมูล = ไม่ใส่ชีทนี้
  * checked*: พื้นที่ที่ติ๊กบนแผนที่ — ใส่เครื่องหมายในคอลัมน์ "ติ๊กบนแผนที่" ให้กรองใน Excel ได้
  */
 export async function exportPixelMapExcel({
-  hierarchy = {}, years = new Set(), detailArea = null,
+  hierarchy = {}, periodLabel = 'ทุกปี', detailArea = null,
   checkedDistricts = new Set(), checkedSubdistricts = new Set(), checkedCommunities = new Set(),
 } = {}) {
   const now = new Date()
-  const yearLabel = years.size ? [...years].sort().join(', ') : 'ทุกปี'
   const commonMeta = [
-    `ปีงบประมาณ: ${yearLabel}`,
+    `ช่วงเวลา: ${periodLabel}`,
     'แหล่งข้อมูล: เหตุการณ์ยาเสพติด (drug_incidents)',
     `ส่งออกเมื่อ: ${thaiDateTime(now)}`,
   ]

@@ -142,7 +142,7 @@ function bumpFlags(target, r) {
 let _hierarchyRowsPromise = null
 function fetchHierarchyRows() {
   if (!_hierarchyRowsPromise) {
-    const select = ['district', 'subdistrict', 'community', 'lat', 'lng', 'fiscal_year', ...HIERARCHY_FLAG_COLS].join(', ')
+    const select = ['district', 'subdistrict', 'community', 'lat', 'lng', 'fiscal_year', 'received_date', ...HIERARCHY_FLAG_COLS].join(', ')
     _hierarchyRowsPromise = fetchAllPages('drug_incidents', select, { parallel: true, orderBy: 'id' }).catch(err => {
       _hierarchyRowsPromise = null // ล้มเหลว → ให้ครั้งหน้าลองใหม่ ไม่ค้าง promise ที่ reject
       throw err
@@ -160,17 +160,33 @@ export function clearPixelMapDataCache() {
 
 // hierarchy เดียวจบ: เขต (meta: count/bySubstance/byAction รวมทั้งเขต)
 //   → แขวง (centroid จาก "ทุกแถวที่มี lat/lng" ของแขวงนั้น ไม่ใช่แค่แถวมีชุมชน — centroid แม่นกว่า, + meta รวมทั้งแขวง)
-//     → ชุมชน (centroid+count เฉพาะแถวที่มี community, มักมีแค่ ~28% ของข้อมูล — shape เดียวกับ meta คือ {count,bySubstance,byAction})
+//     → ชุมชน (นับทุกแถวที่ระบุชุมชน มักมีแค่ ~28% ของข้อมูล, centroid เฉลี่ยจากแถวที่มีพิกัด — shape เดียวกับ meta คือ {count,bySubstance,byAction})
 // key แขวง/ชุมชน เป็น composite เสมอ (district อยู่ใน object แม่อยู่แล้ว) — กันชื่อแขวงซ้ำข้ามเขต (พบจริง 59 ชื่อ)
 // complaints/bkn_summary ไม่มี lat/lng รายแถว จึงทำ hierarchy ได้จาก drug_incidents เท่านั้น
-// years: 'all' (ทุกปี) หรือ Set/array ของปีงบประมาณที่เลือก (ติ๊กได้หลายปี) — ว่าง = ทุกปี
-export async function getCommunityHierarchy(years = 'all') {
-  const yearSet = (years === 'all' || !years || (years.size ?? years.length) === 0) ? null : new Set([...years].map(String))
+// filter: 'all' / null = ทุกช่วง
+//   { fiscalYears: [...] } = ปีงบที่เลือก (ติ๊กได้หลายปี, ว่าง = ทุกปี) — ใช้คอลัมน์ fiscal_year เหมือนเดิม
+//   { from, to }           = ช่วงวันที่ ISO (รายเดือน/รายวัน) — ใช้ received_date (คอลัมน์ date NOT NULL)
+//   Set/array ของปีงบ     = รูปแบบเดิม (ยังรับไว้)
+function hierarchyRowFilter(filter) {
+  if (!filter || filter === 'all') return null
+  const years = (filter instanceof Set || Array.isArray(filter)) ? filter : filter.fiscalYears
+  if (years) {
+    const list = [...years].map(String)
+    if (list.length === 0) return null
+    const set = new Set(list)
+    return (r) => set.has(String(r.fiscal_year))
+  }
+  if (!filter.from || !filter.to) return null
+  return (r) => !!r.received_date && r.received_date >= filter.from && r.received_date <= filter.to
+}
+
+export async function getCommunityHierarchy(filter = 'all') {
+  const keep = hierarchyRowFilter(filter)
   const rows = await fetchHierarchyRows()
 
   const tree = {}
   for (const r of rows) {
-    if (yearSet && !yearSet.has(String(r.fiscal_year))) continue // กรองตามปีงบประมาณที่ติ๊กไว้ (union ของปีที่เลือก)
+    if (keep && !keep(r)) continue // กรองตามช่วงเวลาที่เลือก (ปีงบ / เดือน / ช่วงวันที่)
     const d = r.district
     if (!isBangkokDistrict(d) || !r.subdistrict) continue
     const district = (tree[d] ||= { meta: makeMeta(), subdistricts: {} })
@@ -180,10 +196,12 @@ export async function getCommunityHierarchy(years = 'all') {
     bumpFlags(sub.meta, r)
     if (r.lat && r.lng) { sub.sumLat += r.lat; sub.sumLng += r.lng; sub.n++ }
 
-    if (r.community && r.lat && r.lng) {
-      const c = (sub.communities[r.community] ||= { sumLat: 0, sumLng: 0, ...makeMeta() })
+    // นับ "ทุกแถวที่ระบุชุมชน" ไม่ใช่เฉพาะแถวที่มีพิกัด — ไม่งั้นจำนวนเรื่องของชุมชนขาดไป (มี 222 แถวที่ระบุชุมชนแต่ไม่มี lat/lng)
+    // ส่วนพิกัดที่ใช้วางจุดบนแผนที่ เฉลี่ยจากเฉพาะแถวที่มีพิกัดจริง (nPos)
+    if (hasCommunity(r.community)) {
+      const c = (sub.communities[r.community] ||= { sumLat: 0, sumLng: 0, nPos: 0, ...makeMeta() })
       bumpFlags(c, r)
-      c.sumLat += r.lat; c.sumLng += r.lng
+      if (r.lat && r.lng) { c.sumLat += r.lat; c.sumLng += r.lng; c.nPos++ }
     }
   }
 
@@ -192,9 +210,11 @@ export async function getCommunityHierarchy(years = 'all') {
     for (const sub of Object.values(district.subdistricts)) {
       sub.centroid = sub.n > 0 ? { lat: sub.sumLat / sub.n, lng: sub.sumLng / sub.n } : null
       delete sub.sumLat; delete sub.sumLng; delete sub.n
-      for (const c of Object.values(sub.communities)) {
-        c.lat = c.sumLat / c.count; c.lng = c.sumLng / c.count
-        delete c.sumLat; delete c.sumLng
+      for (const [name, c] of Object.entries(sub.communities)) {
+        // ไม่มีแถวไหนมีพิกัดเลย (24 ชุมชน) = วาดบนแผนที่ไม่ได้ → ตัดทิ้งเหมือนเดิม (เรื่องยังถูกนับที่ระดับเขต/แขวงอยู่แล้ว)
+        if (c.nPos === 0) { delete sub.communities[name]; continue }
+        c.lat = c.sumLat / c.nPos; c.lng = c.sumLng / c.nPos
+        delete c.sumLat; delete c.sumLng; delete c.nPos
       }
     }
   }
@@ -232,8 +252,24 @@ export function sameArea(a, b) {
   return !!a && !!b && a.level === b.level && a.dname === b.dname && a.label === b.label && (a.sub ?? '') === (b.sub ?? '')
 }
 
+// รวม meta ของหลายเขตเป็นก้อนเดียว (ใช้กับ panel ในโหมด compare ที่เลือกได้หลายเขตต่อ panel)
+// คืน shape เดียวกับ meta ของเขต + communities (จำนวนชุมชนที่พบเหตุการณ์) → ส่งต่อ nodeDetail ได้เลย
+export function sumDistrictMeta(hierarchy, names = []) {
+  const out = { count: 0, bySubstance: {}, byAction: {}, byBehavior: {}, inCommunity: 0, communities: 0, districts: 0 }
+  for (const name of names) {
+    const node = hierarchy?.[name]
+    if (!node) continue
+    out.districts++
+    out.count += node.meta?.count ?? 0
+    out.inCommunity += node.meta?.inCommunity ?? 0
+    for (const [col] of BEHAVIOR_FLAGS) out.byBehavior[col] = (out.byBehavior[col] ?? 0) + (node.meta?.byBehavior?.[col] ?? 0)
+    for (const sub of Object.values(node.subdistricts ?? {})) out.communities += Object.keys(sub.communities ?? {}).length
+  }
+  return out
+}
+
 // รายชื่อชุมชนในพื้นที่ (ทั้งเขต หรือเจาะแขวงเดียว) เรียงจำนวนเรื่องมาก→น้อย
-// นับเฉพาะชุมชนที่มีพิกัดในข้อมูล (เหมือนที่วาดบนแผนที่ได้) — เรื่องที่ระบุชุมชนแต่ไม่มีพิกัดจะไม่อยู่ในรายการนี้
+// รายชื่อ = ชุมชนที่มีพิกัดอย่างน้อย 1 แถว (เหมือนที่วาดบนแผนที่ได้) แต่จำนวนเรื่องของแต่ละชุมชนนับครบทุกแถว รวมแถวที่ไม่มีพิกัด
 export function communityList(hierarchy, district, subdistrict = null) {
   const all = hierarchy?.[district]?.subdistricts ?? {}
   const subs = subdistrict ? (all[subdistrict] ? [[subdistrict, all[subdistrict]]] : []) : Object.entries(all)

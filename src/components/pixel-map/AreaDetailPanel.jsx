@@ -1,6 +1,6 @@
 // AreaDetailPanel — การ์ดสรุปพื้นที่ที่เมาส์ชี้อยู่บนแผนที่
 // อยู่ข้างแผนที่ (ไม่ใช่ tooltip ลอยตามเมาส์) จึงอ่านได้สบาย ไม่บังแผนที่ และค้างไว้ที่พื้นที่ล่าสุดให้อ่านต่อได้
-// ตัวเลขทั้งหมดมาจากข้อมูลเหตุการณ์ยาเสพติดตามปีงบที่ติ๊กไว้ (ชุดเดียวกับ tooltip บนแผนที่)
+// ตัวเลขทั้งหมดมาจากข้อมูลเหตุการณ์ยาเสพติดตามช่วงเวลาที่เลือก (ชุดเดียวกับ tooltip บนแผนที่)
 import { useMemo } from 'react'
 import { MousePointerClick, X } from 'lucide-react'
 import { nodeDetail, communityList, resolveAreaNode } from '../../utils/pixelMapData'
@@ -11,22 +11,27 @@ const LEVEL_LABEL = { district: 'เขต', subdistrict: 'แขวง', commun
 const areaTitle = (a) => (a.level === 'subdistrict' && !a.label.startsWith('แขวง') ? `แขวง${a.label}` : a.label)
 
 // แถบบนสุดของแผง — มีพื้นที่ที่คลิกเลือกไว้: บอกชื่อ + ปุ่มยกเลิก (เห็นตลอดแม้กำลังชี้พื้นที่อื่นอยู่) ; ไม่มี: บอกวิธีเลือก
-function PinBar({ pinnedArea, onClearPin }) {
+function PinBar({ pinnedArea, onClearPin, comparing }) {
   if (!pinnedArea) {
     return (
       <p className="flex items-center gap-1.5 text-[12px] text-slate-400">
-        <MousePointerClick size={13} className="shrink-0" /> คลิกพื้นที่บนแผนที่เพื่อเลือกไว้
+        <MousePointerClick size={13} className="shrink-0" />
+        {comparing ? 'คลิกพื้นที่ในแต่ละแผนที่เพื่อเทียบกัน' : 'คลิกพื้นที่บนแผนที่เพื่อเลือกไว้'}
       </p>
     )
   }
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-cyan-50 ring-1 ring-cyan-200 px-2.5 py-1.5 text-[12.5px] text-cyan-800">
-      <MousePointerClick size={14} className="shrink-0" />
-      <span className="flex-1 min-w-0 truncate">เลือกไว้: <b className="font-semibold">{areaTitle(pinnedArea)}</b></span>
-      <button type="button" onClick={onClearPin} title="ยกเลิกการเลือก"
-        className="shrink-0 inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[12px] font-medium hover:bg-cyan-100">
-        <X size={12} /> ยกเลิก
-      </button>
+    <div className="space-y-1">
+      <div className="flex items-center gap-2 rounded-lg bg-cyan-50 ring-1 ring-cyan-200 px-2.5 py-1.5 text-[12.5px] text-cyan-800">
+        <MousePointerClick size={14} className="shrink-0" />
+        <span className="flex-1 min-w-0 truncate">เลือกไว้: <b className="font-semibold">{areaTitle(pinnedArea)}</b></span>
+        <button type="button" onClick={onClearPin} title="ยกเลิกการเลือก"
+          className="shrink-0 inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[12px] font-medium hover:bg-cyan-100">
+          <X size={12} /> ยกเลิก
+        </button>
+      </div>
+      {/* โหมด compare เท่านั้นที่เทียบข้ามแผนที่ได้ — บอกให้รู้ว่าคลิกอีกแผนที่จะได้อะไร */}
+      {comparing && <p className="text-[11.5px] text-slate-400">คลิกพื้นที่ในแผนที่อื่นเพื่อเทียบกัน</p>}
     </div>
   )
 }
@@ -56,7 +61,7 @@ function LegendRow({ color, label, value, total }) {
   )
 }
 
-export default function AreaDetailPanel({ area, pinnedArea, onClearPin, hierarchy }) {
+export default function AreaDetailPanel({ area, pinnedArea, onClearPin, hierarchy, periodLabel = 'ทุกปี', comparing = false }) {
   const detail = useMemo(() => nodeDetail(resolveAreaNode(hierarchy, area)), [area, hierarchy])
   const communities = useMemo(() => (
     area && area.level !== 'community'
@@ -67,7 +72,7 @@ export default function AreaDetailPanel({ area, pinnedArea, onClearPin, hierarch
   if (!area || !detail) {
     return (
       <div className="space-y-2">
-        <PinBar pinnedArea={pinnedArea} onClearPin={onClearPin} />
+        <PinBar pinnedArea={pinnedArea} onClearPin={onClearPin} comparing={comparing} />
         <p className="text-[13px] leading-relaxed text-slate-400">ชี้เมาส์หรือคลิกที่เขต / แขวง / ชุมชน บนแผนที่ แล้วรายละเอียดจะขึ้นตรงนี้</p>
       </div>
     )
@@ -79,7 +84,7 @@ export default function AreaDetailPanel({ area, pinnedArea, onClearPin, hierarch
 
   return (
     <div className="space-y-3.5">
-      <PinBar pinnedArea={pinnedArea} onClearPin={onClearPin} />
+      <PinBar pinnedArea={pinnedArea} onClearPin={onClearPin} comparing={comparing} />
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-[11.5px] font-semibold text-violet-600">{LEVEL_LABEL[area.level] ?? ''}</div>
@@ -141,7 +146,9 @@ export default function AreaDetailPanel({ area, pinnedArea, onClearPin, hierarch
         </div>
       )}
 
-      <p className="text-[11.5px] leading-relaxed text-slate-400 pt-1.5 border-t border-slate-100">ข้อมูลเหตุการณ์ยาเสพติด ตามปีงบที่เลือกไว้ด้านบน</p>
+      <p className="text-[11.5px] leading-relaxed text-slate-400 pt-1.5 border-t border-slate-100">
+        ข้อมูลเหตุการณ์ยาเสพติด · ช่วงเวลา: <span className="font-medium text-slate-500">{periodLabel}</span>
+      </p>
     </div>
   )
 }

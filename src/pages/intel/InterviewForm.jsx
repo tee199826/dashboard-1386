@@ -7,12 +7,15 @@
 // เผื่อวันหน้าเปิดสถิติแบบซักให้อ่านสาธารณะโดยที่ชื่อ/เลขบัตรไม่หลุดไปด้วย
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { RotateCcw } from 'lucide-react'
+import {
+  RotateCcw, User, Gavel, HeartPulse, History, Pill, Banknote, MapPin, ClipboardList, Clock,
+} from 'lucide-react'
 import { draftKeyOf, readDraft, writeDraft, removeDraft } from '../../utils/interviewDraft'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import { dateToFiscalYear, localDateISO } from '../../utils/fiscalYear'
-import { IntelPage, Card, Field, Input, Select, ChipGroup, RepeatList, SaveBar } from '../../components/intel/FormUI'
+import { Field, Input, Select, ChipGroup, RepeatList, SaveBar } from '../../components/intel/FormUI'
+import { FormLayout, SectionCard, SubSection } from '../../components/intel/FormLayout'
 import { DISTRICTS, UNIT_FALLBACK, YEAR_OPTIONS, formatNationalId } from '../../utils/intelOptions'
 import { loadAreaOptions, loadCommunitiesFromData, mergeCommunities } from '../../utils/areaOptions'
 import { loadThaiAddress } from '../../utils/thaiAddress'
@@ -43,6 +46,34 @@ const cleanObj = (o) => {
 }
 
 const fmtTime = (ms) => new Date(ms).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+
+// หัวข้อของแบบฟอร์ม — หัวการ์ดแต่ละใบ (id ไว้ให้เลื่อนมาหา, ไอคอน, ชื่อหัวข้อ, คำอธิบายใต้ชื่อ)
+// เลขหัวข้อคงตามแบบกระดาษ (ส่วนที่ ๑ ข้อมูลบุคคล แล้วตามด้วยข้อ ๑–๖) — ไม่เรียงเลขใหม่ให้สับสนกับต้นฉบับ
+const SECTIONS = [
+  {
+    id: 'sec-person', icon: User,
+    title: 'ส่วนที่ ๑ ข้อมูลบุคคล', sub: 'ช่องที่ระบุตัวบุคคลถูกเก็บแยกตาราง เข้าถึงได้เฉพาะผู้ดูแลระบบ',
+  },
+  {
+    id: 'sec-arrest', icon: Gavel,
+    title: '๑. เคยถูกจับคดียาเสพติด', sub: 'เลือกก่อนว่าเคยหรือไม่เคย — ถ้าเคย ระบุข้อมูล ๒ ครั้งล่าสุด (จำนวนครั้งนับจากรายการที่กรอก)',
+  },
+  {
+    id: 'sec-rehab', icon: HeartPulse,
+    title: '๒. เคยเข้ารับการบำบัด', sub: 'เลือกก่อนว่าเคยหรือไม่เคย — ถ้าเคย ระบุข้อมูล ๒ ครั้งล่าสุด',
+  },
+  { id: 'sec-first', icon: History, title: '๓. การเสพยาครั้งแรก' },
+  { id: 'sec-main', icon: Pill, title: '๔. ยาเสพติดหลักที่ใช้เป็นประจำ' },
+  {
+    id: 'sec-price', icon: Banknote,
+    title: '๕. ราคายาเสพติด', sub: 'กรอกครบ ชนิดยา + ราคา + หน่วย จึงจะบันทึกและนำไปคิดสถิติราคา',
+  },
+  {
+    id: 'sec-source', icon: MapPin,
+    title: '๖. แหล่งที่เคยซื้อยามาเสพ', sub: 'เท่าที่สามารถให้ข้อมูลได้',
+  },
+  { id: 'sec-tail', icon: ClipboardList, title: 'ข้อสังเกต / ข้อเสนอแนะ / ผู้สัมภาษณ์' },
+]
 
 // ตัวเลือก + ค่าที่มีอยู่แล้วแต่ไม่อยู่ในรายการ (เช่น ร่างเก่าที่เคยพิมพ์เอง) — ไม่ให้ค่าหายจากช่องเฉย ๆ
 const withCurrent = (list, value) => (value && !list.includes(value) ? [value, ...list] : list)
@@ -289,6 +320,7 @@ function InterviewFormBody({ draftKey, onClear }) {
   const [showErrors, setShowErrors] = useState(false)
   const err = (k) => showErrors && bad[k]
 
+
   // ── auto save ──────────────────────────────────────────────────────────────
   // เขียนร่างหลังหยุดพิมพ์ 0.8 วินาที ; ยังไม่ได้แก้อะไรเลย (ตรงกับตอนเปิดหน้า) → ไม่สร้างร่าง
   const snapshotJson = JSON.stringify({ p, arrestEver, rehabEver, arrests, rehabs, fu, md, prices, slang, buy, locations, sellers, tail })
@@ -307,6 +339,8 @@ function InterviewFormBody({ draftKey, onClear }) {
   // ผูกกับ savedRef ใน effect — ออกจากหน้า/กดล้างข้อมูลก่อนครบ 3 วินาที timer ถูกยกเลิก ไม่ดึงผู้ใช้กลับมาหน้าค้นหา
   useEffect(() => {
     if (!savedRef) return
+    // เลื่อนขึ้นบนสุดให้เห็นเลขที่แบบ/รหัสอ้างอิงทันที — มีเวลาจดแค่ 3 วินาทีก่อนเปลี่ยนหน้า
+    document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
     const t = setTimeout(() => navigate('/intel/interview'), 3000)
     return () => clearTimeout(t)
   }, [savedRef, navigate])
@@ -320,7 +354,7 @@ function InterviewFormBody({ draftKey, onClear }) {
     e.preventDefault()
     if (bad.count) {
       setShowErrors(true)
-      setStatus({ error: `ยังกรอกไม่ครบ ${bad.count} ช่อง` })
+      setStatus({ error: 'ยังกรอกไม่ครบ — ดูช่องที่ขึ้นสีแดง' })
       // เลื่อนไปช่องแรกที่ขาด (รอ React วาดสีแดงเสร็จก่อน)
       setTimeout(() => {
         document.querySelector('[data-invalid="1"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -467,27 +501,74 @@ function InterviewFormBody({ draftKey, onClear }) {
 
   const unitOptions = UNIT_FALLBACK
 
-  return (
-    <IntelPage title="บันทึกแบบซักผู้เสพ"
-      sub="แบบเก็บข้อมูลจากผู้เสพ (แบบเก็บข้อมูลบุคคล ๑-๑) · ส่วนวิเคราะห์ข่าวและเฝ้าระวัง ปปส.กทม."
-      backTo="/intel/interview">
+  // props ของการ์ดหัวข้อ (id / icon / ชื่อหัวข้อ / คำอธิบาย)
+  const sec = (id) => SECTIONS.find((s) => s.id === id)
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {draft && (
-          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-[13px] text-blue-900">
+  return (
+    <FormLayout
+      title="บันทึกแบบซักผู้เสพ"
+      sub="แบบเก็บข้อมูลจากผู้เสพ (แบบเก็บข้อมูลบุคคล ๑-๑) · ส่วนวิเคราะห์ข่าวและเฝ้าระวัง ปปส.กทม."
+      backTo="/intel/interview"
+      headerAside={
+        <div className="flex items-center gap-2">
+          {draftAt && !savedRef && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11.5px] font-medium text-slate-500">
+              <Clock size={12} /> บันทึกร่าง {fmtTime(draftAt)} น.
+            </span>
+          )}
+          <span className="rounded-lg bg-slate-50 ring-1 ring-slate-200 px-3 py-1.5 text-right">
+            <span className="block text-[10.5px] text-slate-400">เลขที่แบบ</span>
+            <span className="block text-[13px] font-semibold tracking-wide text-slate-600">
+              {savedRef?.doc_no || '๑-๑/…'}
+            </span>
+          </span>
+        </div>
+      }
+      footer={
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <SaveBar status={status} label="บันทึกข้อมูล" onSave={handleSubmit} />
+          <div className="flex flex-wrap items-center gap-2.5">
+            {draftAt && !savedRef && (
+              <span className="hidden md:inline text-[11.5px] text-slate-400">ร่างอัตโนมัติ {fmtTime(draftAt)} น. · เก็บเฉพาะในแท็บนี้</span>
+            )}
+            <button type="button" onClick={handleClear} disabled={status === 'saving'}
+              className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50 disabled:cursor-not-allowed transition">
+              <RotateCcw size={15} /> ล้างข้อมูล
+            </button>
+          </div>
+        </div>
+      }>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {savedRef && (
+          <div className="rounded-2xl border border-emerald-300 bg-emerald-50 px-5 py-4">
+            <div className="text-[12.5px] font-semibold text-emerald-800">บันทึกแล้ว — จดเลขทั้งสองนี้ไว้บนแบบฟอร์มกระดาษ</div>
+            <div className="mt-2 flex flex-wrap gap-x-10 gap-y-2">
+              <div>
+                <div className="text-[11px] text-emerald-700">เลขที่แบบ</div>
+                <div className="text-2xl font-bold tracking-wide text-emerald-900">{savedRef.doc_no || '—'}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-emerald-700">รหัสอ้างอิงสำหรับค้นหา</div>
+                <div className="text-2xl font-bold tracking-wide text-emerald-900">{savedRef.code || '—'}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {draft && !savedRef && (
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-3.5 text-[13px] text-blue-900">
             <span className="font-semibold">กู้คืนข้อมูลที่กรอกค้างไว้แล้ว</span>
             {' '}— บันทึกร่างอัตโนมัติล่าสุดเวลา {fmtTime(draft.savedAt)} น.
             <span className="block mt-0.5 text-[11.5px] text-blue-700/80">
-              ร่างเก็บไว้เฉพาะในแท็บนี้ ปิดแท็บแล้วจะหาย · ถ้าต้องการเริ่มใหม่ กด "ล้างข้อมูล" ด้านล่าง
+              ร่างเก็บไว้เฉพาะในแท็บนี้ ปิดแท็บแล้วจะหาย · ถ้าต้องการเริ่มใหม่ กด "ล้างข้อมูล" ที่แถบด้านล่าง
             </span>
           </div>
         )}
 
-        <Card title="ส่วนที่ ๑ ข้อมูลบุคคล" sub="ช่องที่ระบุตัวบุคคลถูกเก็บแยกตาราง เข้าถึงได้เฉพาะผู้ดูแลระบบ">
+        <SectionCard {...sec('sec-person')}>
+          {/* เลขที่แบบย้ายไปอยู่มุมบนขวาของหัวเรื่องแล้ว (ระบบออกเลขให้ตอนกดบันทึก) ไม่ต้องมีช่องซ้ำในฟอร์ม */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Field label="เลขที่แบบ" hint="ระบบออกเลขให้อัตโนมัติเมื่อกดบันทึก">
-              <Input value="๑-๑/…" readOnly disabled />
-            </Field>
             <Field label="ชื่อ" required error={err('first_name')}><Input value={p.first_name} onChange={(e) => setPf({ first_name: e.target.value })} /></Field>
             <Field label="นามสกุล" required error={err('last_name')}><Input value={p.last_name} onChange={(e) => setPf({ last_name: e.target.value })} /></Field>
             <Field label="ชื่ออื่นๆ / ฉายา"><Input value={p.alias} onChange={(e) => setPf({ alias: e.target.value })} /></Field>
@@ -542,8 +623,7 @@ function InterviewFormBody({ draftKey, onClear }) {
             )}
           </div>
 
-          <div className="mt-5 pt-4 border-t border-slate-100">
-            <div className="text-[13px] font-semibold text-slate-700 mb-3">ที่อยู่อาศัยปัจจุบัน (ล่าสุด)</div>
+          <SubSection title="ที่อยู่อาศัยปัจจุบัน (ล่าสุด)" className="mt-5">
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <Field label="บริเวณ/สถานที่ใกล้ที่อยู่" className="sm:col-span-2"><Input value={p.addr_area} onChange={(e) => setPf({ addr_area: e.target.value })} /></Field>
               <Field label="เลขที่"><Input value={p.addr_no} onChange={(e) => setPf({ addr_no: e.target.value })} /></Field>
@@ -576,9 +656,9 @@ function InterviewFormBody({ draftKey, onClear }) {
                 <ChipGroup options={RESIDENT_STATUS_OPTIONS} value={p.resident_status} onChange={(v) => setPf({ resident_status: v })} />
               </Field>
             </div>
-          </div>
+          </SubSection>
 
-          <div className="mt-5 pt-4 border-t border-slate-100 space-y-4">
+          <div className="mt-5 pt-5 border-t border-slate-100 space-y-4">
             <Field label="สถานภาพการสมรส">
               <ChipGroup options={MARITAL_OPTIONS} value={p.marital_status} onChange={(v) => setPf({ marital_status: v })} />
             </Field>
@@ -621,9 +701,9 @@ function InterviewFormBody({ draftKey, onClear }) {
               </Field>
             </div>
           </div>
-        </Card>
+        </SectionCard>
 
-        <Card title="๑. เคยถูกจับคดียาเสพติด" sub="เลือกก่อนว่าเคยหรือไม่เคย — ถ้าเคย ระบุข้อมูล ๒ ครั้งล่าสุด (จำนวนครั้งนับจากรายการที่กรอก)">
+        <SectionCard {...sec('sec-arrest')}>
           <Field label="เคยถูกจับคดียาเสพติดหรือไม่" required error={err('arrest_ever') && 'กรุณาเลือก'}>
             {/* เลือก "เคย" แล้วเพิ่มแถวว่างให้ 1 แถวทันที จะได้กรอกต่อได้เลย */}
             <ChipGroup options={EVER_OPTIONS} value={arrestEver}
@@ -649,9 +729,9 @@ function InterviewFormBody({ draftKey, onClear }) {
                 )} />
             </div>
           )}
-        </Card>
+        </SectionCard>
 
-        <Card title="๒. เคยเข้ารับการบำบัด" sub="เลือกก่อนว่าเคยหรือไม่เคย — ถ้าเคย ระบุข้อมูล ๒ ครั้งล่าสุด">
+        <SectionCard {...sec('sec-rehab')}>
           <Field label="เคยเข้ารับการบำบัดหรือไม่" required error={err('rehab_ever') && 'กรุณาเลือก'}>
             <ChipGroup options={EVER_OPTIONS} value={rehabEver}
               onChange={(v) => { setRehabEver(v); if (v === EVER_YES && rehabs.length === 0) setRehabs([{ ...BLANK_REHAB }]) }} />
@@ -673,9 +753,9 @@ function InterviewFormBody({ draftKey, onClear }) {
                 )} />
             </div>
           )}
-        </Card>
+        </SectionCard>
 
-        <Card title="๓. การเสพยาครั้งแรก">
+        <SectionCard {...sec('sec-first')}>
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="อายุประมาณ (ปี)" required error={err('fu_age')}><Input type="number" value={fu.age} onChange={(e) => setFuf({ age: e.target.value })} /></Field>
@@ -737,9 +817,9 @@ function InterviewFormBody({ draftKey, onClear }) {
               ไม่เคยหยุดเสพ
             </label>
           </div>
-        </Card>
+        </SectionCard>
 
-        <Card title="๔. ยาเสพติดหลักที่ใช้เป็นประจำ">
+        <SectionCard {...sec('sec-main')}>
           <div className="space-y-4">
             <Field label="ยาเสพติดหลักที่ใช้เป็นประจำ (เลือกได้หลายชนิด)" required error={err('md_drugs') && 'กรุณาเลือกอย่างน้อย 1 ชนิด'}>
               <ChipGroup multi options={MAIN_DRUG_OPTIONS} value={md.drugs} onChange={(v) => setMdf({ drugs: v })} />
@@ -799,9 +879,9 @@ function InterviewFormBody({ draftKey, onClear }) {
               <Field label="เพราะ" required error={err('md_availability_reason')}><Input value={md.availability_reason} onChange={(e) => setMdf({ availability_reason: e.target.value })} /></Field>
             </div>
           </div>
-        </Card>
+        </SectionCard>
 
-        <Card title="๕. ราคายาเสพติด" sub="กรอกครบ ชนิดยา + ราคา + หน่วย จึงจะบันทึกและนำไปคิดสถิติราคา">
+        <SectionCard {...sec('sec-price')}>
           <RepeatList rows={prices} onChange={setPrices} blank={BLANK_PRICE} cols={4} addLabel="เพิ่มราคายา"
             renderRow={(row, patch) => (
               <>
@@ -811,8 +891,7 @@ function InterviewFormBody({ draftKey, onClear }) {
                 <Field label="ห้วงเวลา (เดือน/ปี)"><Input value={row.period} onChange={(e) => patch({ period: e.target.value })} /></Field>
               </>
             )} />
-          <div className="mt-5 pt-4 border-t border-slate-100">
-            <div className="text-[13px] font-semibold text-slate-700 mb-3">คำที่ใช้เรียกยาเสพติด</div>
+          <SubSection title="คำที่ใช้เรียกยาเสพติด" sub="คำแสลง/คำเรียกที่ผู้ให้ข้อมูลใช้ — เว้นว่างได้ถ้าไม่ทราบ" className="mt-5">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {Object.keys(slang).map((k) => (
                 <Field key={k} label={k}>
@@ -820,10 +899,10 @@ function InterviewFormBody({ draftKey, onClear }) {
                 </Field>
               ))}
             </div>
-          </div>
-        </Card>
+          </SubSection>
+        </SectionCard>
 
-        <Card title="๖. แหล่งที่เคยซื้อยามาเสพ" sub="เท่าที่สามารถให้ข้อมูลได้">
+        <SectionCard {...sec('sec-source')}>
           <div className="space-y-4">
             <Field label="ช่องทางการซื้อ">
               <ChipGroup options={BUY_CHANNEL_OPTIONS} value={buy.channel} onChange={(v) => setBuyf({ channel: v })} />
@@ -835,9 +914,10 @@ function InterviewFormBody({ draftKey, onClear }) {
               </Field>
             )}
 
-            <div>
-              <div data-invalid={err('locations') ? '1' : undefined} className="mb-2">
-                <div className={`text-[13px] font-semibold ${err('locations') ? 'text-rose-600' : 'text-slate-700'}`}>
+            {/* หน้าตาเดียวกับ SubSection แต่หัวข้อมีสถานะบังคับกรอก/ข้อความเตือนของตัวเอง */}
+            <div className="rounded-xl ring-1 ring-slate-200/80 bg-slate-50/60 p-4">
+              <div data-invalid={err('locations') ? '1' : undefined} className="mb-3">
+                <div className={`text-[12.5px] font-semibold ${err('locations') ? 'text-rose-600' : 'text-slate-700'}`}>
                   แหล่งที่ซื้อได้ประจำ <span className="text-rose-500">*</span>
                 </div>
                 {err('locations') && (
@@ -934,9 +1014,7 @@ function InterviewFormBody({ draftKey, onClear }) {
                 }} />
             </div>
 
-            <div>
-              <div className="text-[13px] font-semibold text-slate-700 mb-2">ข้อมูลผู้ขาย</div>
-              <p className="text-[11.5px] text-slate-400 mb-2">เก็บแยกตาราง เข้าถึงได้เฉพาะผู้ดูแลระบบ</p>
+            <SubSection title="ข้อมูลผู้ขาย" sub="เก็บแยกตาราง เข้าถึงได้เฉพาะผู้ดูแลระบบ">
               <RepeatList rows={sellers} onChange={setSellers} blank={BLANK_SELLER} cols={3}
                 addLabel="เพิ่มผู้ขาย" empty="ยังไม่ระบุข้อมูลผู้ขาย"
                 renderRow={(row, patch) => (
@@ -985,7 +1063,7 @@ function InterviewFormBody({ draftKey, onClear }) {
                     })()}
                   </>
                 )} />
-            </div>
+            </SubSection>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="วิธีการซื้อยาเสพติด"><Input value={buy.method} onChange={(e) => setBuyf({ method: e.target.value })} /></Field>
@@ -997,20 +1075,21 @@ function InterviewFormBody({ draftKey, onClear }) {
                 <Input type="number" value={buy.seller_count} disabled={buy.seller_count_unknown}
                   onChange={(e) => setBuyf({ seller_count: e.target.value })} />
               </Field>
-              <label className="flex items-center gap-2 text-sm text-slate-700 h-9">
+              <label className="flex items-center gap-2 text-sm text-slate-700 h-10">
                 <input type="checkbox" className="accent-blue-600" checked={buy.seller_count_unknown}
                   onChange={(e) => setBuyf({ seller_count_unknown: e.target.checked })} />
                 ระบุไม่ได้ แต่มีมากกว่า ๑ ราย
               </label>
             </div>
           </div>
-        </Card>
+        </SectionCard>
 
-        <Card title="ข้อสังเกต / ข้อเสนอแนะ / ผู้สัมภาษณ์">
+        <SectionCard {...sec('sec-tail')}>
           <div className="space-y-4">
             <Field label="ข้อสังเกต/ข้อคิดเห็น/ข้อเสนอแนะ/บันทึกเพิ่มเติม จากผู้สัมภาษณ์">
               <textarea rows={4} value={tail.note} onChange={(e) => setTailf({ note: e.target.value })}
-                className="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-y" />
+                placeholder="เช่น ท่าทีระหว่างให้ข้อมูล ความน่าเชื่อถือ ประเด็นที่ควรตามต่อ"
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-300 bg-white text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-y" />
             </Field>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <Field label="ผู้สัมภาษณ์" required error={err('interviewer')}><Input value={tail.interviewer} onChange={(e) => setTailf({ interviewer: e.target.value })} /></Field>
@@ -1021,35 +1100,9 @@ function InterviewFormBody({ draftKey, onClear }) {
               <Field label="หมายเลขโทรศัพท์ผู้เก็บข้อมูล"><Input value={tail.interviewer_phone} onChange={(e) => setTailf({ interviewer_phone: e.target.value })} inputMode="tel" /></Field>
             </div>
           </div>
-        </Card>
+        </SectionCard>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <SaveBar status={status} label="บันทึกข้อมูล" />
-          <div className="flex flex-wrap items-center gap-3">
-            {draftAt && !savedRef && (
-              <span className="text-[12px] text-slate-400">บันทึกร่างอัตโนมัติ {fmtTime(draftAt)} น. · เก็บเฉพาะในแท็บนี้</span>
-            )}
-            <button type="button" onClick={handleClear} disabled={status === 'saving'}
-              className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50 disabled:cursor-not-allowed transition">
-              <RotateCcw size={15} /> ล้างข้อมูล
-            </button>
-          </div>
-        </div>
-        {savedRef && (
-          <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3">
-            <div className="text-[12px] font-medium text-emerald-800">บันทึกแล้ว — จดเลขทั้งสองนี้ไว้บนแบบฟอร์มกระดาษ</div>
-            <div className="mt-1.5 flex flex-wrap gap-x-8 gap-y-2">
-              <div>
-                <div className="text-[11px] text-emerald-700">เลขที่แบบ</div>
-                <div className="text-2xl font-bold tracking-wide text-emerald-900">{savedRef.doc_no || '—'}</div>
-              </div>
-              <div>
-                <div className="text-[11px] text-emerald-700">รหัสอ้างอิงสำหรับค้นหา</div>
-                <div className="text-2xl font-bold tracking-wide text-emerald-900">{savedRef.code || '—'}</div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* ปุ่มบันทึก/ล้างข้อมูลอยู่ที่แถบลอยด้านล่างของหน้า — กดได้จากทุกจุดโดยไม่ต้องเลื่อนมาสุดฟอร์ม */}
       </form>
 
       <datalist id="dl-income">{INCOME_OPTIONS.map((v) => <option key={v} value={v} />)}</datalist>
@@ -1058,6 +1111,6 @@ function InterviewFormBody({ draftKey, onClear }) {
       <datalist id="dl-charge">{CHARGE_OPTIONS.map((v) => <option key={v} value={v} />)}</datalist>
       <datalist id="dl-drug">{FIRST_DRUG_OPTIONS.map((v) => <option key={v} value={v} />)}</datalist>
       <datalist id="dl-price-drug">{PRICE_DRUG_OPTIONS.map((v) => <option key={v} value={v} />)}</datalist>
-    </IntelPage>
+    </FormLayout>
   )
 }

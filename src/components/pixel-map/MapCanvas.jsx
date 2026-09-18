@@ -5,7 +5,8 @@ import {
   districtPathD, buildDotGrid, BKK_BBOX, makeProjection,
   ringPathD, featurePathD, lookupSubdistrict, lookupCommunity, communityCellRing, districtContaining,
 } from '../../utils/pixelMapGeometry'
-import { interpolateHex, getContrastText } from '../../utils/pixelMapStyle'
+import { interpolateHex, getContrastText, PINNED_STROKES } from '../../utils/pixelMapStyle'
+
 import { nodeMetricValue, nodeDetail, sameArea, resolveAreaNode } from '../../utils/pixelMapData'
 import { subKey, ROSE_DEFAULT } from '../../hooks/usePixelMapState'
 import { fitToBoundsTransform, estimateLabelBox, layoutLabels, boxOf } from '../../utils/pixelMapZoom'
@@ -29,7 +30,6 @@ const THEMES = {
 const HOVER_FILL = '#3b82f6'
 const HOVER_STROKE = '#1d4ed8'
 const EXPORT_SIDE_W = 302      // แผงรายละเอียดข้างแผนที่ในรูป export (การ์ด 262 + ขอบซ้ายขวา 20)
-const PINNED_STROKE = '#0891b2' // กรอบพื้นที่ที่คลิกเลือกไว้ — ฟ้าอมเขียว ไม่ซ้ำสีเขต(ม่วง)/แขวง(ส้ม)/ชุมชน(ชมพู)/hover(น้ำเงิน)
 const FOCUS_LAND = '#e2e8f0' // สีพื้นของเขตในโหมดโฟกัสเมื่อไม่ได้เปิดภาพแผนที่
 const FOCUS_DISTRICT_FILL_OPACITY = 0.22 // ระบายเขตที่เลือกแบบจางๆ ให้ยังเห็นภาพแผนที่/แขวงที่ทับอยู่ข้างบน
 const AREA_FILL_OPACITY = 0.28 // แขวง/ชุมชน — ข้างในใสจางๆ (เห็นแผนที่ทะลุ) ขอบทึบสีเข้ม
@@ -106,7 +106,8 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
   width, height, geojson, hierarchy, subdistrictIndex, communityIndex,
   checkedDistricts, checkedSubdistricts, checkedCommunities = EMPTY_SET,
   layers, layerCounts, labelsConfig, style, panelLabel, exporting = false, showExportNumbers = true,
-  zoomTransform, onZoomChange, onAreaHover, onCenterArea, onAreaClick, pinnedArea = null, exportDetailArea = null,
+  zoomTransform, onZoomChange, onAreaHover, onCenterArea, onAreaClick,
+  pinnedArea = null, pinnedColor = PINNED_STROKES[0], exportDetailArea = null, periodLabel,
 }, ref) {
   const theme = THEMES[style.background] ?? THEMES.map
   const bg = theme.bg
@@ -683,6 +684,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
   }, [visibleDistrictPaths, subdistrictShapes, checkedCommunityPoints, handleHoverMove, handleAreaHover, handleAreaClick, onAreaClick])
 
   // กรอบพื้นที่ที่คลิกเลือกไว้ — หา path ตามระดับ (แขวง/ชุมชนต้องยังติ๊กอยู่บนแผนที่ถึงจะมีรูปทรงให้วาด)
+  // พื้นที่ที่คลิกเลือกไว้ "ของแผนที่นี้" (โหมด compare แต่ละแผนที่มีของตัวเอง) — หา path ตามระดับพื้นที่
   const pinnedPathD = useMemo(() => {
     if (!pinnedArea) return null
     if (pinnedArea.level === 'district') return districtPathById[pinnedArea.dname] ?? null
@@ -743,7 +745,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
           {pinnedPathD && !exporting && (
             <g fill="none" strokeLinejoin="round" pointerEvents="none">
               <path d={pinnedPathD} stroke="#ffffff" strokeWidth={7} vectorEffect="non-scaling-stroke" />
-              <path d={pinnedPathD} stroke={PINNED_STROKE} strokeWidth={4} vectorEffect="non-scaling-stroke" />
+              <path d={pinnedPathD} stroke={pinnedColor} strokeWidth={4} vectorEffect="non-scaling-stroke" />
             </g>
           )}
 
@@ -787,7 +789,7 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
           <g pointerEvents="none">
             <rect x={width} y={0} width={EXPORT_SIDE_W} height={height} fill="#f8fafc" />
             <line x1={width + 0.5} y1={0} x2={width + 0.5} y2={height} stroke="#e2e8f0" strokeWidth={1} />
-            <ExportDetailCard area={exportDetailArea} hierarchy={hierarchy} x={width + 20} centerInHeight={height} />
+            <ExportDetailCard area={exportDetailArea} hierarchy={hierarchy} periodLabel={periodLabel} x={width + 20} centerInHeight={height} />
           </g>
         )}
 

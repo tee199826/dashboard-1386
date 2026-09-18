@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Calendar, ChevronDown, RotateCcw, Check } from 'lucide-react'
 import { useFilter } from '../context/FilterContext'
 import { getFiscalYearRange, dateToFiscalYear, localDateISO } from '../utils/fiscalYear'
+import { describeDateFilter } from '../utils/dateFilterLabel'
 
 // DateFilter — secondary control, compact-first (pill + popover)
 // default = pill h-8 ; compact = pill h-7 (ใน chart card) ; popover เดียวกัน
@@ -21,24 +22,6 @@ const POPOVER_W = 288   // = w-72 ของ popover — ใช้คำนวณ
 const todayISO = () => localDateISO(new Date())
 const shiftDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return localDateISO(d) }
 
-function summarize(state) {
-  if (state.mode === 'fiscal') {
-    const n = state.fiscalYears?.length || 0
-    return n === 0 ? 'ทุกปี' : n === 1 ? `ปี ${state.fiscalYears[0]}` : `${n} ปีงบ`
-  } 
-  if (state.mode === 'month') {
-    if (!state.monthYear) return 'ทุกปี'
-    if (!state.month) return `ปี ${state.monthYear} (ทุกเดือน)`
-    return `${TH[state.month]} ${state.monthYear}`
-  }
-  // custom
-  const { customFrom: f, customTo: t } = state
-  if (!f || !t) return 'ทั้งหมด'
-  const a = f.split('-').map(Number), b = t.split('-').map(Number) // [y,m,d]
-  if (a[0] === b[0] && a[1] === b[1]) return `${a[2]}-${b[2]} ${TH[a[1]]} ${a[0] + 543}`
-  if (a[0] === b[0]) return `${a[2]} ${TH[a[1]]} - ${b[2]} ${TH[b[1]]} ${a[0] + 543}`
-  return `${a[2]} ${TH[a[1]]} ${a[0] + 543} - ${b[2]} ${TH[b[1]]} ${b[0] + 543}`
-}
 
 function Popover({ availableYears, disabledModes, onClose, align = 'left' }) {
   const { state, setMode, setFiscalYears, toggleFiscalYear, setMonthYear, setMonth, setCustomFrom, setCustomTo, reset } = useFilter()
@@ -185,7 +168,7 @@ export default function DateFilter({ availableYears = [], compact = false, disab
       <button onClick={toggle}
         className={`inline-flex items-center gap-2 ${h} rounded-xl bg-white border border-slate-300 text-slate-700 shadow-sm hover:border-slate-400 hover:bg-slate-50 transition`}>
         <Calendar size={icon} className="text-blue-600" />
-        <span>{summarize(state)}</span>
+        <span>{describeDateFilter(state)}</span>
         {override && <span className="text-[10px] text-amber-600 font-medium">● ต่าง</span>}
         <ChevronDown size={icon} className="text-slate-400" />
       </button>

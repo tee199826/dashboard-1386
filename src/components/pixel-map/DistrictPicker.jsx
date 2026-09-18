@@ -32,6 +32,25 @@ export default function DistrictPicker({
 
   const rows = useMemo(() => buildAreaRows(hierarchy, districtOptions, q), [hierarchy, districtOptions, q])
 
+  // กดที่แถวไหนก็ติ๊กแถวนั้น ไม่ต้องเล็งช่องติ๊กเล็ก ๆ (ลูกศรกาง/ย่อกดแยก — หยุด event ไม่ให้ไปติ๊กด้วย)
+  // ติ๊ก = กางรายการข้างใน / เอาติ๊กออก = หุบ แบบเดียวกับแผงพื้นที่ด้านซ้าย
+  const tickDistrict = (dname, hasSubs) => {
+    if (selected.includes(dname)) {
+      setExpanded(s => { const n = new Set(s); n.delete(dname); return n })
+      setSubExpanded(s => { const keep = [...s].filter(k => k.split('|')[0] !== dname); return keep.length === s.size ? s : new Set(keep) })
+    } else if (hasSubs) {
+      setExpanded(s => (s.has(dname) ? s : new Set(s).add(dname)))
+    }
+    onToggle(dname)
+  }
+  const tickSub = (dname, sub, hasCommunities) => {
+    const key = subKey(dname, sub)
+    if (checkedSubdistricts.has(key)) setSubExpanded(s => { const n = new Set(s); n.delete(key); return n })
+    else if (hasCommunities) setSubExpanded(s => (s.has(key) ? s : new Set(s).add(key)))
+    toggleSubdistrict(dname, sub)
+  }
+  const stop = (e) => e.stopPropagation()
+
   const subCount = selected.reduce((n, d) => n + [...checkedSubdistricts].filter(k => k.split('|')[0] === d).length, 0)
   const comCount = selected.reduce((n, d) => n + [...checkedCommunities].filter(k => k.split('|')[0] === d).length, 0)
   const label = selected.length === 0 ? '— เลือกเขต —' : selected.length === 1 ? selected[0] : `${selected.length} เขต`
@@ -62,12 +81,13 @@ export default function DistrictPicker({
               const districtOn = selected.includes(dname) 
               return (
                 <div key={dname}>
-                  <div className="flex items-center gap-2 px-2.5 py-1 hover:bg-violet-50">
-                    <input type="checkbox" checked={selected.includes(dname)} onChange={() => onToggle(dname)}
-                      className="accent-violet-600 shrink-0" />
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-violet-50 cursor-pointer"
+                    onClick={() => tickDistrict(dname, subs.length > 0)}>
+                    <input type="checkbox" checked={selected.includes(dname)} onChange={() => tickDistrict(dname, subs.length > 0)}
+                      onClick={stop} className="accent-violet-600 shrink-0" />
                     <span className="flex-1 min-w-0 text-xs text-slate-700 truncate">{dname}</span>
                     {subs.length > 0 && (
-                      <button type="button" onClick={() => setExpanded(s => flip(s, dname))}
+                      <button type="button" onClick={(e) => { stop(e); setExpanded(s => flip(s, dname)) }}
                         className="text-slate-400 hover:text-slate-600 shrink-0" title={isOpen ? 'ย่อแขวง' : 'กางแขวง'}>
                         {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                       </button>
@@ -79,14 +99,15 @@ export default function DistrictPicker({
                     const subOpen = subAuto || subExpanded.has(sKey)
                     return (
                       <div key={sKey}>
-                        <div className={`flex items-center gap-2 pl-6 pr-2.5 py-0.5 ${districtOn ? 'hover:bg-amber-50' : 'opacity-45'}`}
-                          title={districtOn ? undefined : 'ติ๊กเขตก่อนจึงจะเลือกแขวงได้'}>
+                        <div className={`flex items-center gap-2 pl-6 pr-2.5 py-1 ${districtOn ? 'hover:bg-amber-50 cursor-pointer' : 'opacity-45'}`}
+                          title={districtOn ? undefined : 'ติ๊กเขตก่อนจึงจะเลือกแขวงได้'}
+                          onClick={districtOn ? () => tickSub(dname, sub, communities.length > 0) : undefined}>
                           <input type="checkbox" disabled={!districtOn} checked={checkedSubdistricts.has(sKey)}
-                            onChange={() => toggleSubdistrict(dname, sub)}
+                            onChange={() => tickSub(dname, sub, communities.length > 0)} onClick={stop}
                             className="accent-amber-500 shrink-0 disabled:cursor-not-allowed" />
                           <span className="flex-1 min-w-0 text-[11px] text-slate-600 truncate">{sub}</span>
                           {communities.length > 0 && (
-                            <button type="button" onClick={() => setSubExpanded(s => flip(s, sKey))}
+                            <button type="button" onClick={(e) => { stop(e); setSubExpanded(s => flip(s, sKey)) }}
                               className="text-slate-400 hover:text-slate-600 shrink-0" title={subOpen ? 'ย่อชุมชน' : `กางชุมชน (${communities.length})`}>
                               {subOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                             </button>

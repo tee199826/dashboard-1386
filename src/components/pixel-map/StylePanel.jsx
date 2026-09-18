@@ -63,10 +63,14 @@ export default function StylePanel({
   showExportNumbers, setShowExportNumbers,
   showExportDetail, setShowExportDetail,
   onExportExcel, excelBusy, excelError,
+  sections = 'all', // 'design' = รูปแบบ/ข้อมูลซ้อน/ป้ายชื่อ · 'export' = ส่งออก — แยกไว้คนละแท็บในแผงขวา
 }) {
+  const showDesign = sections === 'all' || sections === 'design'
+  const showExport = sections === 'all' || sections === 'export'
   return (
     <>
-      <AccordionSection title="Style" icon={<Palette size={14} className="text-slate-400" />}>
+      {showDesign && (<>
+      <AccordionSection title="รูปแบบแผนที่" icon={<Palette size={14} className="text-slate-400" />} defaultOpen>
         <Field label="การแสดงผล data overlay">
           <Seg options={[['dot', 'จุด'], ['fill', 'เต็มพื้นที่']]} value={style.displayMode} onChange={v => updateStyle({ displayMode: v })} />
         </Field>
@@ -135,7 +139,7 @@ export default function StylePanel({
         </Field>
       </AccordionSection>
 
-      <AccordionSection title="Data" icon={<Database size={14} className="text-slate-400" />}>
+      <AccordionSection title="ข้อมูลซ้อนทับ" icon={<Database size={14} className="text-slate-400" />}>
         <button type="button" onClick={() => onImport?.('new')}
           className="w-full h-9 rounded-lg ring-1 ring-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-1.5">
           <Upload size={13} /> นำเข้าไฟล์ Excel/CSV
@@ -183,7 +187,7 @@ export default function StylePanel({
         ))}
       </AccordionSection>
 
-      <AccordionSection title="Labels" icon={<Hash size={14} className="text-slate-400" />}>
+      <AccordionSection title="ป้ายชื่อพื้นที่" icon={<Hash size={14} className="text-slate-400" />}>
         <Field label="ชื่อเขตบนแผนที่">
           <Seg options={[['off', 'ปิด'], ['selected', 'ที่เลือก'], ['all', 'ทุกเขต']]}
             value={labelsConfig.districtNames} onChange={v => updateLabelsConfig({ districtNames: v })} />
@@ -228,7 +232,10 @@ export default function StylePanel({
         </label>
       </AccordionSection>
 
-      <AccordionSection title="Export" icon={<Download size={14} className="text-slate-400" />}>
+      </>)}
+
+      {showExport && (
+      <AccordionSection title="ส่งออกภาพ" icon={<Download size={14} className="text-slate-400" />} defaultOpen>
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={exportFullMap} onChange={e => setExportFullMap(e.target.checked)} className="accent-violet-600" />
           ส่งออกเต็มแผนที่ (รีเซ็ตซูมก่อน) — ปิด = ตามมุมมองที่เห็น
@@ -242,7 +249,7 @@ export default function StylePanel({
           แนบการ์ด &quot;รายละเอียดพื้นที่&quot; ลงในรูป
         </label>
         <p className="text-[11.5px] leading-relaxed text-slate-400 -mt-1">
-          วางเป็นแผงข้างขวาของแผนที่ ไม่ทับแผนที่ (รูปกว้างขึ้น) — ใช้พื้นที่ที่คลิกเลือกไว้ ถ้าไม่ได้เลือกใช้เขตกลางแผนที่ (ไม่ใช้ในโหมด Compare)
+          วางเป็นแผงข้างขวาของแผนที่ ไม่ทับแผนที่ (รูปกว้างขึ้น) — ใช้พื้นที่ที่คลิกเลือกไว้ ถ้าไม่ได้เลือกใช้เขตกลางแผนที่ (ไม่ใช้ในโหมดเทียบหลายแผนที่)
         </p>
         <div className="grid grid-cols-3 gap-1.5">
           <button type="button" onClick={() => onExportPng(1)} className="h-9 rounded-lg ring-1 ring-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50">PNG 1x</button>
@@ -253,7 +260,7 @@ export default function StylePanel({
           <button type="button" onClick={onExportSvg} className="h-9 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700">Export SVG</button>
           <button type="button" onClick={onCopyEmbed} className="h-9 rounded-lg ring-1 ring-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50">คัดลอก HTML</button>
         </div>
-        {compareActive && <p className="text-[11px] text-slate-400">โหมด Compare: SVG export ได้เฉพาะ panel แรก — PNG export ได้ทั้ง grid</p>}
+        {compareActive && <p className="text-[11px] text-slate-400">โหมดเทียบหลายแผนที่: SVG ได้เฉพาะแผนที่แรก — PNG ได้ครบทุกแผนที่</p>}
 
         <div className="pt-3 border-t border-slate-100 space-y-1.5">
           <button type="button" onClick={onExportExcel} disabled={excelBusy}
@@ -262,11 +269,12 @@ export default function StylePanel({
             {excelBusy ? 'กำลังสร้างไฟล์…' : 'Export Excel (.xlsx)'}
           </button>
           <p className="text-[11.5px] leading-relaxed text-slate-400">
-            ข้อมูลรายเขต / รายแขวง / รายชุมชน ตามปีงบที่เลือก + รายละเอียดพื้นที่ในแผง
+            ข้อมูลรายเขต / รายแขวง / รายชุมชน ตามช่วงเวลาที่เลือก + รายละเอียดพื้นที่ในแผง
           </p>
           {excelError && <p className="text-[11.5px] text-rose-600">{excelError}</p>}
         </div>
       </AccordionSection>
+      )}
     </>
   )
 }

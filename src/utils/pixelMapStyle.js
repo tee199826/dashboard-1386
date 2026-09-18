@@ -1,6 +1,10 @@
 // pixelMapStyle.js — ค่าคงที่/helper style ของ /pixel-map
 export const SHAPES = ['circle', 'square', 'diamond', 'triangle']
 
+// กรอบพื้นที่ที่คลิกเลือกไว้บนแผนที่ — ฟ้าอมเขียว/ม่วงบานเย็น ไม่ซ้ำสีเขต(ม่วง)/แขวง(ส้ม)/ชุมชน(ชมพู)/hover(น้ำเงิน)
+// โหมด compare เลือกได้ 2 พื้นที่ (A/B) สีตามลำดับ ใช้ร่วมกับจุดสีในแผงเทียบพื้นที่
+export const PINNED_STROKES = ['#0891b2', '#c026d3']
+
 const hexToRgb = (hex) => {
   const h = hex.replace('#', '')
   const n = h.length === 3 ? h.split('').map(c => c + c).join('') : h

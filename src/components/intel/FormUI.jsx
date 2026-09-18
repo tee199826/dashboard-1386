@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft, Plus, Trash2, Check, AlertTriangle, Loader2 } from 'lucide-react'
 
 // หมายเหตุ: merge className ไม่ให้ props ทับ — ไม่งั้นส่ง className เข้ามาแล้วสไตล์พื้นฐานหายทั้งหมด
-const CTRL = 'w-full h-9 px-2.5 rounded-lg border border-slate-300 bg-white text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-400'
+// ช่องกรอกสูง 40px — ฟอร์มซักผู้เสพยาวเกือบร้อยช่อง ช่องเตี้ยกว่านี้กดพลาด/อ่านยากเวลานั่งกรอกไปคุยไป
+const CTRL = 'w-full h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-400'
 
 export function IntelPage({ title, sub, backTo, children }) {
   return (
@@ -50,7 +51,7 @@ export function Field({ label, required, hint, error, children, className = '' }
   return (
     <label data-invalid={error ? '1' : undefined} onClick={blockChipForward}
       className={`block space-y-1 ${error ? INVALID : ''} ${className}`}>
-      <span className={`text-xs font-medium ${error ? 'text-rose-600' : 'text-slate-600'}`}>
+      <span className={`text-[12.5px] font-medium ${error ? 'text-rose-600' : 'text-slate-600'}`}>
         {label} {required && <span className="text-rose-500">*</span>}
       </span>
       {children}
@@ -91,8 +92,8 @@ export function ChipGroup({ options, value, onChange, multi = false }) {
     <div className="flex flex-wrap gap-1.5">
       {options.map((o) => (
         <button key={o} type="button" onClick={() => toggle(o)}
-          className={`h-8 px-3 rounded-full text-xs font-medium ring-1 transition ${
-            on(o) ? 'bg-blue-600 text-white ring-blue-600' : 'bg-white text-slate-600 ring-slate-300 hover:bg-slate-50'
+          className={`h-9 px-3.5 rounded-full text-[12.5px] font-medium ring-1 transition ${
+            on(o) ? 'bg-blue-600 text-white ring-blue-600 shadow-sm' : 'bg-white text-slate-600 ring-slate-300 hover:bg-slate-50 hover:ring-slate-400'
           }`}>{o}</button>
       ))}
     </div>
@@ -107,18 +108,24 @@ export function RepeatList({ rows, onChange, blank, renderRow, addLabel = 'เ�
   const patchAt = (i) => (patch) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
   return (
     <div className="space-y-2.5">
-      {rows.length === 0 && <p className="text-[13px] text-slate-400">{empty}</p>}
+      {rows.length === 0 && (
+        <p className="rounded-lg border border-dashed border-slate-300 bg-white/60 px-3 py-3 text-[12.5px] text-slate-400">{empty}</p>
+      )}
+      {/* แต่ละรายการมีเลขกำกับ + ปุ่มลบอยู่หัวแถว — หลายแถวติดกันจะได้ไม่งงว่าช่องไหนของแถวไหน */}
       {rows.map((row, i) => (
-        <div key={i} className="flex items-end gap-2 rounded-lg bg-slate-50 ring-1 ring-slate-200 p-2.5">
-          <div className={`flex-1 min-w-0 grid grid-cols-1 ${GRID_COLS[cols] || GRID_COLS[3]} gap-2`}>{renderRow(row, patchAt(i), i)}</div>
-          <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))} title="ลบแถวนี้"
-            className="h-9 w-9 shrink-0 grid place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition">
-            <Trash2 size={15} />
-          </button>
+        <div key={i} className="rounded-xl bg-white ring-1 ring-slate-200 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11.5px] font-semibold text-slate-400">รายการที่ {i + 1}</span>
+            <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))} title="ลบรายการนี้"
+              className="h-7 px-2 inline-flex items-center gap-1 rounded-md text-[11.5px] font-medium text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition">
+              <Trash2 size={13} /> ลบ
+            </button>
+          </div>
+          <div className={`grid grid-cols-1 ${GRID_COLS[cols] || GRID_COLS[3]} gap-2.5`}>{renderRow(row, patchAt(i), i)}</div>
         </div>
       ))}
       <button type="button" onClick={() => onChange([...rows, { ...blank }])}
-        className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-slate-300 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 transition">
+        className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-lg border border-slate-300 bg-white text-[13px] font-medium text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition">
         <Plus size={15} /> {addLabel}
       </button>
     </div>

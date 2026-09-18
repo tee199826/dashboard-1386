@@ -1,8 +1,10 @@
-import { useMemo } from 'react'
-import { Plus, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Plus, X, Scale } from 'lucide-react'
 import MapCanvas from './MapCanvas'
 import ColorSwatch from './ColorSwatch'
 import DistrictPicker from './DistrictPicker'
+import CompareSummary from './CompareSummary'
+import { PINNED_STROKES } from '../../utils/pixelMapStyle'
 
 const PANEL_ASPECT = 1.29
 const PANEL_GAP = 16
@@ -20,8 +22,15 @@ export default function CompareGrid({
   districtOptions, availableWidth = 900, checkedSubdistricts, checkedCommunities, toggleSubdistrict, toggleCommunity,
   syncZoom, setSyncZoom, sharedCompareZoom, setSharedCompareZoom, setCompareSlotZoom,
   toggleCompareSlotDistrict, setCompareSlotDistricts, setCompareSlotColor, addComparePanel, removeComparePanel,
-  exporting = false, showExportNumbers = true, onAreaHover, onAreaClick, pinnedArea,
+  exporting = false, showExportNumbers = true, onAreaHover, onAreaClick, pinnedByMap = {}, periodLabel,
 }) {
+  // กดเทียบตัวเลขระหว่าง panel (ซ้าย/ขวา) — เปิดไว้แล้วติดไปกับภาพ export ด้วย ใช้เป็นสไลด์เปรียบเทียบได้เลย
+  const [showStats, setShowStats] = useState(false)
+  // ตารางอยู่ใต้แผนที่ ซึ่งมักพ้นจอไปแล้ว — กดปุ่มแล้วเลื่อนไปหาให้ ไม่งั้นดูเหมือนกดแล้วไม่มีอะไรเกิดขึ้น
+  const statsRef = useRef(null)
+  useEffect(() => {
+    if (showStats) statsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [showStats])
   const slotLabel = (districts) => (districts.length === 1 ? districts[0] : districts.length > 1 ? `${districts.length} เขต` : null)
   // ขนาด panel + จำนวนคอลัมน์คิดจากพื้นที่จริง — ถ้ากว้างไม่พอสำหรับ 2 คอลัมน์ที่ความกว้างขั้นต่ำ ให้ยุบเหลือ 1 คอลัมน์ (ไม่ล้น/ไม่ต้องเลื่อน)
   const desiredCols = compareSlots.length <= 2 ? compareSlots.length : 2
@@ -52,12 +61,20 @@ export default function CompareGrid({
         <div className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input type="checkbox" checked={syncZoom} onChange={e => setSyncZoom(e.target.checked)} className="accent-violet-600" />
-            Sync zoom ทุก panel
+            ซูม/เลื่อน พร้อมกันทุกแผนที่
           </label>
-          <button type="button" onClick={addComparePanel} disabled={compareSlots.length >= 4}
-            className="inline-flex items-center gap-1 h-8 px-3 rounded-lg ring-1 ring-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
-            <Plus size={13} />Add panel {compareSlots.length >= 4 ? '(สูงสุด 4)' : ''}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={() => setShowStats(v => !v)}
+              className={`inline-flex items-center gap-1 h-8 px-3 rounded-lg text-xs font-medium ring-1 transition ${
+                showStats ? 'bg-violet-600 text-white ring-violet-600 hover:bg-violet-700' : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'
+              }`}>
+              <Scale size={13} />{showStats ? 'ซ่อนตารางเทียบ' : 'เปรียบเทียบตัวเลข'}
+            </button>
+            <button type="button" onClick={addComparePanel} disabled={compareSlots.length >= 4}
+              className="inline-flex items-center gap-1 h-8 px-3 rounded-lg ring-1 ring-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+              <Plus size={13} />เพิ่มแผนที่ {compareSlots.length >= 4 ? '(สูงสุด 4)' : ''}
+            </button>
+          </div>
         </div>
       )}
 
@@ -110,7 +127,8 @@ export default function CompareGrid({
                 layers={panelLayers} layerCounts={layerCounts} labelsConfig={labelsConfig} style={style} exporting={exporting}
                 showExportNumbers={showExportNumbers}
                 panelLabel={exporting ? '' : label} onAreaHover={onAreaHover}
-                onAreaClick={onAreaClick} pinnedArea={pinnedArea}
+                onAreaClick={(area) => onAreaClick?.(area, slot.id)}
+                pinnedArea={pinnedByMap[slot.id] ?? null} pinnedColor={PINNED_STROKES[i % PINNED_STROKES.length]}
                 zoomTransform={syncZoom ? sharedCompareZoom : slot.zoom}
                 onZoomChange={syncZoom ? setSharedCompareZoom : (t) => setCompareSlotZoom(slot.id, t)}
               />
@@ -118,6 +136,12 @@ export default function CompareGrid({
           )
         })}
       </div>
+
+      {showStats && (
+        <div ref={statsRef} className="scroll-mt-3">
+          <CompareSummary slots={compareSlots} hierarchy={hierarchy} periodLabel={periodLabel} pinnedByMap={pinnedByMap} />
+        </div>
+      )}
 
       {exporting && style.caption && (
         <p className="text-center text-xs text-slate-500">{style.caption}</p>

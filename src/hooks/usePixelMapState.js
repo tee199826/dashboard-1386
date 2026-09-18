@@ -118,6 +118,31 @@ export function usePixelMapState() {
   const toggleCommunity = useCallback((district, subdistrict, community) => setCheckedCommunities(s => flip(s, communityKey(district, subdistrict, community))), [])
   const toggleExpanded = useCallback((dname) => setExpandedDistricts(s => flip(s, dname)), [])
   const toggleSubExpanded = useCallback((district, subdistrict) => setExpandedSubdistricts(s => flip(s, subKey(district, subdistrict))), [])
+  // ติ๊ก = กาง / เอาติ๊กออก = หุบ (ใช้กับรายการพื้นที่ด้านซ้าย) — ตั้งค่าตรง ๆ ไม่ toggle จึงไม่สลับผิดทางถ้ากาง/หุบอยู่แล้ว
+  const expandDistrict = useCallback((dname) => setExpandedDistricts(s => (s.has(dname) ? s : new Set(s).add(dname))), [])
+  const expandSubdistrict = useCallback((district, subdistrict) => setExpandedSubdistricts(s => {
+    const key = subKey(district, subdistrict)
+    return s.has(key) ? s : new Set(s).add(key)
+  }), [])
+  // หุบเขต = หุบแขวงข้างในที่กางค้างไว้ด้วย ไม่งั้นติ๊กเขตกลับมา ชุมชนของแขวงที่ไม่ได้ติ๊กจะโผล่กางค้างอยู่
+  const collapseDistrict = useCallback((dname) => {
+    setExpandedDistricts(s => { if (!s.has(dname)) return s; const n = new Set(s); n.delete(dname); return n })
+    setExpandedSubdistricts(s => {
+      const keep = [...s].filter(k => k.split('|')[0] !== dname)
+      return keep.length === s.size ? s : new Set(keep)
+    })
+  }, [])
+  const collapseSubdistrict = useCallback((district, subdistrict) => setExpandedSubdistricts(s => {
+    const key = subKey(district, subdistrict)
+    if (!s.has(key)) return s
+    const n = new Set(s)
+    n.delete(key)
+    return n
+  }), [])
+  const collapseAll = useCallback(() => {
+    setExpandedDistricts(new Set())
+    setExpandedSubdistricts(new Set())
+  }, [])
   const selectDistricts = useCallback((names) => setCheckedDistricts(new Set(names)), [])
   const clearSelection = useCallback(() => {
     setCheckedDistricts(new Set())
@@ -189,6 +214,7 @@ export function usePixelMapState() {
     toggleDistrict, toggleSubdistrict, toggleCommunity,
     selectDistricts, clearSelection,
     expandedDistricts, toggleExpanded, expandedSubdistricts, toggleSubExpanded,
+    expandDistrict, expandSubdistrict, collapseDistrict, collapseSubdistrict, collapseAll,
     layers, updateLayer, toggleLayerVisible, addDataLayer, addImportedLayer, replaceLayerImport, removeDataLayer, reorderDataLayers,
     compareSlots, addComparePanel, removeComparePanel, toggleCompareSlotDistrict, setCompareSlotDistricts, setCompareSlotColor,
     style, updateStyle,
