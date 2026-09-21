@@ -51,9 +51,31 @@ export default function InterviewSearch() {
 
   // ตัวเลือกอาชีพ — โหลดครั้งเดียว (ไม่แตะ PII)
   useEffect(() => {
+<<<<<<< HEAD
+    let cancelled = false
+    ;(async () => {
+      try {
+        // ดึงทั้ง 2 ตารางแบบแบ่งหน้าพร้อมกัน — select ครั้งเดียวติดเพดาน 1,000 แถวของ PostgREST ชื่อจะหายเงียบ ๆ
+        // error ของตารางไหนก็ตามโยนออกไปแสดงผล ไม่กลืนเงียบ
+        const [su, piiRows] = await Promise.all([
+          fetchAllPages('interview_records', '*', { parallel: true, orderBy: 'record_uid' }),
+          fetchAllPages('interview_records_pii', '*', { parallel: true, orderBy: 'record_uid' }),
+        ])
+        if (cancelled) return
+        setPii(Object.fromEntries(piiRows.map((r) => [r.record_uid, r])))
+        setRows(su)
+      } catch (e) {
+        if (!cancelled) setError(e.message)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+=======
     supabase.rpc('interview_filter_options').then(({ data }) => {
       setOccupations((data || []).map((r) => r.occupation).filter(Boolean))
     })
+>>>>>>> f57285caa9963f6a5b796d30efcbd975ffba80f6
   }, [])
 
   // ค้นหาฝั่งเซิร์ฟเวอร์ — หน่วงพิมพ์ 300ms ; ทิ้งผลคำขอเก่าถ้าเงื่อนไขเปลี่ยนก่อนได้ผล
@@ -92,11 +114,19 @@ export default function InterviewSearch() {
     setBusy(true)
     setActionError(null)
     try {
+<<<<<<< HEAD
+      // ลบแถวหลักอย่างเดียว — FK on delete cascade ลบข้อมูลส่วนบุคคลให้ใน transaction เดียวกัน
+      // (เดิมลบ PII ก่อน ถ้าลบแถวหลักล้มจะเหลือรายการที่ข้อมูลส่วนบุคคลหายไปแล้ว)
+      const { error: e } = await supabase.from('interview_records').delete().eq('record_uid', r.record_uid)
+      if (e) { setActionError(`ลบไม่สำเร็จ: ${e.message}`); return }
+      logAction?.('delete', 'interview_records', r.record_uid, null)
+=======
       // ลบผ่าน RPC — เซิร์ฟเวอร์ลบ + บันทึก audit 'delete' ในธุรกรรมเดียว (PII ลบตาม FK cascade)
       // ล้มเหลว → actionError (ไม่ใช่ error ตอนโหลด) ตารางผลค้นหาจะได้ไม่หายทั้งหน้า
       const { data: ok, error: e } = await supabase.rpc('interview_delete', { p_record_uid: r.record_uid })
       if (e) { setActionError(`ลบไม่สำเร็จ: ${e.message}`); return }
       if (!ok) { setActionError('ลบไม่สำเร็จ: ไม่พบรายการ (อาจถูกลบไปแล้ว)'); return }
+>>>>>>> f57285caa9963f6a5b796d30efcbd975ffba80f6
       setDetail(null)
       setRows((s) => s.filter((x) => x.record_uid !== r.record_uid))
       setTotal((n) => Math.max(0, n - 1))
@@ -135,7 +165,16 @@ export default function InterviewSearch() {
       })
       header.forEach((h, i) => { ws.getColumn(i + 1).width = Math.max(12, h.length + 6) })
       const buf = await wb.xlsx.writeBuffer()
+<<<<<<< HEAD
+      const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+      const a = document.createElement('a')
+      a.href = url; a.download = `interview-records-${new Date().toISOString().slice(0, 10)}.xlsx`; a.click()
+      // ปล่อย URL หลังเบราว์เซอร์เริ่มดาวน์โหลดแล้ว — revoke ทันที Firefox/Safari อาจยกเลิกการดาวน์โหลด
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      logAction?.('view', 'interview_records', null, { action: 'export', count: filtered.length })
+=======
       downloadBlob(new Blob([buf], { type: XLSX_MIME }), `interview-records-${new Date().toISOString().slice(0, 10)}.xlsx`)
+>>>>>>> f57285caa9963f6a5b796d30efcbd975ffba80f6
     } catch (e) {
       setActionError(`ส่งออก Excel ไม่สำเร็จ: ${e.message}`)
     } finally { setBusy(false) }
