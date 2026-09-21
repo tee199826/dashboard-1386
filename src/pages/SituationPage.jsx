@@ -1,13 +1,7 @@
-<<<<<<< HEAD
 // /situation — ข้อมูลยาเสพติด (รวม จับกุม/บำบัด/ร้องเรียน เดิม /arrest /incidents /treatment)
-// filter เวลา+พื้นที่ ใช้ร่วมกันทุกส่วน (state เดียว) — เลือกส่วนที่แสดงด้วย listbox
-import { useMemo } from 'react'
-=======
-// /situation — สถานการณ์ยาเสพติด (รวม จับกุม/บำบัด/ร้องเรียน เดิม /arrest /incidents /treatment)
 // filter เวลา+พื้นที่ ใช้ร่วมกันทุกส่วน (state เดียว) — เลือกส่วนที่แสดงด้วยแท็บ
 // แต่ละแท็บมาจากคนละชุดข้อมูล: จับกุม = arrest_* (CRIMES กทม.) · บำบัด/ร้องเรียน = drug_incidents (ระบบ 1386)
 import { useMemo, useEffect } from 'react'
->>>>>>> origin/fix/security-audit
 import { useSearchParams } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
 import { useDrugIncidents } from '../hooks/useDrugIncidents'
@@ -107,13 +101,9 @@ export default function SituationPage() {
       <header className="border-b border-slate-200 pb-6">
         <div className="flex items-end justify-between gap-6 flex-wrap">
           <div className="min-w-0">
-<<<<<<< HEAD
-            <div className="text-xs uppercase tracking-widest text-slate-500">ข้อมูลยาเสพติด · drug_incidents</div>
+            {/* ชื่อหน้าตามเมนู "ข้อมูลยาเสพติด" (main) ; ป้ายที่มาเปลี่ยนตามแท็บ — จับกุมไม่ได้มาจาก drug_incidents */}
+            <div className="text-xs uppercase tracking-widest text-slate-500">ข้อมูลยาเสพติด · {SOURCE_EYEBROW[section]}</div>
             <h1 className="mt-1.5 text-3xl lg:text-[2rem] font-semibold tracking-tight text-slate-900 leading-tight">ข้อมูลยาเสพติด</h1>
-=======
-            <div className="text-xs uppercase tracking-widest text-slate-500">สถานการณ์ยาเสพติด · {SOURCE_EYEBROW[section]}</div>
-            <h1 className="mt-1.5 text-3xl lg:text-[2rem] font-semibold tracking-tight text-slate-900 leading-tight">สถานการณ์ยาเสพติด</h1>
->>>>>>> origin/fix/security-audit
             <p className="mt-2 text-sm text-slate-500 tabular-nums">
               {totals[section].toLocaleString()} {sectionUnit} · {sectionLabel} ในช่วงที่เลือก
             </p>
