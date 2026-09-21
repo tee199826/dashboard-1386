@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Plus, X, Scale } from 'lucide-react'
 import MapCanvas from './MapCanvas'
 import ColorSwatch from './ColorSwatch'
@@ -23,14 +23,18 @@ export default function CompareGrid({
   syncZoom, setSyncZoom, sharedCompareZoom, setSharedCompareZoom, setCompareSlotZoom,
   toggleCompareSlotDistrict, setCompareSlotDistricts, setCompareSlotColor, addComparePanel, removeComparePanel,
   exporting = false, showExportNumbers = true, onAreaHover, onAreaClick, pinnedByMap = {}, periodLabel,
+  onRemovePin, onClearPins,
 }) {
-  // กดเทียบตัวเลขระหว่าง panel (ซ้าย/ขวา) — เปิดไว้แล้วติดไปกับภาพ export ด้วย ใช้เป็นสไลด์เปรียบเทียบได้เลย
-  const [showStats, setShowStats] = useState(false)
-  // ตารางอยู่ใต้แผนที่ ซึ่งมักพ้นจอไปแล้ว — กดปุ่มแล้วเลื่อนไปหาให้ ไม่งั้นดูเหมือนกดแล้วไม่มีอะไรเกิดขึ้น
+  // ตารางเทียบตัวเลขระหว่างแผนที่ — อยู่ใต้แผนที่และเปิดไว้เป็นค่าเริ่มต้น (คลิกพื้นที่บนแผนที่แล้วเห็นผลเทียบทันที)
+  // ปุ่มบน toolbar ซ่อน/แสดงได้ ; เปิดไว้แล้วติดไปกับภาพ export ด้วย ใช้เป็นสไลด์เปรียบเทียบได้เลย
+  const [showStats, setShowStats] = useState(true)
   const statsRef = useRef(null)
-  useEffect(() => {
-    if (showStats) statsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [showStats])
+  // กดเปิดตารางเอง → เลื่อนไปหา (ตารางมักพ้นจอ) ; ตอนเข้าโหมดครั้งแรกไม่เลื่อนหน้าเอง
+  const toggleStats = () => {
+    const next = !showStats
+    setShowStats(next)
+    if (next) setTimeout(() => statsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 0)
+  }
   const slotLabel = (districts) => (districts.length === 1 ? districts[0] : districts.length > 1 ? `${districts.length} เขต` : null)
   // ขนาด panel + จำนวนคอลัมน์คิดจากพื้นที่จริง — ถ้ากว้างไม่พอสำหรับ 2 คอลัมน์ที่ความกว้างขั้นต่ำ ให้ยุบเหลือ 1 คอลัมน์ (ไม่ล้น/ไม่ต้องเลื่อน)
   const desiredCols = compareSlots.length <= 2 ? compareSlots.length : 2
@@ -64,7 +68,7 @@ export default function CompareGrid({
             ซูม/เลื่อน พร้อมกันทุกแผนที่
           </label>
           <div className="flex items-center gap-1.5">
-            <button type="button" onClick={() => setShowStats(v => !v)}
+            <button type="button" onClick={toggleStats}
               className={`inline-flex items-center gap-1 h-8 px-3 rounded-lg text-xs font-medium ring-1 transition ${
                 showStats ? 'bg-violet-600 text-white ring-violet-600 hover:bg-violet-700' : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'
               }`}>
@@ -139,7 +143,8 @@ export default function CompareGrid({
 
       {showStats && (
         <div ref={statsRef} className="scroll-mt-3">
-          <CompareSummary slots={compareSlots} hierarchy={hierarchy} periodLabel={periodLabel} pinnedByMap={pinnedByMap} />
+          <CompareSummary slots={compareSlots} hierarchy={hierarchy} periodLabel={periodLabel} pinnedByMap={pinnedByMap}
+            exporting={exporting} onRemovePin={onRemovePin} onClearPins={onClearPins} />
         </div>
       )}
 

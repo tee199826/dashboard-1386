@@ -13,7 +13,6 @@ import CompareGrid from '../components/pixel-map/CompareGrid'
 import ImportDataModal from '../components/pixel-map/ImportDataModal'
 import CommunityPanel from '../components/pixel-map/CommunityPanel'
 import AreaDetailPanel from '../components/pixel-map/AreaDetailPanel'
-import AreaComparePanel from '../components/pixel-map/AreaComparePanel'
 import AccordionSection from '../components/pixel-map/AccordionSection'
 import DateFilter from '../components/DateFilter'
 import { useFilter } from '../context/FilterContext'
@@ -185,18 +184,13 @@ export default function PixelMap() {
   const removePinnedArea = useCallback((mapId) => setPinnedByMap(prev => ({ ...prev, [mapId]: null })), [])
   const clearPinnedArea = useCallback(() => setPinnedByMap(prev => (comparing ? { multi: prev.multi } : { ...prev, multi: null })), [comparing])
 
-  // คอลัมน์ของแผงเทียบ = panel ที่มีพื้นที่เลือกไว้ เรียงตามลำดับ panel (ซ้าย→ขวา)
-  const compareColumns = useMemo(() => compareSlots
-    .map((slot, i) => ({
-      key: slot.id,
-      index: i,
-      area: pinnedByMap[slot.id] ?? null,
-      panelName: `แผนที่ ${i + 1}`,
-      panelHint: slot.districts?.length ? `${slot.label}: ${slot.districts.join(', ')}` : slot.label,
-    }))
-    .filter(c => c.area), [compareSlots, pinnedByMap])
-  const comparePair = comparing && compareColumns.length >= 2
-  const fallbackArea = comparing ? (compareColumns[0]?.area ?? null) : (pinnedByMap.multi ?? centerArea)
+  // โหมด compare: พื้นที่ที่คลิกเลือกไว้ของแผนที่แรกที่มี (ซ้าย→ขวา) — แผงรายละเอียดด้านขวา/การ์ด export/Excel ใช้ตัวนี้
+  // การเทียบตัวเลขข้ามแผนที่อยู่ในตารางใต้แผนที่ (CompareSummary) ที่เดียว
+  const firstComparePin = useMemo(() => {
+    const slot = compareSlots.find(s => pinnedByMap[s.id])
+    return slot ? { mapId: slot.id, area: pinnedByMap[slot.id] } : null
+  }, [compareSlots, pinnedByMap])
+  const fallbackArea = comparing ? (firstComparePin?.area ?? null) : (pinnedByMap.multi ?? centerArea)
   const detailArea = hoverArea ?? fallbackArea
 
   // แผนที่ยืดตามพื้นที่ที่เหลือจริง (คงสัดส่วน 900:700) — เดิมล็อก 900px ตายตัว พอจอไม่กว้างพอกล่องจะถูกบีบจนต้องเลื่อนดู
@@ -339,6 +333,7 @@ export default function PixelMap() {
               addComparePanel={addComparePanel} removeComparePanel={removeComparePanel}
               exporting={exporting} showExportNumbers={showExportNumbers} onAreaHover={setHoverArea}
               onAreaClick={togglePinnedArea} pinnedByMap={pinnedByMap} periodLabel={periodLabel}
+              onRemovePin={removePinnedArea} onClearPins={clearPinnedArea}
             />
           ) : (
             <MapCanvas
@@ -373,14 +368,11 @@ export default function PixelMap() {
             {panelTab === 'detail' && (
               <>
                 <AccordionSection title="รายละเอียดพื้นที่" icon={<Info size={14} className="text-slate-400" />} defaultOpen>
-                  {/* โหมด compare + เลือกพื้นที่ไว้ตั้งแต่ 2 แผนที่ขึ้นไป → แผงนี้กลายเป็นตารางเทียบแทนรายละเอียดพื้นที่เดียว */}
-                  {comparePair ? (
-                    <AreaComparePanel columns={compareColumns} hierarchy={hierarchy} periodLabel={periodLabel}
-                      onRemove={removePinnedArea} onClear={clearPinnedArea} />
-                  ) : (
-                    <AreaDetailPanel area={detailArea} pinnedArea={comparing ? compareColumns[0]?.area : pinnedByMap.multi}
-                      onClearPin={clearPinnedArea} hierarchy={hierarchy} periodLabel={periodLabel} comparing={comparing} />
-                  )}
+                  {/* รายละเอียดพื้นที่เดียวเสมอ — การเทียบข้ามแผนที่ย้ายไปอยู่ตารางใต้แผนที่ (กว้างพอให้อ่านสบาย) */}
+                  {/* โหมด compare: "ยกเลิก" เอาออกเฉพาะพื้นที่ที่โชว์อยู่ ไม่ล้างของแผนที่อื่นไปด้วย */}
+                  <AreaDetailPanel area={detailArea} pinnedArea={comparing ? firstComparePin?.area : pinnedByMap.multi}
+                    onClearPin={comparing ? () => firstComparePin && removePinnedArea(firstComparePin.mapId) : clearPinnedArea}
+                    hierarchy={hierarchy} periodLabel={periodLabel} comparing={comparing} />
                 </AccordionSection>
                 <AccordionSection title="ชุมชนในพื้นที่ที่เลือก" icon={<Users size={14} className="text-slate-400" />} defaultOpen>
                   <CommunityPanel

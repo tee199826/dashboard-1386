@@ -1,4 +1,5 @@
-// CompareSummary — ตารางเทียบตัวเลขของแต่ละแผนที่ในโหมด Compare (กดเปิด/ปิดจาก toolbar)
+// CompareSummary — ตารางเทียบตัวเลขของแต่ละแผนที่ในโหมด Compare (อยู่ใต้แผนที่ เปิดเป็นค่าเริ่มต้น ซ่อนได้จาก toolbar)
+// ที่เดียวที่เทียบตัวเลขข้ามแผนที่ — แผงด้านขวาแสดงรายละเอียดของพื้นที่เดียว (แคบเกินกว่าจะวางตารางเทียบให้อ่านสบาย)
 // ตัวเลขมาจาก hierarchy ชุดเดียวกับแผนที่ (ตามช่วงเวลาที่เลือก)
 // แต่ละแผนที่เอาพื้นที่มาจาก 2 ทางที่ผู้ใช้เลือกได้จริง — เลือกทางไหนก็เทียบได้ ไม่ต้องรู้ว่าปุ่มไหนคู่กับตารางไหน:
 //   1) คลิกพื้นที่บนแผนที่ (เขต/แขวง/ชุมชน) — มาก่อน เพราะเป็นการเจาะจงล่าสุดและมีกรอบไฮไลต์บนแผนที่ให้เห็น (คลิกซ้ำ = ยกเลิก)
@@ -6,6 +7,7 @@
 // หัวคอลัมน์บอกทุกครั้งว่าตัวเลขมาจากทางไหน จะได้ไม่งงว่าทำไมไม่ตรงกับที่นึกไว้
 // 2 แผนที่: มีคอลัมน์ "ต่าง" (ซ้าย − ขวา) ให้เห็นส่วนต่างทันที ; 3-4 แผนที่: เทียบกันเป็นคอลัมน์ (ไม่มีคอลัมน์ต่าง เพราะเทียบคู่ไหนก็ไม่ชัด)
 import { useMemo } from 'react'
+import { X } from 'lucide-react'
 import { sumDistrictMeta, nodeDetail, communityList, resolveAreaNode, BEHAVIOR_FLAGS } from '../../utils/pixelMapData'
 
 const pct = (n, total) => (total > 0 ? Math.round((n / total) * 100) : 0)
@@ -35,6 +37,7 @@ function buildColumn(slot, index, hierarchy, pinnedArea) {
       label: areaTitle(pinnedArea),
       sub: pinnedArea.level === 'community' ? `${pinnedArea.dname} · ${pinnedArea.sub ?? ''}` : pinnedArea.dname,
       source: `คลิกบนแผนที่ (${LEVEL_LABEL[pinnedArea.level] ?? ''})`,
+      pinned: true,
       level: pinnedArea.level,
       meta: meta ?? {},
       detail: nodeDetail(meta) ?? EMPTY_DETAIL,
@@ -60,13 +63,18 @@ function buildColumn(slot, index, hierarchy, pinnedArea) {
   return { ...base, label: slot.label, meta: {}, detail: EMPTY_DETAIL, communities: null, empty: true }
 }
 
-export default function CompareSummary({ slots = [], hierarchy, periodLabel, pinnedByMap = {} }) {
+export default function CompareSummary({
+  slots = [], hierarchy, periodLabel, pinnedByMap = {}, exporting = false, onRemovePin, onClearPins,
+}) {
   const cols = useMemo(
     () => slots.map((slot, i) => buildColumn(slot, i, hierarchy, pinnedByMap[slot.id] ?? null)),
     [slots, hierarchy, pinnedByMap],
   )
 
   const filled = cols.filter(c => !c.empty)
+  // ภาพ export ไม่ต้องมีกล่องคำแนะนำวิธีเลือกพื้นที่ — ยังไม่ได้เลือกอะไรก็ไม่ใส่ตารางลงภาพเลย
+  if (exporting && filled.length === 0) return null
+  const anyPinned = !exporting && cols.some(c => c.pinned)
   const showDiff = cols.length === 2 && filled.length === 2
   const showAreaSplit = filled.every(c => c.level !== 'community')    // ระดับชุมชนไม่มีในชุมชน/นอกชุมชน (อยู่ในชุมชนทั้งหมดอยู่แล้ว)
   const rows = [
@@ -83,7 +91,15 @@ export default function CompareSummary({ slots = [], hierarchy, periodLabel, pin
     <div className="rounded-xl ring-1 ring-slate-200 bg-white overflow-hidden">
       <div className="flex items-baseline justify-between gap-2 px-3 py-2 bg-slate-50 border-b border-slate-100">
         <span className="text-[12.5px] font-semibold text-slate-700">เปรียบเทียบตัวเลขระหว่างแผนที่</span>
-        <span className="text-[11.5px] text-slate-400">ช่วงเวลา: {periodLabel}</span>
+        <span className="flex items-baseline gap-3">
+          <span className="text-[11.5px] text-slate-400">ช่วงเวลา: {periodLabel}</span>
+          {/* เอาพื้นที่ที่คลิกเลือกไว้ออกทุกแผนที่ (เขตที่ติ๊กจากช่องด้านบนยังอยู่) */}
+          {anyPinned && onClearPins && (
+            <button type="button" onClick={onClearPins} className="text-[11.5px] font-medium text-slate-500 hover:text-rose-600">
+              ล้างที่คลิกเลือก
+            </button>
+          )}
+        </span>
       </div>
 
       {/* ยังไม่ได้เลือกพื้นที่สักแผนที่ → บอกวิธีเลือก ดีกว่าโชว์ตารางขีดกลางทั้งใบจนดูเหมือนปุ่มเสีย */}
@@ -106,6 +122,11 @@ export default function CompareSummary({ slots = [], hierarchy, periodLabel, pin
                     <span className="inline-flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color }} />
                       <span className="truncate max-w-[140px] text-slate-700" title={c.sub ?? c.label}>{c.label}</span>
+                      {/* ✕ = เอาพื้นที่ที่คลิกเลือกไว้ของแผนที่นี้ออก (เหมือนคลิกซ้ำที่เดิมบนแผนที่) */}
+                      {c.pinned && !exporting && onRemovePin && (
+                        <button type="button" onClick={() => onRemovePin(c.id)} title="เอาพื้นที่นี้ออก"
+                          className="shrink-0 text-slate-300 hover:text-rose-600"><X size={13} /></button>
+                      )}
                     </span>
                     {/* บอกว่าตัวเลขคอลัมน์นี้มาจากการเลือกแบบไหน — กันสับสนว่าทำไมเลขไม่ตรงกับที่นึกไว้ */}
                     <div className="text-[11px] font-normal text-slate-400">

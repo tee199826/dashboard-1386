@@ -16,7 +16,7 @@ function PinBar({ pinnedArea, onClearPin, comparing }) {
     return (
       <p className="flex items-center gap-1.5 text-[12px] text-slate-400">
         <MousePointerClick size={13} className="shrink-0" />
-        {comparing ? 'คลิกพื้นที่ในแต่ละแผนที่เพื่อเทียบกัน' : 'คลิกพื้นที่บนแผนที่เพื่อเลือกไว้'}
+        {comparing ? 'คลิกพื้นที่ในแต่ละแผนที่ แล้วดูตารางเทียบใต้แผนที่' : 'คลิกพื้นที่บนแผนที่เพื่อเลือกไว้'}
       </p>
     )
   }
@@ -30,8 +30,8 @@ function PinBar({ pinnedArea, onClearPin, comparing }) {
           <X size={12} /> ยกเลิก
         </button>
       </div>
-      {/* โหมด compare เท่านั้นที่เทียบข้ามแผนที่ได้ — บอกให้รู้ว่าคลิกอีกแผนที่จะได้อะไร */}
-      {comparing && <p className="text-[11.5px] text-slate-400">คลิกพื้นที่ในแผนที่อื่นเพื่อเทียบกัน</p>}
+      {/* โหมด compare เท่านั้นที่เทียบข้ามแผนที่ได้ — ตารางเทียบอยู่ใต้แผนที่ (แผงนี้แสดงพื้นที่เดียว) */}
+      {comparing && <p className="text-[11.5px] text-slate-400">คลิกพื้นที่ในแผนที่อื่นเพื่อเทียบ — ดูตารางเทียบใต้แผนที่</p>}
     </div>
   )
 }
