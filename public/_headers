@@ -1,0 +1,14 @@
+# Security headers (SEC-14) — Netlify อ่านไฟล์นี้จาก publish dir (dist/) โดยอัตโนมัติ
+# CSP เริ่มแบบ Report-Only ก่อน: ดู violation ใน DevTools console บน staging ให้ครบทุกหน้า
+# (แผนที่ / ฟอนต์ / Supabase / export) แล้วค่อยเปลี่ยนหัวข้อเป็น Content-Security-Policy เพื่อบังคับใช้
+#
+# หมายเหตุ connect-src: ใส่โดเมน Supabase ของโปรเจกต์ (https://<ref>.supabase.co และ wss://<ref>.supabase.co)
+# แทน *.supabase.co ได้เมื่อยืนยันแล้ว — ค่า wildcard ด้านล่างเพื่อให้ staging ทดสอบได้โดยไม่ต้องแก้ไฟล์
+/*
+  Strict-Transport-Security: max-age=31536000
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Cross-Origin-Opener-Policy: same-origin
+  Content-Security-Policy-Report-Only: default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://server.arcgisonline.com https://*.tile.openstreetmap.org https://images.unsplash.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://server.arcgisonline.com https://*.tile.openstreetmap.org; worker-src 'self' blob:; upgrade-insecure-requests

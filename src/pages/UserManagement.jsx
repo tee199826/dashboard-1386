@@ -128,11 +128,17 @@ function AddUserModal({ onClose, onAdded, showToast }) {
     setError('')
     setBusy(true)
     try {
-      const { error } = await supabase.auth.signUp({
-        email, password,
-        options: { data: { full_name: fullName, role } },
+      // สร้างผ่าน Edge Function (service role ฝั่งเซิร์ฟเวอร์) — ไม่ใช้ auth.signUp จากเบราว์เซอร์ (SEC-04):
+      // role ถูกกำหนดฝั่งเซิร์ฟเวอร์หลังตรวจว่าผู้เรียกเป็นแอดมิน และ session ของแอดมินไม่ถูกสลับ
+      const { data, error } = await supabase.functions.invoke('admin-create-user', {
+        body: { email, password, full_name: fullName, role },
       })
-      if (error) throw error
+      if (error) {
+        // FunctionsHttpError → อ่านข้อความจาก body ของฟังก์ชัน (เช่น 403 forbidden / invalid email)
+        const detail = await error.context?.json?.().catch(() => null)
+        throw new Error(detail?.error || error.message)
+      }
+      if (data?.error) throw new Error(data.error)
       showToast?.(`เพิ่มผู้ใช้ "${email}" สำเร็จ`)
       onAdded()
     } catch (err) {
@@ -165,8 +171,8 @@ function AddUserModal({ onClose, onAdded, showToast }) {
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">รหัสผ่าน (อย่างน้อย 6 ตัว)</label>
-            <input type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)}
+            <label className="block text-sm font-medium text-slate-700 mb-1">รหัสผ่าน (อย่างน้อย 8 ตัว)</label>
+            <input type="password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
           </div>
           <div>

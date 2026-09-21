@@ -5,18 +5,24 @@
 //   interview_records_pii  — ข้อมูลส่วนบุคคล
 // ทั้งคู่ล็อก RLS ให้ผู้ดูแลระบบเท่านั้น แต่ยังแยก PII คนละตาราง
 // เผื่อวันหน้าเปิดสถิติแบบซักให้อ่านสาธารณะโดยที่ชื่อ/เลขบัตรไม่หลุดไปด้วย
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   RotateCcw, User, Gavel, HeartPulse, History, Pill, Banknote, MapPin, ClipboardList, Clock,
 } from 'lucide-react'
 import { draftKeyOf, readDraft, writeDraft, removeDraft } from '../../utils/interviewDraft'
 import { supabase } from '../../lib/supabase'
+<<<<<<< HEAD
 import { useAuth } from '../../context/AuthContext'
 import { dateToFiscalYear, localDateISO } from '../../utils/fiscalYear'
 import { Field, Input, Select, ChipGroup, RepeatList, SaveBar } from '../../components/intel/FormUI'
 import { FormLayout, SectionCard, SubSection } from '../../components/intel/FormLayout'
 import { DISTRICTS, UNIT_FALLBACK, YEAR_OPTIONS, formatNationalId } from '../../utils/intelOptions'
+=======
+import { dateToFiscalYear } from '../../utils/fiscalYear'
+import { IntelPage, Card, Field, Input, Select, ChipGroup, RepeatList, SaveBar } from '../../components/intel/FormUI'
+import { DISTRICTS, UNIT_FALLBACK, YEAR_OPTIONS, simpleHash, formatNationalId } from '../../utils/intelOptions'
+>>>>>>> origin/fix/security-audit
 import { loadAreaOptions, loadCommunitiesFromData, mergeCommunities } from '../../utils/areaOptions'
 import { loadThaiAddress } from '../../utils/thaiAddress'
 import { STATION_TO_BKN } from '../../utils/bknMapping'
@@ -137,13 +143,18 @@ export default function InterviewForm() {
 
 function InterviewFormBody({ draftKey, onClear }) {
   const navigate = useNavigate()
+<<<<<<< HEAD
   const { logAction } = useAuth()
   // ร่างที่ค้างในแท็บนี้ — อ่านครั้งเดียวตอน mount (กดล้างข้อมูลแล้ว mount ใหม่จะได้ null)
   // ทุก useState ด้านล่างใช้ค่าจากร่างทับค่าเริ่มต้น — ช่องที่เพิ่มในฟอร์มทีหลังยังได้ค่าเริ่มต้นครบ
   const [draft] = useState(() => readDraft(draftKey))
   const d = draft?.data
+=======
+>>>>>>> origin/fix/security-audit
   const [status, setStatus] = useState(null)
   const [savedRef, setSavedRef] = useState(null)   // { code, doc_no } ที่ฐานข้อมูลออกให้ตอนบันทึก
+  // idempotency key — สร้างครั้งเดียวต่อการกรอก 1 ใบ : กดบันทึกซ้ำหลัง error ใช้ uid เดิม → ไม่ได้แถวซ้ำ (SEC-12)
+  const recordUidRef = useRef(null)
 
   // ── ส่วนที่ 1 ข้อมูลบุคคล ──
   // เลขที่แบบ (doc_no) ไม่มีช่องกรอก — trigger ฝั่งฐานข้อมูลออกเลข ๑-๑/๐๐๐๑ ให้เอง
@@ -388,12 +399,22 @@ function InterviewFormBody({ draftKey, onClear }) {
         }
       })
 
+<<<<<<< HEAD
     // สุ่ม UUID — เดิมใช้ hash 32 บิตจากข้อมูลฟอร์ม ซึ่งชนกันได้ แล้วบันทึกล้มด้วย duplicate key
     const record_uid = 'u:' + (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`)
 
     // ระยะเวลาแยก ปี/เดือน → เก็บทั้งตัวเลข (ไว้คำนวณสถิติ) และข้อความอ่านง่าย (แผงรายละเอียดใช้แสดง)
     const afterDur = fu.after === 'เสพต่อ' ? toDuration(fu.after_y, fu.after_m) : null
     const quitDur = fu.never_quit ? null : toDuration(fu.quit_y, fu.quit_m)
+=======
+    if (!recordUidRef.current) {
+      recordUidRef.current = 'h:' + simpleHash([
+        tail.interviewed_at, p.national_id, p.first_name, p.last_name, p.age, p.occupation,
+        dealer_locations[0]?.district, regular_drugs.map((d) => `${d.drug}:${d.price}`).join(','), Date.now(),
+      ].map((v) => v ?? '').join('|'))
+    }
+    const record_uid = recordUidRef.current
+>>>>>>> origin/fix/security-audit
 
     // 1) เนื้อหาแบบฟอร์ม
     const row = {
@@ -486,17 +507,30 @@ function InterviewFormBody({ draftKey, onClear }) {
     }
     const hasPii = pii.full_name || pii.national_id || pii.phone || pii.address
       || pii.friend_address || sellerList.length || pii.interviewer
+<<<<<<< HEAD
     // บันทึก 2 ตารางใน transaction เดียวฝั่งฐานข้อมูล (RPC save_interview) — สำเร็จทั้งคู่หรือไม่เข้าเลย
     // ไม่มีแถวกำพร้าแม้เน็ตหลุด/ปิดแท็บกลางทาง ; ถ้าล้มเหลวข้อมูลในฟอร์มยังอยู่ครบ กดบันทึกใหม่ได้
     const { data: saved, error } = await supabase
       .rpc('save_interview', { p_record: row, p_pii: hasPii ? pii : null })
       .single()
     if (error) { setStatus({ error: `บันทึกไม่สำเร็จ: ${error.message}` }); return }
+=======
+    // บันทึก 2 ตารางในธุรกรรมเดียวผ่าน RPC — ถ้า PII ล้ม เนื้อหาแบบฟอร์มก็ไม่ถูกบันทึกค้าง (SEC-12)
+    // audit 'create' บันทึกฝั่งเซิร์ฟเวอร์ในธุรกรรมเดียวกัน
+    const { data: saved, error } = await supabase.rpc('interview_save', { p_record: row, p_pii: hasPii ? pii : null })
+    if (error) { setStatus({ error: `บันทึกไม่สำเร็จ: ${error.message}` }); return }
+    setSavedRef({ code: saved?.code || null, doc_no: saved?.doc_no || null })
+    recordUidRef.current = null
+>>>>>>> origin/fix/security-audit
 
     setSavedRef({ code: saved?.code || null, doc_no: saved?.doc_no || null })   // effect ด้านบนพาไปหน้าค้นหาใน 3 วินาที
     setStatus('saved')
+<<<<<<< HEAD
     removeDraft(draftKey)   // บันทึกเข้าระบบแล้ว ร่างไม่ต้องเก็บต่อ
     logAction?.('create', 'interview_records', record_uid, { hasPii: !!hasPii })
+=======
+    setTimeout(() => navigate('/intel/interview'), 3000)   // หน่วงให้อ่าน/จดรหัสอ้างอิงทัน แล้วไปหน้าค้นหา
+>>>>>>> origin/fix/security-audit
   }
 
   const unitOptions = UNIT_FALLBACK

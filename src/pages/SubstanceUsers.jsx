@@ -9,6 +9,7 @@ import {
 import { fetchAllPages } from '../utils/supabasePagination'
 import { supabase } from '../lib/supabase'
 import { filterByDateColumn } from '../utils/filterRows'
+import { escapeHtml } from '../utils/escapeHtml'
 import { dateToFiscalYear } from '../utils/fiscalYear'
 import { useFilter } from '../context/FilterContext'
 import IncidentMap from '../components/IncidentMap'
@@ -338,7 +339,7 @@ export default function SubstanceUsers() {
   const districtLayerOnEachFeature = useMemo(() => (feature, layer) => {
     const dn = feature.properties?.dname || 'ไม่ระบุ'
     const c = agg.distMap[dn] || 0
-    layer.bindTooltip(`${dn} — ${c} ราย${c ? ' · คลิกดูชื่อแหล่งซื้อ' : ''}`, { sticky: true, className: 'su-district-tooltip' })
+    layer.bindTooltip(`${escapeHtml(dn)} — ${c} ราย${c ? ' · คลิกดูชื่อแหล่งซื้อ' : ''}`, { sticky: true, className: 'su-district-tooltip' })
     layer.on('click', () => setPickedDistrict(prev => prev === dn ? null : dn))
   }, [agg.distMap])
 

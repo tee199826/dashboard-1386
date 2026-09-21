@@ -1,5 +1,12 @@
 import { supabase } from '../lib/supabase'
 
+// คอลัมน์ที่ dashboard สาธารณะใช้จริง — ขอเท่านี้จาก API ไม่ select('*') แล้วมาตัดใน browser (SEC-07)
+// ถ้า complaints มีคอลัมน์อ่อนไหวเพิ่มภายหลัง จะไม่หลุดมากับ response โดยอัตโนมัติ
+const COMPLAINT_COLUMNS = [
+  'id', 'group_no', 'received_date', 'completed_date', 'channel', 'district', 'subdistrict', 'community',
+  'province', 'person_type', 'sex', 'occupation', 'role', 'action_unit', 'urgency', 'status', 'drug', 'area_type',
+].join(', ')
+
 export async function loadAllData() {
   console.log('[loader] กำลังโหลดจาก Supabase...')
 
@@ -10,7 +17,7 @@ export async function loadAllData() {
   while (true) {
     const { data, error } = await supabase
       .from('complaints')
-      .select('*')
+      .select(COMPLAINT_COLUMNS)
       .order('received_date', { ascending: false })
       .range(from, from + BATCH_SIZE - 1)
 

@@ -1,8 +1,9 @@
 // useDrugIncidents — โหลด drug_incidents ทั้งตาราง (raw one-hot columns) ใช้ร่วมทุก section ของ /situation
-// select('*') + parallel paging เพราะหน้าเหล่านี้ aggregate ฝั่ง client ไม่สนลำดับแถว
+// เลือกเฉพาะคอลัมน์สาธารณะ + parallel paging เพราะหน้าเหล่านี้ aggregate ฝั่ง client ไม่สนลำดับแถว
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { fetchAllPages } from '../utils/supabasePagination'
 import { dateToFiscalYear } from '../utils/fiscalYear'
+import { DRUG_INCIDENT_PUBLIC_COLUMNS } from '../utils/drugFlags'
 
 export function useDrugIncidents() {
   const [rows, setRows] = useState([])
@@ -13,7 +14,7 @@ export function useDrugIncidents() {
     setIsLoading(true)
     setError(null)
     try {
-      const all = await fetchAllPages('drug_incidents', '*', { parallel: true })
+      const all = await fetchAllPages('drug_incidents', DRUG_INCIDENT_PUBLIC_COLUMNS, { parallel: true })
       setRows(all)
     } catch (err) {
       console.error('[useDrugIncidents] load failed:', err)

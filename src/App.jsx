@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { DataProvider } from './context/DataContext'
 import { AuthProvider } from './context/AuthContext'
 import { PresentationProvider, usePresentation } from './context/PresentationContext'
@@ -26,7 +26,16 @@ import DrugEvidence from './pages/DrugEvidence'
 import InterviewForm from './pages/intel/InterviewForm'
 import InterviewSearch from './pages/intel/InterviewSearch'
 import Admin from './pages/Admin'
+import RptFieldEntry from './pages/RptFieldEntry'
 import { Menu } from 'lucide-react'
+
+// เปลี่ยน route ผ่าน sidebar แล้วเลื่อนขึ้นบนสุด — SPA ไม่รีเซ็ต scroll ให้เอง (เดิมเปลี่ยนหน้าแล้วค้างที่ตำแหน่งเดิม)
+// เปลี่ยนเฉพาะ pathname (query เปลี่ยน เช่น /situation?section= ไม่เลื่อน เพราะเป็นแท็บในหน้าเดียวกัน)
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => { window.scrollTo(0, 0) }, [pathname])
+  return null
+}
 
 // โครง tree เดียวทั้ง 2 โหมด — presentation แค่ซ่อน Header/Sidebar
 // (ถ้า return tree คนละชุด React จะ remount children → state ของหน้า/FilterProvider หายตอนเข้า-ออกโหมดนำเสนอ)
@@ -65,6 +74,7 @@ export default function App() {
       <DataProvider>
         <PresentationProvider>
         <BrowserRouter>
+          <ScrollToTop />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/radar" element={<MainLayout><SubstanceRadar /></MainLayout>} />
@@ -75,7 +85,11 @@ export default function App() {
             <Route path="/districts/behavior-table" element={<MainLayout><FilterProvider><BehaviorTable /></FilterProvider></MainLayout>} />
             <Route path="/operations" element={<MainLayout><FilterProvider><Operations /></FilterProvider></MainLayout>} />
             <Route path="/bkn" element={<MainLayout><FilterProvider><BknPage /></FilterProvider></MainLayout>} />
-            <Route path="/substance-users" element={<MainLayout><FilterProvider><SubstanceUsers /></FilterProvider></MainLayout>} />
+            {/* ข้อมูลผู้เสพรายคน (อายุ/อาชีพ/รายได้/ประวัติจับกุม-บำบัด/แหล่งซื้อ) — อยู่ในหมวด "ฐานข้อมูลการข่าว"
+                ของ sidebar ที่ซ่อนจากคนทั่วไปอยู่แล้ว แต่ route เดิมไม่ได้ห่อ guard → เข้าตรงด้วย URL ได้ */}
+            <Route path="/substance-users" element={
+              <ProtectedRoute><MainLayout><FilterProvider><SubstanceUsers /></FilterProvider></MainLayout></ProtectedRoute>
+            } />
             <Route path="/complaints" element={<MainLayout><FilterProvider><ComplaintsPage /></FilterProvider></MainLayout>} />
             <Route path="/situation" element={<MainLayout><FilterProvider><SituationPage /></FilterProvider></MainLayout>} />
 
@@ -89,8 +103,14 @@ export default function App() {
               <ProtectedRoute><MainLayout><InterviewForm /></MainLayout></ProtectedRoute>
             } />
 
-            {/* Admin · Data Health (public ก่อน — auth ทีหลัง) */}
-            <Route path="/admin" element={<MainLayout><Admin /></MainLayout>} />
+            {/* Admin · Data Health — ผู้ดูแลระบบเท่านั้น (SEC-07: เดิมเปิด public ชั่วคราว) */}
+            <Route path="/rpt-entry" element={
+              <ProtectedRoute><MainLayout><RptFieldEntry /></MainLayout></ProtectedRoute>
+            } />
+
+            <Route path="/admin" element={
+              <ProtectedRoute><MainLayout><Admin /></MainLayout></ProtectedRoute>
+            } />
 
             <Route path="/upload" element={
               <ProtectedRoute><MainLayout><UploadPage /></MainLayout></ProtectedRoute>

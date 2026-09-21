@@ -1,6 +1,7 @@
 // exportSituation.js — Excel export ของหน้า /situation (จับกุม/บำบัด/ร้องเรียน, ตาราง drug_incidents)
 // รับแถวที่ filter ตาม view ปัจจุบันแล้วจากหน้าที่เรียก (ไม่ query เอง) — ตัวเลขตรงกับที่ user เห็นบนจอเสมอ
 import ExcelJS from 'exceljs'
+import { downloadBlob, XLSX_MIME } from './downloadBlob'
 import { formatThaiDate } from './heroMeta'
 import { DNAME_TO_GROUP } from './constants'
 import { BEHAVIOR_FLAGS, DRUG_FLAGS, RESULT_FLAGS, countFlag, drugCounts, rowsWithAnyDrug } from './drugFlags'
@@ -203,11 +204,5 @@ export async function exportTreatmentReport({ summaryRows = [], dimRows = [], pe
 
 async function download(wb, filenamePrefix) {
   const buffer = await wb.xlsx.writeBuffer()
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${filenamePrefix}-${new Date().toISOString().slice(0, 10)}.xlsx`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(new Blob([buffer], { type: XLSX_MIME }), `${filenamePrefix}-${new Date().toISOString().slice(0, 10)}.xlsx`)
 }

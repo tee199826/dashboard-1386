@@ -1,5 +1,6 @@
 // exportComplaints.js — Excel export ของหน้า /complaints (แถวที่ filter ตาม view ปัจจุบันแล้ว)
 import ExcelJS from 'exceljs'
+import { downloadBlob, XLSX_MIME } from './downloadBlob'
 import { formatThaiDate } from './heroMeta'
 import { DNAME_TO_GROUP } from './constants'
 
@@ -111,11 +112,5 @@ export async function exportComplaintsReport({
     ['วันที่', 'เขต', 'แขวง', 'ชุมชน', 'กลุ่มโซน', 'พฤติการณ์', 'ตัวยา', 'ช่องทาง', 'ผลดำเนินการ', 'ด่วน'], detailRows)
 
   const buffer = await wb.xlsx.writeBuffer()
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${filenamePrefix}-${new Date().toISOString().slice(0, 10)}.xlsx`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(new Blob([buffer], { type: XLSX_MIME }), `${filenamePrefix}-${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
