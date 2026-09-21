@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url'
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public', import.meta.url))
 const ALLOWED_EXT = new Set(['.geojson', '.svg', '.png', '.ico', '.webmanifest', '.txt'])
-const ALLOWED_NAME = new Set(['_redirects', '_headers', 'robots.txt'])
+// thai-address.json = รายชื่อ จังหวัด/อำเภอ/ตำบล ทั่วประเทศ (ข้อมูลอ้างอิงสาธารณะ kongvut/thai-province-data, MIT)
+//   ช่อง "จังหวัดอื่น" ในแบบซักผู้เสพโหลดตรงจาก /thai-address.json ; อนุญาตระบุชื่อไฟล์ ไม่เปิด .json ทั้งหมด
+const ALLOWED_NAME = new Set(['_redirects', '_headers', 'robots.txt', 'thai-address.json'])
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
