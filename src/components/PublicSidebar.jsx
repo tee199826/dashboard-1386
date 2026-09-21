@@ -44,6 +44,9 @@ const NAV = [
         { to: '/intel/interview', label: 'ค้นหา/รายการที่บันทึก' },
         { to: '/intel/interview/new', label: 'บันทึกข้อมูลผู้เสพ' },
       ] },
+      { label: 'เรื่องร้องเรียน ปปส.', items: [
+        { to: '/rpt-entry', label: 'กรอกข้อมูลภาคสนาม' },
+      ] },
       { label: 'ราคายาเสพติด', items: [
         { label: 'แผนที่ราคายาเสพติด' },
         { label: 'บันทึกข้อมูล' },

@@ -26,6 +26,7 @@ import DrugEvidence from './pages/DrugEvidence'
 import InterviewForm from './pages/intel/InterviewForm'
 import InterviewSearch from './pages/intel/InterviewSearch'
 import Admin from './pages/Admin'
+import RptFieldEntry from './pages/RptFieldEntry'
 import { Menu } from 'lucide-react'
 
 // เปลี่ยน route ผ่าน sidebar แล้วเลื่อนขึ้นบนสุด — SPA ไม่รีเซ็ต scroll ให้เอง (เดิมเปลี่ยนหน้าแล้วค้างที่ตำแหน่งเดิม)
@@ -103,6 +104,10 @@ export default function App() {
             } />
 
             {/* Admin · Data Health — ผู้ดูแลระบบเท่านั้น (SEC-07: เดิมเปิด public ชั่วคราว) */}
+            <Route path="/rpt-entry" element={
+              <ProtectedRoute><MainLayout><RptFieldEntry /></MainLayout></ProtectedRoute>
+            } />
+
             <Route path="/admin" element={
               <ProtectedRoute><MainLayout><Admin /></MainLayout></ProtectedRoute>
             } />
