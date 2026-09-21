@@ -13,6 +13,7 @@ import { fetchAllPages } from '../utils/supabasePagination'
 import { deriveBehaviors } from '../utils/drugWide'
 import { getDistrictMetrics } from '../utils/statistics'
 import { DNAME_TO_GROUP } from '../utils/constants'
+import { escapeHtml } from '../utils/escapeHtml'
 import { supabase } from '../lib/supabase'
 import { formatThaiDate, formatPeriod, minMaxDate, getLastUploadDate } from '../utils/heroMeta'
 import { dateToFiscalYear } from '../utils/fiscalYear'
@@ -180,13 +181,6 @@ export default function AllDistricts() {
     if (d) { setSelectedDistrict(d); mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const heroPeriod = useMemo(() => {
-    const c = minMaxDate(records, 'date'), i = minMaxDate(incidents, 'received_date')
-    const mins = [c.min, i.min].filter(Boolean).sort()
-    const maxs = [c.max, i.max].filter(Boolean).sort()
-    return formatPeriod(mins[0], maxs[maxs.length - 1])
-  }, [records, incidents])
-
   const { getDateRange, state } = useFilter()
   const range = getDateRange()
   const rFrom = range?.from  // ช่วงครอบ (min→max) — ใช้กับ comparison/trend ; หลายปีงบใช้ span
@@ -202,6 +196,14 @@ export default function AllDistricts() {
   const fRecords = useMemo(() => filterByDateColumn(records, 'date', range), [records, range])
   const fIncidents = useMemo(() => filterByDateColumn(incidents, 'received_date', range), [incidents, range])
   const fDealers = useMemo(() => filterByDateColumn(dealerRows, 'surveyed_at', range), [dealerRows, range])
+
+  // ช่วงวันที่บน hero = ชุดที่กรองแล้ว ให้ตรงกับป้ายปีงบ (เดิมใช้ข้อมูลดิบ → "ปีงบ 2569" แต่โชว์ 2562–2569)
+  const heroPeriod = useMemo(() => {
+    const c = minMaxDate(fRecords, 'date'), i = minMaxDate(fIncidents, 'received_date')
+    const mins = [c.min, i.min].filter(Boolean).sort()
+    const maxs = [c.max, i.max].filter(Boolean).sort()
+    return formatPeriod(mins[0], maxs[maxs.length - 1])
+  }, [fRecords, fIncidents])
 
   // ── YTD comparison (จาก incidents raw) ──
   const comparison = useMemo(() => {
@@ -381,14 +383,14 @@ export default function AllDistricts() {
         : mapCompareMode === 'delta' ? `<span style="color:${diff >= 0 ? C.violetDark : '#059669'};font-weight:700">Δ ${diff >= 0 ? '+' : ''}${diff.toLocaleString()}</span>`
           : (pct == null ? '—' : `<span style="color:${pct >= 0 ? '#e11d48' : '#059669'};font-weight:700">${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(1)}%</span>`)
       const r = (lbl, val) => `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#64748b">${lbl}</span><span style="font-weight:600;font-variant-numeric:tabular-nums;color:#0f172a">${val}</span></div>`
-      layer.bindTooltip(`<div style="min-width:210px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid #f1f5f9"><span style="font-weight:700;color:#0f172a">${dn}</span><span style="font-size:11px;color:#64748b">${group}</span></div><div style="display:flex;flex-direction:column;gap:4px;font-size:12px">${r('ปีนี้ (YTD)', `${cur.toLocaleString()} เหตุ`)}${r('ปีก่อน (YTD)', `${prev.toLocaleString()} เหตุ`)}<div style="display:flex;justify-content:space-between;gap:16px;padding-top:2px;border-top:1px solid #f1f5f9;margin-top:2px"><span style="color:#64748b">เปลี่ยนแปลง</span>${changeTxt}</div></div></div>`, { sticky: true, className: 'su-district-tooltip' })
+      layer.bindTooltip(`<div style="min-width:210px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid #f1f5f9"><span style="font-weight:700;color:#0f172a">${escapeHtml(dn)}</span><span style="font-size:11px;color:#64748b">${escapeHtml(group)}</span></div><div style="display:flex;flex-direction:column;gap:4px;font-size:12px">${r('ปีนี้ (YTD)', `${cur.toLocaleString()} เหตุ`)}${r('ปีก่อน (YTD)', `${prev.toLocaleString()} เหตุ`)}<div style="display:flex;justify-content:space-between;gap:16px;padding-top:2px;border-top:1px solid #f1f5f9;margin-top:2px"><span style="color:#64748b">เปลี่ยนแปลง</span>${changeTxt}</div></div></div>`, { sticky: true, className: 'su-district-tooltip' })
       return
     }
     const complaints = m?.complaints || 0, done = m?.completed || 0
     const pct = complaints ? Math.round(done / complaints * 100) : 0
     const incidents = m?.incidents || 0
     const r = (lbl, val, color) => `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#64748b">${lbl}</span><span style="font-weight:600;font-variant-numeric:tabular-nums;color:${color || '#0f172a'}">${val}</span></div>`
-    layer.bindTooltip(`<div style="min-width:210px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid #f1f5f9"><span style="font-weight:700;color:#0f172a">${dn}</span><span style="font-size:11px;color:#64748b">${group}</span></div><div style="display:flex;flex-direction:column;gap:4px;font-size:12px">${r('เรื่องร้องเรียน', `${complaints.toLocaleString()} เรื่อง`)}${r('ดำเนินการสำเร็จ', `${done.toLocaleString()} เรื่อง (${pct}%)`, '#047857')}${r('เหตุการณ์ยา', `${incidents.toLocaleString()} ครั้ง`)}</div></div>`, { sticky: true, className: 'su-district-tooltip' })
+    layer.bindTooltip(`<div style="min-width:210px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding-bottom:6px;margin-bottom:6px;border-bottom:1px solid #f1f5f9"><span style="font-weight:700;color:#0f172a">${escapeHtml(dn)}</span><span style="font-size:11px;color:#64748b">${escapeHtml(group)}</span></div><div style="display:flex;flex-direction:column;gap:4px;font-size:12px">${r('เรื่องร้องเรียน', `${complaints.toLocaleString()} เรื่อง`)}${r('ดำเนินการสำเร็จ', `${done.toLocaleString()} เรื่อง (${pct}%)`, '#047857')}${r('เหตุการณ์ยา', `${incidents.toLocaleString()} ครั้ง`)}</div></div>`, { sticky: true, className: 'su-district-tooltip' })
   }, [byName, comparing, mapCompareMode, curByD, prevByD])
 
   const chartsEmpty = incReady && fIncidents.length === 0
@@ -631,17 +633,25 @@ export default function AllDistricts() {
             </div>
           </Card>
 
-          <Card title="พฤติการณ์รายเขต (Top 15)" sub="เสพ / ค้า / เสพ-ค้า / ผลิต" icon={<Layers />} loading={!incReady} empty={chartsEmpty}>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={behaviorStack} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                <YAxis type="category" dataKey="district" width={70} tick={{ fontSize: 10, fill: '#475569' }} />
-                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} formatter={(v, n) => [v.toLocaleString(), n]} labelFormatter={(_, p) => p?.[0]?.payload?.full || ''} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                {BEHAVIOR_CATS.map(c => <Bar key={c} dataKey={c} stackId="beh" fill={BEHAVIOR_PALETTE[c]} radius={c === 'ผลิต' ? [0, 4, 4, 0] : 0} />)}
-              </BarChart>
-            </ResponsiveContainer>
+          <Card title="พฤติการณ์รายเขต (Top 15)" sub="เสพ / ค้า / เสพ-ค้า / ผลิต · คลิกกราฟเพื่อดูตารางทั้งหมด" icon={<Layers />} loading={!incReady} empty={chartsEmpty}
+            right={
+              <button onClick={() => navigate('/districts/behavior-table')}
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+                ดูตารางทั้งหมด <ChevronRight size={12} />
+              </button>
+            }>
+            <div onClick={() => navigate('/districts/behavior-table')} className="cursor-pointer">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={behaviorStack} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                  <YAxis type="category" dataKey="district" width={70} tick={{ fontSize: 10, fill: '#475569' }} />
+                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} formatter={(v, n) => [v.toLocaleString(), n]} labelFormatter={(_, p) => p?.[0]?.payload?.full || ''} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {BEHAVIOR_CATS.map(c => <Bar key={c} dataKey={c} stackId="beh" fill={BEHAVIOR_PALETTE[c]} radius={c === 'ผลิต' ? [0, 4, 4, 0] : 0} />)}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </Card>
         </div>
 

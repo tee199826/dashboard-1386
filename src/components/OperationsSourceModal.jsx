@@ -1,6 +1,7 @@
 import { X } from 'lucide-react'
 
-export default function OperationsSourceModal({ onClose, totalCases, completed, filteredCount, percent }) {
+export default function OperationsSourceModal({ onClose, totalCases, completed, filteredCount, channelCount = 0, hasRpt = true, percent }) {
+  const diff = totalCases - filteredCount
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
@@ -53,7 +54,7 @@ export default function OperationsSourceModal({ onClose, totalCases, completed, 
               </div>
               <div className="bg-white p-2 rounded">
                 <span className="text-slate-500">ช่องทางหลัก</span>
-                <div className="font-bold text-amber-700">6 ช่องทาง</div>
+                <div className="font-bold text-amber-700">{channelCount} ช่องทาง</div>
               </div>
             </div>
             <div className="mt-2 text-xs text-amber-700">✓ ใช้สำหรับ: Sources Overview, กราฟ, ตารางช่องทาง</div>
@@ -66,7 +67,9 @@ export default function OperationsSourceModal({ onClose, totalCases, completed, 
             <p className="text-sm text-slate-700 leading-relaxed">
               ทั้ง 2 แหล่งมาจาก ป.ป.ส. แต่ <strong>RPT_114 รวมทุก case</strong> ในระบบ
               ส่วน <strong>Export Records เป็น subset</strong> ที่ส่งออกเป็นไฟล์รายเรื่อง
-              (ต่างกัน ~6 records — เป็นเรื่องปกติ)
+              {hasRpt
+                ? ` (ช่วงที่เลือก: RPT_114 ${totalCases.toLocaleString()} เรื่อง · Records ${filteredCount.toLocaleString()} รายการ${diff > 0 ? ` — ต่างกัน ${diff.toLocaleString()}` : ''})`
+                : ' (ช่วงที่เลือกไม่มีข้อมูล RPT_114 — ตัวเลขทั้งหมดมาจาก Records)'}
             </p>
             <p className="text-sm text-slate-700 leading-relaxed mt-2">
               <strong>หลักการ:</strong> ใช้ RPT_114 สำหรับนำเสนอ/รายงาน · ใช้ Records สำหรับวิเคราะห์เชิงลึก

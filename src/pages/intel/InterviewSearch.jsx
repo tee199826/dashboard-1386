@@ -1,28 +1,43 @@
 // /intel/interview — ค้นหา/รายการแบบซักผู้เสพที่บันทึกไว้ (แอดมินเท่านั้น)
 // ชุดข้อมูลของตัวเอง แยกจาก substance_users (ที่นำเข้าจาก Excel) — ที่นี่มีเฉพาะรายการที่กรอกผ่านฟอร์ม
-// ต่อ 2 ตารางเข้าด้วยกันด้วย record_uid : interview_records + interview_records_pii
+//
+// ค้นหา/แบ่งหน้าทำฝั่งเซิร์ฟเวอร์ผ่าน RPC (migration 20260915_security_baseline.sql) — เบราว์เซอร์ไม่ดึง
+// PII ทั้งตารางมาค้นในหน่วยความจำอีก (SEC-05/13):
+//   interview_search  → รายการ (ชื่อ + เลขบัตรแบบ mask), นับรวมฝั่งเซิร์ฟเวอร์
+//   interview_get     → PII เต็มทีละคนเมื่อกดเปิด + audit 'view' ในธุรกรรมเดียว
+//   interview_export  → ตัวกรองชุดเดียวกับ search, audit 'export' ก่อนคืนข้อมูล
+//   interview_delete  → ลบ parent ครั้งเดียว (FK cascade) + audit ในธุรกรรมเดียว (SEC-12)
 // รายการที่ไม่ได้กรอกชื่อไว้ จะแสดงเป็น "(ไม่ระบุชื่อ)" ตามจริง
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Search, Plus, AlertTriangle, Loader2, Trash2, X, Download, FileText } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { useAuth } from '../../context/AuthContext'
-import { fetchAllPages } from '../../utils/supabasePagination'
 import { formatThaiDate } from '../../utils/heroMeta'
+import { downloadBlob, XLSX_MIME } from '../../utils/downloadBlob'
 import { IntelPage, Card, Field, Input, Select } from '../../components/intel/FormUI'
 import { DISTRICTS, formatNationalId, displayNationalId } from '../../utils/intelOptions'
 
 const PAGE_SIZE = 50
 const txt = (v) => (v == null || v === '' ? '—' : String(v))
-const isMissingSchema = (m) => /column .* does not exist|could not find the table|relation .* does not exist/i.test(m || '')
+const isMissingSchema = (m) => /column .* does not exist|could not find the (table|function)|relation .* does not exist|function .* does not exist/i.test(m || '')
+const nz = (v) => (v === '' || v == null ? null : v)
+
+// พารามิเตอร์ตัวกรอง → อาร์กิวเมนต์ RPC (ชุดเดียวกันทั้ง search และ export — ผลส่งออกตรงกับที่เห็นบนจอ)
+function rpcFilters(q, f) {
+  return {
+    p_q: nz(q.trim()), p_from: nz(f.from), p_to: nz(f.to),
+    p_district: nz(f.district), p_occupation: nz(f.occupation),
+    p_age_min: f.ageMin === '' ? null : Number(f.ageMin), p_age_max: f.ageMax === '' ? null : Number(f.ageMax),
+  }
+}
 
 export default function InterviewSearch() {
-  const { logAction } = useAuth()
   const [rows, setRows] = useState([])
-  const [pii, setPii] = useState({})
+  const [total, setTotal] = useState(0)
+  const [occupations, setOccupations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [detail, setDetail] = useState(null)
+  const [detail, setDetail] = useState(null)          // { record, pii } จาก interview_get
   const [busy, setBusy] = useState(false)
   // ลบ/ส่งออกไม่สำเร็จ — แยกจาก error ตอนโหลด ไม่งั้นตารางผลค้นหาหายทั้งหน้าจนต้องรีเฟรช
   const [actionError, setActionError] = useState(null)
@@ -34,7 +49,9 @@ export default function InterviewSearch() {
   const onQ = (v) => { setQ(v); setPage(1) }
   const onF = (patch) => { setF((s) => ({ ...s, ...patch })); setPage(1) }
 
+  // ตัวเลือกอาชีพ — โหลดครั้งเดียว (ไม่แตะ PII)
   useEffect(() => {
+<<<<<<< HEAD
     let cancelled = false
     ;(async () => {
       try {
@@ -54,53 +71,63 @@ export default function InterviewSearch() {
       }
     })()
     return () => { cancelled = true }
+=======
+    supabase.rpc('interview_filter_options').then(({ data }) => {
+      setOccupations((data || []).map((r) => r.occupation).filter(Boolean))
+    })
+>>>>>>> origin/fix/security-audit
   }, [])
 
-  const occupations = useMemo(
-    () => [...new Set(rows.map((r) => r.occupation).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'th')),
-    [rows],
-  )
+  // ค้นหาฝั่งเซิร์ฟเวอร์ — หน่วงพิมพ์ 300ms ; ทิ้งผลคำขอเก่าถ้าเงื่อนไขเปลี่ยนก่อนได้ผล
+  useEffect(() => {
+    let cancelled = false
+    const t = setTimeout(async () => {
+      setLoading(true)
+      const { data, error: e } = await supabase.rpc('interview_search', {
+        ...rpcFilters(q, f), p_limit: PAGE_SIZE, p_offset: (page - 1) * PAGE_SIZE,
+      })
+      if (cancelled) return
+      // error ≠ ไม่มีข้อมูล — แสดงเป็นข้อผิดพลาด ไม่ใช่ "ไม่พบรายการ" (SEC-13)
+      if (e) { setError(e.message); setRows([]); setTotal(0) }
+      else { setError(null); setRows(data || []); setTotal(data?.[0]?.total_count ?? 0) }
+      setLoading(false)
+    }, 300)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [q, f, page])
 
-  const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase()
-    const min = Number(f.ageMin), max = Number(f.ageMax)
-    return rows.filter((r) => {
-      const P = pii[r.record_uid]
-      if (term) {
-        // ใส่เลขบัตรทั้งแบบตัวเลขล้วนและแบบมีขีด — พิมพ์ค้นแบบไหนก็เจอ
-        const hay = [r.code, P?.full_name, P?.alias, P?.national_id, formatNationalId(P?.national_id),
-          P?.phone, r.doc_no].filter(Boolean).join(' ').toLowerCase()
-        if (!hay.includes(term)) return false
-      }
-      const d = r.surveyed_at ? String(r.surveyed_at).slice(0, 10) : ''
-      if (f.from && (!d || d < f.from)) return false
-      if (f.to && (!d || d > f.to)) return false
-      if (f.district && r.residence?.district !== f.district) return false
-      if (f.occupation && r.occupation !== f.occupation) return false
-      if (f.ageMin && (r.age == null || r.age < min)) return false
-      if (f.ageMax && (r.age == null || r.age > max)) return false
-      return true
-    }).sort((a, b) => String(b.surveyed_at || '').localeCompare(String(a.surveyed_at || '')))
-  }, [rows, pii, q, f])
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)   // กันหน้าค้างเกินหลังผลลัพธ์ลดลง
-  const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+
+  // เปิดรายละเอียด — ดึง PII เต็มเฉพาะแถวนี้ (เซิร์ฟเวอร์บันทึก audit 'view' ให้)
+  const openDetail = useCallback(async (r) => {
+    setBusy(true)
+    try {
+      const { data, error: e } = await supabase.rpc('interview_get', { p_record_uid: r.record_uid })
+      if (e) { setError(`เปิดรายละเอียดไม่สำเร็จ: ${e.message}`); return }
+      if (data?.record) setDetail({ record: data.record, pii: data.pii || null })
+    } finally { setBusy(false) }
+  }, [])
 
   const handleDelete = async (r) => {
-    const P = pii[r.record_uid]
-    const who = P?.full_name || r.doc_no || r.record_uid
+    const who = r.full_name || r.doc_no || r.record_uid
     if (!window.confirm(`ลบรายการนี้ถาวร?\n\n${who}\nวันที่สำรวจ ${formatThaiDate(r.surveyed_at) || '—'}\n\nลบแล้วกู้คืนไม่ได้`)) return
     setBusy(true)
     setActionError(null)
     try {
+<<<<<<< HEAD
       // ลบแถวหลักอย่างเดียว — FK on delete cascade ลบข้อมูลส่วนบุคคลให้ใน transaction เดียวกัน
       // (เดิมลบ PII ก่อน ถ้าลบแถวหลักล้มจะเหลือรายการที่ข้อมูลส่วนบุคคลหายไปแล้ว)
       const { error: e } = await supabase.from('interview_records').delete().eq('record_uid', r.record_uid)
       if (e) { setActionError(`ลบไม่สำเร็จ: ${e.message}`); return }
       logAction?.('delete', 'interview_records', r.record_uid, null)
+=======
+      const { data: ok, error: e } = await supabase.rpc('interview_delete', { p_record_uid: r.record_uid })
+      if (e) { setError(`ลบไม่สำเร็จ: ${e.message}`); return }
+      if (!ok) { setError('ลบไม่สำเร็จ: ไม่พบรายการ (อาจถูกลบไปแล้ว)'); return }
+>>>>>>> origin/fix/security-audit
       setDetail(null)
       setRows((s) => s.filter((x) => x.record_uid !== r.record_uid))
+      setTotal((n) => Math.max(0, n - 1))
     } finally { setBusy(false) }
   }
 
@@ -108,6 +135,11 @@ export default function InterviewSearch() {
     setBusy(true)
     setActionError(null)
     try {
+      // เซิร์ฟเวอร์บันทึก audit 'export' ก่อนคืนข้อมูล — ถ้า audit ล้ม จะไม่ได้ข้อมูล (SEC-10)
+      const { data, error: e } = await supabase.rpc('interview_export', rpcFilters(q, f))
+      if (e) { setError(`ส่งออกไม่สำเร็จ: ${e.message}`); return }
+      const list = data || []
+      if (!list.length) { setError('ส่งออกไม่สำเร็จ: ไม่มีรายการตรงเงื่อนไข'); return }
       const ExcelJS = (await import('exceljs')).default
       const wb = new ExcelJS.Workbook()
       wb.creator = '1386 Dashboard'; wb.created = new Date()
@@ -118,8 +150,8 @@ export default function InterviewSearch() {
         c.font = { bold: true, color: { argb: 'FFFFFFFF' } }
         c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }
       })
-      filtered.forEach((r) => {
-        const P = pii[r.record_uid] || {}
+      list.forEach((r) => {
+        const P = r.pii || {}
         ws.addRow([
           r.code || '', formatThaiDate(r.surveyed_at) || '', r.doc_no || '', P.full_name || '',
           displayNationalId(P.national_id) || '',
@@ -131,6 +163,7 @@ export default function InterviewSearch() {
       })
       header.forEach((h, i) => { ws.getColumn(i + 1).width = Math.max(12, h.length + 6) })
       const buf = await wb.xlsx.writeBuffer()
+<<<<<<< HEAD
       const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
       const a = document.createElement('a')
       a.href = url; a.download = `interview-records-${new Date().toISOString().slice(0, 10)}.xlsx`; a.click()
@@ -139,6 +172,9 @@ export default function InterviewSearch() {
       logAction?.('view', 'interview_records', null, { action: 'export', count: filtered.length })
     } catch (e) {
       setActionError(`ส่งออก Excel ไม่สำเร็จ: ${e.message}`)
+=======
+      downloadBlob(new Blob([buf], { type: XLSX_MIME }), `interview-records-${new Date().toISOString().slice(0, 10)}.xlsx`)
+>>>>>>> origin/fix/security-audit
     } finally { setBusy(false) }
   }
 
@@ -156,7 +192,7 @@ export default function InterviewSearch() {
               <Input value={q} onChange={(e) => onQ(e.target.value)} placeholder="เช่น ผส-69-0001 หรือ ชื่อ-สกุล" className="!pl-8" />
             </div>
           </Field>
-          <button type="button" onClick={handleExport} disabled={busy || !filtered.length}
+          <button type="button" onClick={handleExport} disabled={busy || loading || !total}
             className="inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 whitespace-nowrap">
             <Download size={15} /> Export Excel
           </button>
@@ -195,11 +231,12 @@ export default function InterviewSearch() {
             <AlertTriangle size={16} className="mt-0.5 shrink-0 text-rose-500" />
             <div>
               <p className="text-rose-600 font-medium">
-                {schemaMissing ? 'ยังไม่ได้สร้างตารางของแบบซักผู้เสพ' : `เกิดข้อผิดพลาด: ${error}`}
+                {schemaMissing ? 'ยังไม่ได้สร้างตาราง/ฟังก์ชันของแบบซักผู้เสพ' : `เกิดข้อผิดพลาด: ${error}`}
               </p>
               {schemaMissing && (
                 <p className="mt-1 text-slate-500">
-                  รัน <code className="px-1 py-0.5 rounded bg-slate-100 text-[12px]">supabase/migrations/20260910_interview_records.sql</code> บน Supabase ก่อน
+                  รัน <code className="px-1 py-0.5 rounded bg-slate-100 text-[12px]">supabase/migrations/20260910_interview_records.sql</code>
+                  {' '}และ <code className="px-1 py-0.5 rounded bg-slate-100 text-[12px]">20260915_security_baseline.sql</code> บน Supabase ก่อน
                 </p>
               )}
             </div>
@@ -208,9 +245,9 @@ export default function InterviewSearch() {
       )}
 
       {!loading && !error && (
-        <Card title={`ผลการค้นหา · ${filtered.length.toLocaleString()} รายการ`}
+        <Card title={`ผลการค้นหา · ${total.toLocaleString()} รายการ`}
           sub={totalPages > 1 ? `หน้า ${safePage} / ${totalPages}` : undefined}>
-          {filtered.length === 0 ? (
+          {rows.length === 0 ? (
             <div className="py-10 flex flex-col items-center gap-2 text-center">
               <FileText size={28} className="text-slate-300" />
               <p className="text-sm text-slate-500">ไม่พบรายการที่ตรงกับเงื่อนไข</p>
@@ -225,6 +262,7 @@ export default function InterviewSearch() {
                       <th className="py-2.5 pr-3 font-medium">วันที่สำรวจ</th>
                       <th className="py-2.5 pr-3 font-medium">เลขที่แบบ</th>
                       <th className="py-2.5 pr-3 font-medium">ชื่อ-สกุล</th>
+                      <th className="py-2.5 pr-3 font-medium">เลขบัตร</th>
                       <th className="py-2.5 pr-3 font-medium text-right">อายุ</th>
                       <th className="py-2.5 pr-3 font-medium">อาชีพ</th>
                       <th className="py-2.5 pr-3 font-medium">พื้นที่</th>
@@ -232,38 +270,36 @@ export default function InterviewSearch() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pageRows.map((r) => {
-                      const P = pii[r.record_uid]
-                      return (
-                        <tr key={r.record_uid} onClick={() => setDetail(r)}
-                          className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer">
-                          <td className="py-2.5 pr-3 whitespace-nowrap font-semibold text-[#243aa8]">{txt(r.code)}</td>
-                          <td className="py-2.5 pr-3 tabular-nums whitespace-nowrap text-slate-600">{formatThaiDate(r.surveyed_at) || '—'}</td>
-                          <td className="py-2.5 pr-3 text-slate-500 whitespace-nowrap">{txt(r.doc_no)}</td>
-                          <td className="py-2.5 pr-3 font-medium text-slate-800 whitespace-nowrap">
-                            {P?.full_name || <span className="text-slate-400 font-normal">(ไม่ระบุชื่อ)</span>}
-                          </td>
-                          <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600">{r.age ?? '—'}</td>
-                          <td className="py-2.5 pr-3 text-slate-500 max-w-[220px] truncate" title={r.occupation}>{txt(r.occupation)}</td>
-                          <td className="py-2.5 pr-3 text-slate-500 whitespace-nowrap">
-                            {[r.residence?.district?.replace(/^เขต/, ''), r.residence?.subdistrict].filter(Boolean).join(' · ') || '—'}
-                          </td>
-                          <td className="py-2.5 text-right">
-                            <button type="button" title="ลบรายการนี้" disabled={busy}
-                              onClick={(e) => { e.stopPropagation(); handleDelete(r) }}
-                              className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition disabled:opacity-40">
-                              <Trash2 size={15} />
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
+                    {rows.map((r) => (
+                      <tr key={r.record_uid} onClick={() => !busy && openDetail(r)}
+                        className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer">
+                        <td className="py-2.5 pr-3 whitespace-nowrap font-semibold text-[#243aa8]">{txt(r.code)}</td>
+                        <td className="py-2.5 pr-3 tabular-nums whitespace-nowrap text-slate-600">{formatThaiDate(r.surveyed_at) || '—'}</td>
+                        <td className="py-2.5 pr-3 text-slate-500 whitespace-nowrap">{txt(r.doc_no)}</td>
+                        <td className="py-2.5 pr-3 font-medium text-slate-800 whitespace-nowrap">
+                          {r.full_name || <span className="text-slate-400 font-normal">(ไม่ระบุชื่อ)</span>}
+                        </td>
+                        <td className="py-2.5 pr-3 tabular-nums whitespace-nowrap text-slate-500">{txt(r.national_id_masked)}</td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600">{r.age ?? '—'}</td>
+                        <td className="py-2.5 pr-3 text-slate-500 max-w-[220px] truncate" title={r.occupation}>{txt(r.occupation)}</td>
+                        <td className="py-2.5 pr-3 text-slate-500 whitespace-nowrap">
+                          {[r.district?.replace(/^เขต/, ''), r.subdistrict].filter(Boolean).join(' · ') || '—'}
+                        </td>
+                        <td className="py-2.5 text-right">
+                          <button type="button" title="ลบรายการนี้" disabled={busy}
+                            onClick={(e) => { e.stopPropagation(); handleDelete(r) }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition disabled:opacity-40">
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
               {totalPages > 1 && (
                 <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
-                  <span className="tabular-nums">แสดง {pageRows.length} จาก {filtered.length.toLocaleString()} รายการ</span>
+                  <span className="tabular-nums">แสดง {rows.length} จาก {total.toLocaleString()} รายการ</span>
                   <div className="flex gap-1.5">
                     <button onClick={() => setPage(Math.max(1, safePage - 1))} disabled={safePage === 1}
                       className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium disabled:opacity-40">ก่อนหน้า</button>
@@ -277,7 +313,10 @@ export default function InterviewSearch() {
         </Card>
       )}
 
-      {detail && <DetailPanel row={detail} pii={pii[detail.record_uid]} onClose={() => setDetail(null)} onDelete={() => handleDelete(detail)} busy={busy} />}
+      {detail && (
+        <DetailPanel row={detail.record} pii={detail.pii} onClose={() => setDetail(null)}
+          onDelete={() => handleDelete({ ...detail.record, full_name: detail.pii?.full_name })} busy={busy} />
+      )}
     </IntelPage>
   )
 }

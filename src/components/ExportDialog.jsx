@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Download } from 'lucide-react'
 import Modal from './Modal'
 import { formatThaiDate } from '../utils/heroMeta'
@@ -17,6 +17,15 @@ const ACTION_OPTIONS = [
   { key: 'action_investigating', label: 'อยู่ระหว่างสืบสวน' },
 ]
 const ALL_ACTION_KEYS = ACTION_OPTIONS.map((a) => a.key)
+
+// วันสุดท้ายของ "เดือนก่อนหน้า" ของวันที่ ISO (เช่น 2026-09-07 → 2026-08-31) — ใช้ preset "ถึงสิ้นเดือนที่แล้ว"
+function endOfPrevMonth(iso) {
+  if (!iso) return ''
+  const [y, m] = iso.split('-').map(Number)
+  const d = new Date(y, m - 1, 0)   // วันที่ 0 ของเดือน m = วันสุดท้ายของเดือน m-1
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+const isMonthEnd = (iso) => { if (!iso) return false; const [y, m, d] = iso.split('-').map(Number); return new Date(y, m, 0).getDate() === d }
 
 // การ์ดตัวเลือกแบบ radio — children (ถ้ามี) วางนอก <label> เสมอ กัน click ของ control ข้างในไป toggle radio ซ้อน
 function RadioOption({ selected, onSelect, title, desc, children }) {
@@ -43,14 +52,23 @@ function RadioOption({ selected, onSelect, title, desc, children }) {
  *   currentPeriodLabel — ข้อความอธิบายตัวกรองปัจจุบันของหน้า เช่น "ปีงบ 2569"
  *   defaultFrom, defaultTo — ค่าตั้งต้นของช่อง "กำหนดเอง" (ISO) — seed จากช่วงที่หน้ากำลังดูอยู่ ถ้ามี
  *   busy — export กำลังทำงาน (disable ปุ่ม + กัน backdrop close)
+ *   extraModes — รูปแบบรายงานเพิ่มของหน้านั้น [{ id, label, desc, noStatusFilter }] ; defaultMode — โหมดที่เลือกตอนเปิด
  */
-export default function ExportDialog({
+// wrapper: mount ตัว dialog ใหม่ทุกครั้งที่เปิด → state เริ่มจาก props สดเสมอ (ไม่ต้อง reset ใน effect)
+export default function ExportDialog(props) {
+  if (!props.open) return null
+  return <ExportDialogInner {...props} />
+}
+
+function ExportDialogInner({
   open, onClose, onConfirm,
   currentPeriodLabel = 'ตัวกรองปัจจุบัน',
   defaultFrom = '', defaultTo = '',
   busy = false,
+  extraModes = [], defaultMode = 'district',
 }) {
-  const [mode, setMode] = useState('district')
+  const modes = [...REPORT_MODES, ...extraModes]
+  const [mode, setMode] = useState(defaultMode)
   const [zoneDetail, setZoneDetail] = useState('top3')
   const [dateMode, setDateMode] = useState('filter')
   const [from, setFrom] = useState(defaultFrom)
@@ -59,26 +77,17 @@ export default function ExportDialog({
   const [statusPending, setStatusPending] = useState(true)
   const [selectedActions, setSelectedActions] = useState(ALL_ACTION_KEYS)
 
-  // รีเซ็ตทุกครั้งที่เปิด — กันค่าเก่าจากการ export รอบก่อนค้าง
-  useEffect(() => {
-    if (!open) return
-    setMode('district')
-    setZoneDetail('top3')
-    setDateMode('filter')
-    setFrom(defaultFrom)
-    setTo(defaultTo)
-    setStatusDone(true)
-    setStatusPending(true)
-    setSelectedActions(ALL_ACTION_KEYS)
-  }, [open, defaultFrom, defaultTo])
-
   const toggleAction = (key) => setSelectedActions((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key])
   const selectAllStatus = () => { setStatusDone(true); setStatusPending(true); setSelectedActions(ALL_ACTION_KEYS) }
   const clearAllStatus = () => { setStatusDone(false); setStatusPending(false); setSelectedActions([]) }
 
   const customIncomplete = dateMode === 'custom' && (!from || !to)
   const customInvalid = dateMode === 'custom' && from && to && from > to
-  const noStatusSelected = !statusDone && !statusPending
+  const hideStatus = !!modes.find((m) => m.id === mode)?.noStatusFilter
+  const noStatusSelected = !hideStatus && !statusDone && !statusPending
+  // preset ช่วงวันที่ — "ถึงสิ้นเดือนที่แล้ว" ใช้เมื่อข้อมูลล่าสุดยังไม่สิ้นเดือน (เช่น ถึง 7 ก.ย. → ตัดที่ 31 ส.ค.)
+  const prevMonthEnd = endOfPrevMonth(defaultTo)
+  const showPrevMonthPreset = !!defaultTo && !isMonthEnd(defaultTo) && prevMonthEnd >= (defaultFrom || '')
   const canConfirm = !busy && !customIncomplete && !customInvalid && !noStatusSelected
 
   const handleConfirm = () => {
@@ -106,7 +115,7 @@ export default function ExportDialog({
       <div className="space-y-4">
         <div className="space-y-1.5">
           <div className="text-xs font-semibold uppercase tracking-widest text-slate-500">รูปแบบรายงาน</div>
-          {REPORT_MODES.map((m) => (
+          {modes.map((m) => (
             <RadioOption key={m.id} selected={mode === m.id} onSelect={() => setMode(m.id)} title={m.label} desc={m.desc}>
               {m.id === 'zone' && (
                 <div className="space-y-1">
@@ -142,11 +151,27 @@ export default function ExportDialog({
               {!customInvalid && from && to && (
                 <p className="text-[11px] text-slate-400">{formatThaiDate(from)} – {formatThaiDate(to)}</p>
               )}
+              {(showPrevMonthPreset || defaultTo) && (
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {showPrevMonthPreset && (
+                    <button type="button" onClick={() => { setFrom(defaultFrom); setTo(prevMonthEnd) }}
+                      className={`px-2 py-1 rounded-md text-[11px] font-medium ring-1 transition ${to === prevMonthEnd && from === defaultFrom ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-700 ring-slate-200 hover:ring-slate-400'}`}>
+                      ถึงสิ้นเดือนที่แล้ว ({formatThaiDate(prevMonthEnd)})
+                    </button>
+                  )}
+                  {defaultTo && (
+                    <button type="button" onClick={() => { setFrom(defaultFrom); setTo(defaultTo) }}
+                      className={`px-2 py-1 rounded-md text-[11px] font-medium ring-1 transition ${to === defaultTo && from === defaultFrom ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-700 ring-slate-200 hover:ring-slate-400'}`}>
+                      ทั้งช่วงที่มีข้อมูล ({formatThaiDate(defaultTo)})
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </RadioOption>
         </div>
 
-        <div className="border-t border-slate-100 pt-4 space-y-2">
+        {!hideStatus && <div className="border-t border-slate-100 pt-4 space-y-2">
           <div className="flex items-center justify-between">
             <div className="text-xs font-semibold uppercase tracking-widest text-slate-500">กรองข้อมูล (เลือกได้หลายอย่าง)</div>
             <div className="flex items-center gap-2">
@@ -182,7 +207,7 @@ export default function ExportDialog({
           )}
 
           {noStatusSelected && <p className="text-[11px] text-rose-600">เลือกอย่างน้อย 1 สถานะ</p>}
-        </div>
+        </div>}
       </div>
     </Modal>
   )

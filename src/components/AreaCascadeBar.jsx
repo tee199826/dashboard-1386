@@ -6,12 +6,20 @@ import { GROUP_ORDER } from '../hooks/useAreaCascade'
 
 const Sep = () => <ChevronRight size={15} className="text-slate-300 shrink-0" />
 
-export default function AreaCascadeBar({ cascade }) {
+// disableSub/disableCommunity: section ที่ข้อมูลไม่ลึกถึงระดับนั้น (เช่น จับกุมมีถึงแขวง ไม่มีชุมชน) — ส่ง reason ไปเป็น tooltip
+// subdistrictOptions: override รายการแขวงจากชุดข้อมูลอื่น (จับกุมใช้ arrest_case.subdistrict ไม่ใช่ของ drug_incidents)
+export default function AreaCascadeBar({
+  cascade, disableSub = false, disableSubReason, disableCommunity = false, disableCommunityReason,
+  subdistrictOptions: subdistrictOptionsOverride,
+}) {
   const {
     group, district, subdistrict, community,
     setGroup, setDistrict, setSubdistrict, setCommunity,
-    districtOptions, subdistrictOptions, communityOptions,
+    districtOptions, subdistrictOptions: cascadeSubOptions, communityOptions,
   } = cascade
+  const subdistrictOptions = subdistrictOptionsOverride ?? cascadeSubOptions
+  const subOff = disableSub || district === 'all'
+  const communityOff = disableCommunity || subdistrict === 'all'
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 shadow-sm">
@@ -24,13 +32,17 @@ export default function AreaCascadeBar({ cascade }) {
       <FilterPill label="เขต" value={district} onChange={setDistrict}
         options={[['all', 'ทุกเขต'], ...districtOptions.map((d) => [d, d.replace(/^เขต/, '')])]} />
       <Sep />
-      <FilterPill label="แขวง" value={subdistrict} onChange={setSubdistrict}
-        options={[['all', district === 'all' ? 'เลือกเขตก่อน' : 'ทุกแขวง'], ...subdistrictOptions.map((s) => [s, s])]}
-        disabled={district === 'all'} />
+      <span title={disableSub ? disableSubReason : undefined} className="inline-flex">
+        <FilterPill label="แขวง" value={subdistrict} onChange={setSubdistrict}
+          options={[['all', disableSub ? (disableSubReason || 'ไม่มีข้อมูลระดับแขวง') : district === 'all' ? 'เลือกเขตก่อน' : 'ทุกแขวง'], ...subdistrictOptions.map((s) => [s, s])]}
+          disabled={subOff} />
+      </span>
       <Sep />
-      <FilterPill label="ชุมชน" value={community} onChange={setCommunity}
-        options={[['all', subdistrict === 'all' ? 'เลือกแขวงก่อน' : 'ทุกชุมชน'], ...communityOptions.map((c) => [c, c])]}
-        disabled={subdistrict === 'all'} />
+      <span title={disableCommunity ? disableCommunityReason : undefined} className="inline-flex">
+        <FilterPill label="ชุมชน" value={community} onChange={setCommunity}
+          options={[['all', disableCommunity ? (disableCommunityReason || 'ไม่มีข้อมูลระดับชุมชน') : subdistrict === 'all' ? 'เลือกแขวงก่อน' : 'ทุกชุมชน'], ...communityOptions.map((c) => [c, c])]}
+          disabled={communityOff} />
+      </span>
     </div>
   )
 }

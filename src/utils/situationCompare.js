@@ -4,7 +4,9 @@ import { filterByDateColumn } from './filterRows'
 import { groupOf } from '../hooks/useAreaCascade'
 
 // แถวผ่านตัวกรองพื้นที่ (กลุ่ม/เขต/แขวง/ชุมชน) ปัจจุบันของ cascade หรือไม่ — ไม่ผ่านตัวกรองเวลา (ใช้เทียบข้ามปีงบ)
+// รับ allRows (raw, ยังไม่ผ่าน bkkRows cleanup ของ useAreaCascade) จึงต้องกัน district ขยะ/ต่างจังหวัดเองที่นี่ด้วย
 export function matchesArea(r, cascade) {
+  if (!groupOf(r.district)) return false // ตัด district ที่ไม่ใช่ 1 ใน 50 เขต กทม. (เช่น "เขตอำเภอสนม" จากข้อมูลขยะ)
   if (cascade.group !== 'all' && groupOf(r.district) !== cascade.group) return false
   if (cascade.district !== 'all' && r.district !== cascade.district) return false
   if (cascade.subdistrict !== 'all' && r.subdistrict !== cascade.subdistrict) return false

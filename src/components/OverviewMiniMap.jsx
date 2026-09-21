@@ -8,6 +8,7 @@ export default function OverviewMiniMap({ points }) {
     <MapContainer
       center={[13.75, 100.5]}
       zoom={10}
+      preferCanvas   // จุดหลายพันจุดวาดบน canvas แทน SVG node ต่อจุด
       style={{ height: 280, width: '100%', borderRadius: '0.75rem', zIndex: 0 }}
       scrollWheelZoom={false}
       zoomControl={false}

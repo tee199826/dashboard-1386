@@ -1,9 +1,11 @@
 // exportSituation.js — Excel export ของหน้า /situation (จับกุม/บำบัด/ร้องเรียน, ตาราง drug_incidents)
 // รับแถวที่ filter ตาม view ปัจจุบันแล้วจากหน้าที่เรียก (ไม่ query เอง) — ตัวเลขตรงกับที่ user เห็นบนจอเสมอ
 import ExcelJS from 'exceljs'
+import { downloadBlob, XLSX_MIME } from './downloadBlob'
 import { formatThaiDate } from './heroMeta'
 import { DNAME_TO_GROUP } from './constants'
 import { BEHAVIOR_FLAGS, DRUG_FLAGS, RESULT_FLAGS, countFlag, drugCounts, rowsWithAnyDrug } from './drugFlags'
+import { DIMENSION_LABEL } from './treatmentData'
 
 const DISTRICT_ALIAS = { 'เขตราษฎร์บูรณะ': 'เขตราษฏร์บูรณะ' }
 const groupOf = (d) => DNAME_TO_GROUP[DISTRICT_ALIAS[d] || d] || 'ไม่ระบุ'
@@ -31,7 +33,7 @@ function styleHeaderRow(row) {
 }
 
 const PCT_COLUMNS = new Set(['%'])
-const isNumericHeader = (h) => !PCT_COLUMNS.has(h) && ['จำนวน'].includes(h)
+const isNumericHeader = (h) => !PCT_COLUMNS.has(h) && ['จำนวน', 'จำนวนคดี', 'ผู้ต้องหา(คน)', 'จำนวนผู้บำบัด', 'รายเก่า', 'รายใหม่'].includes(h)
 
 function writeSheet(workbook, name, metaLines, header, dataRows) {
   const ws = workbook.addWorksheet(name)
@@ -92,26 +94,48 @@ function detailRows(rows) {
     }))
 }
 
-/** Export ส่วนจับกุม — rows = แถว action_arrest=true ที่ filter ตาม view ปัจจุบันแล้ว */
-export async function exportArrestReport({ rows = [], periodLabel = 'ทั้งหมด', filterLabel = 'ทุกพื้นที่', filenamePrefix = 'arrest-report' } = {}) {
+const DIM_LABEL = { charge: 'ข้อหา', drug: 'ตัวยา' }
+
+/** Export ส่วนจับกุม — caseRows/dimRows = arrest_case/arrest_dim, ageSummaryRows = view arrest_age_summary (aggregate ที่ DB แล้ว) ที่ filter ตาม view ปัจจุบันแล้ว (สถิติทางการจาก CRIMES กทม.) */
+export async function exportArrestReport({ caseRows = [], dimRows = [], ageSummaryRows = [], periodLabel = 'ทั้งหมด', filterLabel = 'ทุกพื้นที่', filenamePrefix = 'arrest-report' } = {}) {
   const wb = new ExcelJS.Workbook()
   wb.creator = '1386 Dashboard'; wb.created = new Date()
-  const meta = buildMeta(rows, periodLabel, filterLabel)
 
-  const total = rows.length
-  const behRows = BEHAVIOR_FLAGS.map(([col, label]) => {
-    const n = countFlag(rows, col)
-    return { ข้อหา: label, จำนวน: n, '%': total ? n / total : 0 }
-  }).sort((a, b) => b.จำนวน - a.จำนวน)
-  writeSheet(wb, 'สรุปข้อหา', meta, ['ข้อหา', 'จำนวน', '%'], behRows)
+  const totalCases = caseRows.reduce((s, r) => s + (r.cases || 0), 0)
+  const meta = [
+    `ข้อมูล ณ วันที่: ${formatThaiDateTime(new Date())}`,
+    `ช่วงเวลา: ${periodLabel}`,
+    `ตัวกรอง: ${filterLabel}`,
+    `รวม ${totalCases.toLocaleString()} คดี (${caseRows.length.toLocaleString()} แถวเขต×ปีงบ)`,
+    'ที่มา: CRIMES กทม. (arrest_case / arrest_dim / arrest_age)',
+  ]
 
-  const withDrug = rowsWithAnyDrug(rows).length
-  const drugRows = drugCounts(rows).map((d) => ({ ตัวยา: d.name, จำนวน: d.value, '%': withDrug ? d.value / withDrug : 0 }))
-  writeSheet(wb, 'ของกลางตัวยา', [...meta, 'หมายเหตุ: 1 คดีมีของกลางหลายตัวยาได้ — ฐาน % คือคดีที่ระบุตัวยาได้เท่านั้น'],
-    ['ตัวยา', 'จำนวน', '%'], drugRows)
+  const summarySheetRows = caseRows
+    .slice()
+    .sort((a, b) => b.fiscal_year - a.fiscal_year || b.cases - a.cases)
+    .map((r) => ({ เขต: r.district, ปีงบ: r.fiscal_year, จำนวนคดี: r.cases || 0, 'ผู้ต้องหา(คน)': r.persons || 0 }))
+  writeSheet(wb, 'สรุปรายเขต', meta, ['เขต', 'ปีงบ', 'จำนวนคดี', 'ผู้ต้องหา(คน)'], summarySheetRows)
 
-  writeSheet(wb, 'รายละเอียด', meta,
-    ['วันที่', 'เขต', 'แขวง', 'ชุมชน', 'กลุ่มโซน', 'พฤติการณ์', 'ตัวยา', 'ผลตรวจสอบ', 'ผลดำเนินการ'], detailRows(rows))
+  const dimSheetRows = dimRows
+    .slice()
+    .sort((a, b) => b.fiscal_year - a.fiscal_year || a.dimension.localeCompare(b.dimension) || b.count - a.count)
+    .map((r) => ({ เขต: r.district, ปีงบ: r.fiscal_year, มิติ: DIM_LABEL[r.dimension] || r.dimension, ค่า: r.dim_value, จำนวน: r.count || 0 }))
+  writeSheet(wb, 'มิติ (ข้อหา ตัวยา)', [...meta, 'หมายเหตุ: ข้อหานับคน ตัวยานับคดี — 1 คน/คดีมีได้หลายค่าในมิติเดียวกัน'],
+    ['เขต', 'ปีงบ', 'มิติ', 'ค่า', 'จำนวน'], dimSheetRows)
+
+  // PDPA เข้ม: frontend ไม่เคยดึง arrest_age (รายคน มี percode) เลย — ageSummaryRows มาจาก view arrest_age_summary
+  // ที่ aggregate เป็น histogram ช่วงอายุ + min/max รายเขต×ปีงบ ไว้ที่ DB แล้ว (ดู useArrestData.js) — export จึงเป็นระดับเขต ไม่ระบุตัวคน
+  const ageSheetRows = ageSummaryRows
+    .slice()
+    .sort((a, b) => b.fiscal_year - a.fiscal_year || a.district.localeCompare(b.district, 'th'))
+    .map((r) => ({
+      เขต: r.district, ปีงบ: r.fiscal_year,
+      '12-19': r.bucket_12_19 || 0, '20-29': r.bucket_20_29 || 0, '30-39': r.bucket_30_39 || 0,
+      '40-49': r.bucket_40_49 || 0, '50+': r.bucket_50_plus || 0,
+      อายุต่ำสุด: r.min_age ?? '-', อายุสูงสุด: r.max_age ?? '-',
+    }))
+  writeSheet(wb, 'ช่วงอายุรายเขต', meta,
+    ['เขต', 'ปีงบ', '12-19', '20-29', '30-39', '40-49', '50+', 'อายุต่ำสุด', 'อายุสูงสุด'], ageSheetRows)
 
   await download(wb, filenamePrefix)
 }
@@ -146,41 +170,39 @@ export async function exportIncidentsReport({ rows = [], periodLabel = 'ทั�
   await download(wb, filenamePrefix)
 }
 
-/** Export ส่วนบำบัด — rows = แถว action_treatment=true ที่ filter ตาม view ปัจจุบันแล้ว */
-export async function exportTreatmentReport({ rows = [], periodLabel = 'ทั้งหมด', filterLabel = 'ทุกพื้นที่', filenamePrefix = 'treatment-report' } = {}) {
+/** Export ส่วนบำบัด — summaryRows/dimRows = treatment_summary/treatment_dim ที่ filter ตาม view ปัจจุบันแล้ว (สถิติทางการจาก บสต. กทม.) */
+export async function exportTreatmentReport({ summaryRows = [], dimRows = [], periodLabel = 'ทั้งหมด', filterLabel = 'ทุกพื้นที่', filenamePrefix = 'treatment-report' } = {}) {
   const wb = new ExcelJS.Workbook()
   wb.creator = '1386 Dashboard'; wb.created = new Date()
-  const meta = buildMeta(rows, periodLabel, filterLabel)
 
-  const withDrug = rowsWithAnyDrug(rows).length
-  const drugRows = drugCounts(rows).map((d) => ({ ตัวยา: d.name, จำนวน: d.value, '%': withDrug ? d.value / withDrug : 0 }))
-  writeSheet(wb, 'ตัวยา', [...meta, 'หมายเหตุ: 1 รายอาจเกี่ยวข้องหลายตัวยาได้ — ฐาน % คือรายที่ระบุตัวยาได้เท่านั้น'],
-    ['ตัวยา', 'จำนวน', '%'], drugRows)
+  const totalPerson = summaryRows.reduce((s, r) => s + (r.total_person || 0), 0)
+  const meta = [
+    `ข้อมูล ณ วันที่: ${formatThaiDateTime(new Date())}`,
+    `ช่วงเวลา: ${periodLabel}`,
+    `ตัวกรอง: ${filterLabel}`,
+    `รวม ${totalPerson.toLocaleString()} ราย (${summaryRows.length.toLocaleString()} แถวเขต×ปีงบ)`,
+    'ที่มา: บสต. กทม. (treatment_summary / treatment_dim)',
+  ]
 
-  const districtMap = {}
-  for (const r of rows) {
-    if (!r.district) continue
-    districtMap[r.district] = (districtMap[r.district] || 0) + 1
-  }
-  const total = rows.length
-  const areaRows = Object.entries(districtMap)
-    .map(([district, n]) => ({ เขต: district, กลุ่มโซน: groupOf(district), จำนวน: n, '%': total ? n / total : 0 }))
-    .sort((a, b) => b.จำนวน - a.จำนวน)
-  writeSheet(wb, 'พื้นที่', meta, ['เขต', 'กลุ่มโซน', 'จำนวน', '%'], areaRows)
+  const summarySheetRows = summaryRows
+    .slice()
+    .sort((a, b) => b.fiscal_year - a.fiscal_year || b.total_person - a.total_person)
+    .map((r) => ({
+      เขต: r.district, ปีงบ: r.fiscal_year, จำนวนผู้บำบัด: r.total_person || 0,
+      รายเก่า: r.old_person ?? '-', รายใหม่: r.new_person ?? '-',
+    }))
+  writeSheet(wb, 'สรุปรายเขต', meta, ['เขต', 'ปีงบ', 'จำนวนผู้บำบัด', 'รายเก่า', 'รายใหม่'], summarySheetRows)
 
-  writeSheet(wb, 'รายละเอียด', meta,
-    ['วันที่', 'เขต', 'แขวง', 'ชุมชน', 'กลุ่มโซน', 'พฤติการณ์', 'ตัวยา', 'ผลตรวจสอบ', 'ผลดำเนินการ'], detailRows(rows))
+  const dimSheetRows = dimRows
+    .slice()
+    .sort((a, b) => b.fiscal_year - a.fiscal_year || a.dimension.localeCompare(b.dimension) || b.total_person - a.total_person)
+    .map((r) => ({ เขต: r.district, ปีงบ: r.fiscal_year, มิติ: DIMENSION_LABEL[r.dimension] || r.dimension, ค่า: r.dim_value, จำนวน: r.total_person || 0 }))
+  writeSheet(wb, 'มิติ (ตัวยา อาชีพ เพศ ฯลฯ)', meta, ['เขต', 'ปีงบ', 'มิติ', 'ค่า', 'จำนวน'], dimSheetRows)
 
   await download(wb, filenamePrefix)
 }
 
 async function download(wb, filenamePrefix) {
   const buffer = await wb.xlsx.writeBuffer()
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${filenamePrefix}-${new Date().toISOString().slice(0, 10)}.xlsx`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(new Blob([buffer], { type: XLSX_MIME }), `${filenamePrefix}-${new Date().toISOString().slice(0, 10)}.xlsx`)
 }

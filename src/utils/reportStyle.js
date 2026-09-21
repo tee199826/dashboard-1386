@@ -16,3 +16,7 @@ export const readableOn = (hex) => {
 // legacy — เผื่อ component เก่ายังอ้าง (Recharts ถูกแทนด้วย CSS bar แล้ว)
 export const barTooltipStyle = { borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }
 export const labelStyle = { fontSize: 11, fill: '#475569', fontWeight: 600 }
+
+// ลำดับสีสำหรับโดนัทหลายชิ้น (เช่น ตัวยา top5) — วนใช้สีหลัก, "อื่นๆ" (index เกิน sequence) ใช้เทาอ่อนแยกต่างหาก
+export const DONUT_SEQUENCE = [COLORS.amber, COLORS.rose, COLORS.emerald, COLORS.slate, COLORS.slateSoft]
+export const DONUT_OTHER_COLOR = '#cbd5e1'

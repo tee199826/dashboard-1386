@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx'
 import { getDistrictFromLatLng } from '../lib/districtMatcher'
+import { assertUploadFile, MAX_SHEET_ROWS } from './uploadLimits'
 
 // ─── Mapping ชื่อ header ภาษาไทย → ชื่อคอลัมน์ DB ───────────────────────────
 
@@ -303,11 +304,13 @@ function parsePrice(text) {
  * workbook = raw workbook สำหรับ parser พิเศษ (เช่น parse115B)
  */
 export async function parseFile(file) {
+  assertUploadFile(file)   // นามสกุล + ขนาด ก่อนอ่านทั้งก้อน (SEC-11)
   const buffer = await file.arrayBuffer()
   const workbook = XLSX.read(buffer, {
     type: 'array',
     cellDates: true,
     dateNF: 'yyyy-mm-dd',
+    sheetRows: MAX_SHEET_ROWS,
   })
 
   const sheetName = workbook.SheetNames[0]

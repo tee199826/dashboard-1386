@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -66,12 +66,12 @@ function sumGroups(arr) {
 // ── sub-components ───────────────────────────────────────────────────────────
 function KpiCard({ icon, label, value, sub, gradient, delta }) {
   return (
-    <div className={`bg-gradient-to-br ${gradient} text-white rounded-2xl p-5 shadow-md relative overflow-hidden`}>
+    <div className={`bg-gradient-to-br ${gradient} text-white rounded-2xl p-4 sm:p-5 shadow-md relative overflow-hidden`}>
       <div className="absolute -right-2 -top-3 opacity-10 text-8xl select-none pointer-events-none">
         {icon}
       </div>
       <div className="text-xs font-semibold uppercase tracking-wide opacity-80 mb-2 leading-tight">{label}</div>
-      <div className="text-4xl font-black leading-none">{value}</div>
+      <div className="text-2xl sm:text-4xl font-black leading-none tabular-nums">{value}</div>
       {sub && <div className="text-xs mt-2 opacity-75">{sub}</div>}
       {delta != null && delta !== 0 && (
         <div className={`inline-flex items-center gap-1 mt-2 text-xs font-bold px-2 py-0.5 rounded-full ${
@@ -178,76 +178,104 @@ function HBarChart({ data, height }) {
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
-export default function Rpt114Dashboard() {
-  const [years,        setYears]        = useState([])
-  const [selectedYear, setSelectedYear] = useState('all')
+// years (optional, controlled): null = ทุกปี, [] = ไม่มีปี (ไม่ระบุวันที่), [ปี...] = ปีงบที่เลือก
+// onYearsChange(v): v = 'all' | 'YYYY' (รูปแบบเดียวกับ select ของหน้า Operations)
+// ไม่ส่ง years = ทำงานเองแบบเดิม (state ภายใน)
+// yearOptions / lastUpdated (optional): หน้าแม่มีอยู่แล้ว ส่งมาเพื่อไม่ต้อง query ซ้ำ
+export default function Rpt114Dashboard({ years: yearsProp, onYearsChange, yearOptions, lastUpdated: lastUpdatedProp } = {}) {
+  const controlled = yearsProp !== undefined
+  const [ownYears,     setYears]        = useState([])
+  const years = yearOptions ?? ownYears
+  const [localYear,    setLocalYear]    = useState('all')
   const [compareOn,    setCompareOn]    = useState(false)
+
+  const selectedYears = useMemo(
+    () => (controlled ? yearsProp : (localYear === 'all' ? null : [localYear])),
+    [controlled, yearsProp, localYear])
+  const single = selectedYears?.length === 1 ? selectedYears[0] : null     // ปีเดียว → ใช้แถวสรุปตรงๆ + เทียบปีก่อนได้
+  const selectedYear = selectedYears === null ? 'all' : (single ?? (selectedYears.length ? selectedYears.join(',') : 'none'))
+  const changeYear = (v) => {
+    if (controlled) onYearsChange?.(v)
+    else setLocalYear(v === 'all' ? 'all' : Number(v))
+    if (v === 'all') setCompareOn(false)
+  }
   const [rows,         setRows]         = useState([])
   const [prevRows,     setPrevRows]     = useState([])
   const [loading,      setLoading]      = useState(true)
-  const [lastUpdated,  setLastUpdated]  = useState(null)
+  const [ownLastUpdated, setLastUpdated] = useState(null)
+  const lastUpdated = lastUpdatedProp !== undefined ? lastUpdatedProp : ownLastUpdated
 
-  // fetch distinct years + last uploaded_at
+  // fetch distinct years + last uploaded_at (เฉพาะตอนหน้าแม่ไม่ได้ส่งมา)
   useEffect(() => {
-    const init = async () => {
-      const { data } = await supabase.from('report_114').select('fiscal_year')
-      if (!data || data.length === 0) { setLoading(false); return }
-      const ys = [...new Set(data.map(r => r.fiscal_year))].filter(Boolean).sort((a,b) => b - a)
-      setYears(ys)
-      // selectedYear stays 'all' (default)
+    if (yearOptions === undefined) {
+      supabase.from('report_114').select('fiscal_year').then(({ data }) => {
+        const ys = [...new Set((data ?? []).map(r => r.fiscal_year))].filter(Boolean).sort((a,b) => b - a)
+        setYears(ys)
+      })
     }
-    init()
-    supabase.from('upload_batches').select('uploaded_at')
-      .eq('target_table','report_114')
-      .order('uploaded_at',{ ascending:false }).limit(1)
-      .then(({ data }) => setLastUpdated(data?.[0]?.uploaded_at ?? null))
-  }, [])
+    if (lastUpdatedProp === undefined) {
+      supabase.from('upload_batches').select('uploaded_at')
+        .eq('target_table','report_114')
+        .order('uploaded_at',{ ascending:false }).limit(1)
+        .then(({ data }) => setLastUpdated(data?.[0]?.uploaded_at ?? null))
+    }
+  }, [yearOptions, lastUpdatedProp])
 
-  // fetch rows (all years when selectedYear==='all', else specific year)
+  // fetch rows (ทุกปี / ปีเดียว / หลายปี) — reqId กัน response เก่ามาทีหลัง
+  const reqIdRef = useRef(0)
   useEffect(() => {
+    const reqId = ++reqIdRef.current
     setLoading(true)
     const doFetch = async () => {
       let q = supabase.from('report_114').select('*')
-      if (selectedYear !== 'all') q = q.eq('fiscal_year', selectedYear)
-      const { data } = await q
+      if (selectedYears?.length === 1) q = q.eq('fiscal_year', selectedYears[0])
+      else if (selectedYears?.length > 1) q = q.in('fiscal_year', selectedYears)
+      const { data } = selectedYears?.length === 0 ? { data: [] } : await q
+      if (reqId !== reqIdRef.current) return
       setRows(data ?? [])
-
-      if (compareOn && selectedYear !== 'all' && years.length >= 2) {
-        const prev = years.find(y => y < selectedYear)
-        if (prev) {
-          const { data: pd } = await supabase.from('report_114').select('*').eq('fiscal_year', prev)
-          setPrevRows(pd ?? [])
-        } else {
-          setPrevRows([])
-        }
-      } else {
-        setPrevRows([])
-      }
       setLoading(false)
     }
     doFetch()
-  }, [selectedYear, compareOn, years])
+  }, [selectedYears])
+
+  // ปีก่อนหน้าสำหรับเทียบ — แยกจาก rows จะได้ไม่ refetch rows ตอน years/compareOn เปลี่ยน
+  const prevYear = (compareOn && single != null && years.length >= 2) ? (years.find(y => y < single) ?? null) : null
+  useEffect(() => {
+    if (prevYear == null) return
+    let cancelled = false
+    supabase.from('report_114').select('*').eq('fiscal_year', prevYear)
+      .then(({ data }) => { if (!cancelled) setPrevRows(data ?? []) })
+    return () => { cancelled = true }
+  }, [prevYear])
 
   const summary = useMemo(() => {
-    if (selectedYear !== 'all') return getSummary(rows)
+    if (single != null) return getSummary(rows)
     return sumRows(rows.filter(r => r.group_no == null))
-  }, [rows, selectedYear])
+  }, [rows, single])
 
   const groups = useMemo(() => {
-    if (selectedYear !== 'all') return getGroups(rows)
+    if (single != null) return getGroups(rows)
     return sumGroups(rows)
-  }, [rows, selectedYear])
+  }, [rows, single])
 
-  const prevSummary = useMemo(() => getSummary(prevRows), [prevRows])
+  // ใช้เฉพาะเมื่อ prevRows เป็นของปีที่ต้องการจริง (กันค่าค้างจากปีก่อนหน้าที่เคยโหลด)
+  const prevSummary = useMemo(() => {
+    if (prevYear == null) return null
+    const sm = getSummary(prevRows)
+    return sm && sm.fiscal_year === prevYear ? sm : null
+  }, [prevRows, prevYear])
 
   const periodLabel = useMemo(() => {
-    if (selectedYear !== 'all') return summary?.period ?? null
-    if (!years.length) return null
-    const sorted = [...years].sort((a, b) => a - b)
-    return sorted.length === 1
-      ? `ปีงบ ${sorted[0]}`
-      : `ปีงบ ${sorted[0]}–${sorted[sorted.length - 1]}`
-  }, [selectedYear, years, summary])
+    if (single != null) return summary?.period ?? null
+    const ys = selectedYears ?? years
+    if (!ys.length) return null
+    const sorted = [...ys].sort((a, b) => a - b)
+    if (sorted.length === 1) return `ปีงบ ${sorted[0]}`
+    const contiguous = sorted.every((y, i) => i === 0 || y === sorted[i - 1] + 1)
+    return contiguous
+      ? `ปีงบ ${sorted[0]}–${sorted[sorted.length - 1]}`
+      : `ปีงบ ${sorted.join(', ')}`
+  }, [single, selectedYears, years, summary])
 
   const { drugData, drugLogScale } = useMemo(() => {
     if (!summary) return { drugData:[], drugLogScale:false }
@@ -310,8 +338,12 @@ export default function Rpt114Dashboard() {
   if (!loading && (!rows.length || !summary)) return (
     <div className="flex flex-col items-center justify-center py-20 text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
       <BarChart2 size={48} className="mb-3 text-slate-300" />
-      <div className="text-base font-semibold text-slate-500">ยังไม่มีข้อมูล RPT_114</div>
-      <div className="text-sm mt-1 text-slate-400">กรุณาอัปโหลดไฟล์ RPT_114 ผ่านปุ่ม "นำเข้า RPT_114" ด้านบน</div>
+      <div className="text-base font-semibold text-slate-500">
+        {selectedYears?.length === 0 ? 'RPT_114 ไม่มีข้อมูลสำหรับ "ไม่ระบุวันที่"' : 'ยังไม่มีข้อมูล RPT_114'}
+      </div>
+      <div className="text-sm mt-1 text-slate-400">
+        {selectedYears?.length === 0 ? 'เลือกปีงบประมาณด้านบนเพื่อดูรายงาน' : 'กรุณาอัปโหลดไฟล์ RPT_114 ผ่านปุ่ม "นำเข้า RPT_114" ด้านบน'}
+      </div>
     </div>
   )
 
@@ -344,18 +376,18 @@ export default function Rpt114Dashboard() {
             <label className="text-sm font-medium text-slate-600">ปีงบประมาณ:</label>
             <select
               value={selectedYear}
-              onChange={e => {
-                const v = e.target.value
-                setSelectedYear(v === 'all' ? 'all' : Number(v))
-                if (v === 'all') setCompareOn(false)
-              }}
+              onChange={e => changeYear(e.target.value)}
               className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white"
             >
               <option value="all">รวมทุกปีงบ</option>
               {years.map(y => <option key={y} value={y}>ปีงบ {y}</option>)}
+              {/* หลายปีจาก DateFilter ของหน้า — ให้ select แสดงค่าได้ */}
+              {selectedYears?.length > 1 && (
+                <option value={selectedYear}>ปีงบ {[...selectedYears].sort((a, b) => a - b).join(', ')}</option>
+              )}
             </select>
           </div>
-          {selectedYear !== 'all' && years.length >= 2 && (
+          {single != null && years.length >= 2 && (
             <button onClick={() => setCompareOn(v => !v)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border transition ${
                 compareOn ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400'
@@ -366,7 +398,7 @@ export default function Rpt114Dashboard() {
           )}
           {compareOn && prevSummary && (
             <span className="text-xs text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
-              เปรียบเทียบกับปีงบ {years.find(y => y < selectedYear)}
+              เปรียบเทียบกับปีงบ {years.find(y => y < single)}
             </span>
           )}
         </div>
@@ -478,7 +510,7 @@ export default function Rpt114Dashboard() {
               <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center text-2xl">📋</div>
               <div>
                 <div className="font-bold text-lg">ตารางรายละเอียดรายกลุ่ม</div>
-                <div className="text-xs text-slate-300 mt-0.5">กลุ่ม 1–5 + รวมทั้งหมด · {selectedYear === 'all' ? 'รวมทุกปีงบประมาณ' : `ปีงบ ${selectedYear}`}</div>
+                <div className="text-xs text-slate-300 mt-0.5">กลุ่ม 1–5 + รวมทั้งหมด · {selectedYears === null ? 'รวมทุกปีงบประมาณ' : periodLabel}</div>
               </div>
             </div>
           </div>

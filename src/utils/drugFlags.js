@@ -60,3 +60,14 @@ export function rowsWithAnyDrug(rows) {
   return rows.filter((r) =>
     DRUG_FLAGS.some(([c]) => r[c]) || (Array.isArray(r.drug_others) && r.drug_others.some(Boolean)))
 }
+
+// คอลัมน์ drug_incidents ที่หน้าสาธารณะใช้ — แทน select('*') (SEC-07 data minimisation)
+// ตัด address (ที่อยู่รายบุคคล) / source / content_hash ที่ไม่มีหน้าไหนแสดง ออกจาก response ตั้งแต่ API
+export const DRUG_INCIDENT_PUBLIC_COLUMNS = [
+  'id', 'received_date', 'fiscal_year', 'group_no', 'community', 'subdistrict', 'district', 'community_code',
+  'lat', 'lng', 'area_group', 'created_at',
+  ...BEHAVIOR_FLAGS.map(([c]) => c),
+  ...DRUG_FLAGS.map(([c]) => c), 'drug_others',
+  ...RESULT_FLAGS.map(([c]) => c),
+  ...ACTION_FLAGS.map(([c]) => c),
+].join(', ')

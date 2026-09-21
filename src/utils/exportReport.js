@@ -1,6 +1,7 @@
 // exportReport.js — multi-sheet Excel export ของรายงาน drug_incidents (ใช้ร่วม /districts, /bkn, /radar)
 // รับ "แถวที่ filter ตาม view ปัจจุบันแล้ว" จากหน้าที่เรียก (ไม่ query เอง) — รับประกันตัวเลขตรงกับที่ user เห็นบนจอ
 import ExcelJS from 'exceljs'
+import { downloadBlob, XLSX_MIME } from './downloadBlob'
 import { formatThaiDate } from './heroMeta'
 import { DNAME_TO_GROUP } from './constants'
 
@@ -319,7 +320,7 @@ const PCT_COLUMNS = new Set(['% ดำเนินการ', '% สำเร็
 const isNumericHeader = (h) => !PCT_COLUMNS.has(h) && [
   'ร้องเรียนทั้งหมด', 'ดำเนินการแล้ว', 'ยังไม่ดำเนินการ', 'ยังไม่ดำเนิน', 'แหล่งซื้อ', 'จำนวนร้องเรียน', 'อันดับ', 'จำนวน',
   'จำนวนเขต', 'ร้องเรียน', 'เหตุการณ์', 'จับกุม', 'ตรวจค้น', 'บำบัด', 'สืบสวน', 'หลบหนี',
-  'เสพ', 'จำหน่าย', 'เสพและจำหน่าย', 'ผลิต', 'รวม',
+  'เสพ', 'ค้า', 'เสพ-ค้า', 'จำหน่าย', 'เสพและจำหน่าย', 'ผลิต', 'รวม',
 ].includes(h)
 
 // ── เขียน 1 sheet: metadata N บรรทัด + header (bold+fill) + data, auto-width + number format ──
@@ -509,11 +510,37 @@ export async function exportDrugIncidentReport({
   }
 
   const buffer = await wb.xlsx.writeBuffer()
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${filenamePrefix}${mode === 'zone' ? '-zone' : ''}-${new Date().toISOString().slice(0, 10)}.xlsx`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadBlob(new Blob([buffer], { type: XLSX_MIME }),
+    `${filenamePrefix}${mode === 'zone' ? '-zone' : ''}-${new Date().toISOString().slice(0, 10)}.xlsx`)
+}
+
+/**
+ * export ตารางพฤติการณ์รายเขต (หน้า /districts/behavior-table) — รับแถวที่ aggregate ตาม view ปัจจุบันแล้ว
+ * @param {object} opts
+ *   - rows: [{ district, 'เสพ', 'ค้า', 'เสพ/ค้า', 'ผลิต', total }] — ครบ 50 เขต กทม. (pre-seed ฝั่งหน้าเรียก)
+ *   - periodLabel: ข้อความช่วงเวลาที่ใช้อยู่
+ */
+export async function exportBehaviorTable({ rows = [], periodLabel = 'ทั้งหมด', filenamePrefix = 'behavior-table' } = {}) {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = '1386 Dashboard'
+  wb.created = new Date()
+
+  const meta = [
+    `ข้อมูล ณ วันที่: ${formatThaiDateTime(new Date())}`,
+    `ช่วงเวลา: ${periodLabel}`,
+  ]
+
+  const dataRows = rows.map((r) => ({
+    เขต: r.district,
+    กลุ่มโซน: DNAME_TO_GROUP[r.district] || '-',
+    เสพ: r['เสพ'] || 0,
+    ค้า: r['ค้า'] || 0,
+    'เสพ-ค้า': r['เสพ/ค้า'] || 0,
+    ผลิต: r['ผลิต'] || 0,
+    รวม: r.total || 0,
+  }))
+  writeSheet(wb, 'พฤติการณ์รายเขต', meta, ['เขต', 'กลุ่มโซน', 'เสพ', 'ค้า', 'เสพ-ค้า', 'ผลิต', 'รวม'], dataRows)
+
+  const buffer = await wb.xlsx.writeBuffer()
+  downloadBlob(new Blob([buffer], { type: XLSX_MIME }), `${filenamePrefix}-${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
