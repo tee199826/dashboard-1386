@@ -352,9 +352,9 @@ export default function SubstanceUsers() {
   }, [agg.districtTable, search, sortDesc])
 
   if (loading) return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-violet-50/30">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
-        <div className="h-40 rounded-2xl bg-gradient-to-r from-violet-200 to-purple-200 animate-pulse" />
+        <div className="h-40 rounded-2xl bg-gradient-to-r from-blue-200 to-indigo-200 animate-pulse" />
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {Array.from({ length: 5 }).map((_, i) => <KpiSkeleton key={i} />)}
         </div>
@@ -401,19 +401,19 @@ export default function SubstanceUsers() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-violet-50/30">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
 
-        {/* Hero — ม่วง gradient + glassmorphism + count badge */}
+        {/* Hero — น้ำเงิน gradient + glassmorphism + count badge (โทนเดียวกับหน้าอื่น) */}
         <header className="relative overflow-hidden rounded-2xl px-8 py-7 text-white
-          bg-gradient-to-r from-violet-700 via-purple-700 to-violet-800 shadow-2xl shadow-violet-900/30">
+          bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 shadow-2xl shadow-blue-900/30">
           <div className="absolute -top-12 -right-12 w-48 h-48 bg-white/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-8 -left-8 w-40 h-40 bg-fuchsia-400/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-8 -left-8 w-40 h-40 bg-indigo-400/20 rounded-full blur-3xl pointer-events-none" />
           <div className="relative flex items-start justify-between gap-4">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-widest text-violet-200 mb-2">Substance Users · Drug Survey Data</div>
+              <div className="text-xs font-semibold uppercase tracking-widest text-blue-200 mb-2">Substance Users · Drug Survey Data</div>
               <h1 className="text-4xl font-bold tracking-tight">แบบเก็บข้อมูลจากผู้เสพ</h1>
-              <p className="text-violet-200 text-base mt-2 leading-relaxed">ข้อมูลสำรวจผู้เสพยาเสพติด</p>
+              <p className="text-blue-200 text-base mt-2 leading-relaxed">ข้อมูลสำรวจผู้เสพยาเสพติด</p>
             </div>
             <div className="flex flex-col items-end gap-3 shrink-0">
               <HeroActions onRefresh={load} refreshing={loading} sourceInfo={sourceInfo} />
@@ -440,11 +440,11 @@ export default function SubstanceUsers() {
         <section>
           <SectionHeader title="ภาพรวม" />
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            <KpiCard icon={<Users size={26} />} gradient="from-violet-500 to-purple-600" shadow="shadow-violet-500/30"
+            <KpiCard icon={<Users size={26} />} gradient="from-blue-500 to-indigo-600" shadow="shadow-blue-500/30"
               label="ผู้เสพรวม" value={<AnimatedCounter value={agg.total} />} sub="ทั้งหมดในระบบ" />
             <KpiCard icon={<Activity size={26} />} gradient="from-cyan-500 to-blue-600" shadow="shadow-cyan-500/30"
               label="อายุเฉลี่ยของผู้เสพ" value={<AnimatedCounter value={agg.avgAge} decimals={1} />} sub="ปี" />
-            <KpiCard icon={<Clock size={26} />} gradient="from-fuchsia-500 to-purple-600" shadow="shadow-fuchsia-500/30"
+            <KpiCard icon={<Clock size={26} />} gradient="from-indigo-500 to-sky-600" shadow="shadow-indigo-500/30"
               label="อายุที่เริ่มเสพเฉลี่ย"
               value={agg.avgFirstAge > 0 ? <AnimatedCounter value={agg.avgFirstAge} decimals={1} /> : '—'}
               sub={agg.avgFirstAge > 0 ? 'ปี' : 'ไม่มีข้อมูล'} />
@@ -516,12 +516,12 @@ function TabBar({ tabs, active, onChange, viewMode, setViewMode }) {
               tabIndex={isActive ? 0 : -1}
               onClick={() => onChange(t.id)}
               onKeyDown={e => onKeyDown(e, i)}
-              className={`relative px-5 py-4 text-[15px] transition whitespace-nowrap hover:text-violet-700
-                ${isActive ? 'text-violet-700 font-bold' : 'text-slate-500 font-medium'}`}
+              className={`relative px-5 py-4 text-[15px] transition whitespace-nowrap hover:text-blue-700
+                ${isActive ? 'text-blue-700 font-bold' : 'text-slate-500 font-medium'}`}
             >
               <span className="flex items-center gap-2">{Icon && <Icon size={18} />}{t.label}</span>
               {isActive && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-gradient-to-r from-violet-500 to-purple-600" />
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600" />
               )}
             </button>
           )
@@ -530,7 +530,7 @@ function TabBar({ tabs, active, onChange, viewMode, setViewMode }) {
           onClick={() => setViewMode(allOn ? 'tabs' : 'all')}
           aria-pressed={allOn}
           className={`ml-auto px-5 py-4 text-[15px] font-medium transition whitespace-nowrap inline-flex items-center gap-1.5
-            ${allOn ? 'text-violet-700' : 'text-slate-500 hover:text-violet-700'}`}
+            ${allOn ? 'text-blue-700' : 'text-slate-500 hover:text-blue-700'}`}
         >
           <LayoutGrid size={18} />
           แสดงทั้งหมด
@@ -564,7 +564,7 @@ function HistorySection({ agg, yearCtl }) {
           {agg.firstUseHist.length ? <VBar data={agg.firstUseHist} palette="amber" /> : <Empty />}
         </ChartCard>
         <ChartCard title="ชนิดยาที่ใช้ครั้งแรก" desc="ชนิดยาเสพติดที่ใช้เป็นครั้งแรก" {...yearCtl}><HBar data={agg.firstDrug} unit=" คน" rainbow /></ChartCard>
-        <ChartCard title="สาเหตุการเสพครั้งแรก" desc="เหตุผลที่เริ่มใช้ยาเสพติด" {...yearCtl}><HBar data={agg.firstReason} unit=" คน" palette="violet" /></ChartCard>
+        <ChartCard title="สาเหตุการเสพครั้งแรก" desc="เหตุผลที่เริ่มใช้ยาเสพติด" {...yearCtl}><HBar data={agg.firstReason} unit=" คน" palette="indigo" /></ChartCard>
         {/* ย้ายมาจากแท็บ "ราคา" — ยาที่ใช้ปัจจุบันเป็นส่วนหนึ่งของประวัติการเสพ */}
         <ChartCard title="ยาเสพติดที่ใช้ปัจจุบัน" desc="ชนิดยาที่ใช้เป็นประจำในปัจจุบัน" {...yearCtl}>
           {agg.regularDrugs.length ? <HBar data={agg.regularDrugs} unit=" ราย" palette="teal" /> : <Empty />}
@@ -633,7 +633,7 @@ function DealersSection({ agg, yearCtl, mapKey, districtLayerKey, districtLayerS
           hover:shadow-md transition">
           <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
-              <MapPin size={16} className="text-violet-700 shrink-0" />
+              <MapPin size={16} className="text-blue-700 shrink-0" />
               <h3 className="text-sm font-semibold text-slate-900 truncate">แผนที่กรุงเทพมหานคร · เขตที่เข้มกว่า = มีแหล่งซื้อมากกว่า</h3>
             </div>
           </div>
@@ -668,7 +668,7 @@ function DealersSection({ agg, yearCtl, mapKey, districtLayerKey, districtLayerS
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหาเขต..."
-                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 outline-none transition" />
+                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition" />
             </div>
           </div>
           <div className="overflow-y-auto max-h-[620px]">
@@ -677,7 +677,7 @@ function DealersSection({ agg, yearCtl, mapKey, districtLayerKey, districtLayerS
                 <tr className="border-b border-slate-200">
                   <th className="text-left px-6 py-4 text-xs font-semibold text-slate-700 uppercase tracking-wider">เขต</th>
                   <th onClick={() => setSortDesc(s => !s)}
-                    className="text-right px-6 py-4 text-xs font-semibold text-slate-700 uppercase tracking-wider cursor-pointer select-none whitespace-nowrap hover:text-violet-700 transition">
+                    className="text-right px-6 py-4 text-xs font-semibold text-slate-700 uppercase tracking-wider cursor-pointer select-none whitespace-nowrap hover:text-blue-700 transition">
                     จำนวนคน {sortDesc ? '▼' : '▲'}
                   </th>
                 </tr>
@@ -690,7 +690,7 @@ function DealersSection({ agg, yearCtl, mapKey, districtLayerKey, districtLayerS
                       onClick={() => setPickedDistrict?.(on ? null : d.name)}
                       title={`ดูชื่อแหล่งซื้อใน${d.name}`}
                       className={`border-b border-slate-100 last:border-0 cursor-pointer transition-colors ${
-                        on ? 'bg-violet-100 text-violet-900 font-semibold' : `${i % 2 ? 'bg-slate-50/50' : 'bg-white'} hover:bg-violet-50 hover:text-violet-900`
+                        on ? 'bg-blue-100 text-blue-900 font-semibold' : `${i % 2 ? 'bg-slate-50/50' : 'bg-white'} hover:bg-blue-50 hover:text-blue-900`
                       }`}>
                       <td className="px-6 py-3 text-sm">{d.name}</td>
                       <td className="px-6 py-3 text-sm text-right font-medium tabular-nums">{d.count.toLocaleString()}</td>
@@ -711,7 +711,7 @@ function DealersSection({ agg, yearCtl, mapKey, districtLayerKey, districtLayerS
             ) : (
               <>
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <h4 className="text-sm font-bold text-violet-900 truncate">แหล่งซื้อใน{pickedDistrict}</h4>
+                  <h4 className="text-sm font-bold text-blue-900 truncate">แหล่งซื้อใน{pickedDistrict}</h4>
                   <button onClick={() => setPickedDistrict?.(null)}
                     className="text-xs text-slate-400 hover:text-slate-700 shrink-0">ล้าง</button>
                 </div>
@@ -720,9 +720,9 @@ function DealersSection({ agg, yearCtl, mapKey, districtLayerKey, districtLayerS
                 ) : (
                   <ul className="space-y-1 max-h-56 overflow-auto">
                     {pickedSpots.map((sp) => (
-                      <li key={sp.name} className="flex items-center justify-between gap-3 text-sm px-2 py-1.5 rounded-md bg-violet-50">
+                      <li key={sp.name} className="flex items-center justify-between gap-3 text-sm px-2 py-1.5 rounded-md bg-blue-50">
                         <span className="text-slate-700 truncate" title={sp.name}>{sp.name}</span>
-                        <span className="text-violet-800 font-semibold tabular-nums shrink-0">{sp.count}</span>
+                        <span className="text-blue-800 font-semibold tabular-nums shrink-0">{sp.count}</span>
                       </li>
                     ))}
                   </ul>
@@ -762,18 +762,18 @@ function FooterPill({ periodLabel }) {
 function ChartCard({ title, desc, children }) {
   return (
     <div className="group relative bg-white rounded-2xl p-6 border border-slate-100
-      shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_40px_rgba(124,58,237,0.12)]
-      hover:border-violet-200 hover:-translate-y-0.5 transition-all duration-300">
+      shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_40px_rgba(37,99,235,0.12)]
+      hover:border-blue-200 hover:-translate-y-0.5 transition-all duration-300">
       {/* accent line top */}
-      <div className="absolute top-0 left-6 right-6 h-0.5 bg-gradient-to-r from-transparent via-violet-300 to-transparent opacity-0 group-hover:opacity-100 transition" />
+      <div className="absolute top-0 left-6 right-6 h-0.5 bg-gradient-to-r from-transparent via-blue-300 to-transparent opacity-0 group-hover:opacity-100 transition" />
       <div className="flex items-start justify-between mb-4">
         <div>
           <h3 className="text-lg font-bold text-slate-900">{title}</h3>
           {desc && <p className="text-sm text-slate-500 mt-0.5">{desc}</p>}
         </div>
         <div className="flex items-center gap-1 text-slate-300">
-          <button type="button" className="hover:text-violet-600 p-1 transition" aria-label="ขยาย"><Maximize2 size={14} /></button>
-          <button type="button" className="hover:text-violet-600 px-1 text-lg leading-none -mt-1 transition" aria-label="เพิ่มเติม">⋯</button>
+          <button type="button" className="hover:text-blue-600 p-1 transition" aria-label="ขยาย"><Maximize2 size={14} /></button>
+          <button type="button" className="hover:text-blue-600 px-1 text-lg leading-none -mt-1 transition" aria-label="เพิ่มเติม">⋯</button>
         </div>
       </div>
       {children}
@@ -823,7 +823,7 @@ function getTop3Color(value, allValues, palette) {
 }
 
 // vertical bar — Top-3 shade ตาม palette, rainbow=true เพื่อหมุน CHART_COLORS ตาม index
-function VBar({ data, height = 380, rainbow = false, palette = 'violet' }) {
+function VBar({ data, height = 380, rainbow = false, palette = 'blue' }) {
   const values = data.map(x => x.value)
   const pal = TOP3_PALETTES[palette] || TOP3_PALETTES.violet
   return (
@@ -844,7 +844,7 @@ function VBar({ data, height = 380, rainbow = false, palette = 'violet' }) {
 }
 
 // horizontal bar — Top-3 shade ตาม palette, rainbow=true เพื่อหมุน CHART_COLORS ตาม index
-function HBar({ data, height = 380, unit = '', rainbow = false, palette = 'violet' }) {
+function HBar({ data, height = 380, unit = '', rainbow = false, palette = 'blue' }) {
   const values = data.map(x => x.value)
   const pal = TOP3_PALETTES[palette] || TOP3_PALETTES.violet
   return (
@@ -1154,7 +1154,7 @@ function PriceTrend({ records, periodLabel }) {
       {/* header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">ราคายา</h3>
+          <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">ราคายา</h3>
           <p className="text-sm text-slate-500 mt-0.5">ค่าเฉลี่ยรายเดือน (ปีงบ ต.ค.–ก.ย.)</p>
         </div>
         <div className="flex items-center gap-1 text-slate-300">
@@ -1188,7 +1188,7 @@ function PriceTrend({ records, periodLabel }) {
 
           {/* toggle เทียบปีก่อน */}
           <label className="flex items-center gap-2 cursor-pointer mb-4 w-fit">
-            <div className={`relative w-10 h-6 rounded-full transition-all ${compareLastYear ? 'bg-gradient-to-r from-indigo-500 to-purple-500 shadow-md shadow-indigo-500/30' : 'bg-slate-300'}`}>
+            <div className={`relative w-10 h-6 rounded-full transition-all ${compareLastYear ? 'bg-gradient-to-r from-blue-500 to-indigo-500 shadow-md shadow-blue-500/30' : 'bg-slate-300'}`}>
               <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all shadow ${compareLastYear ? 'left-[18px]' : 'left-0.5'}`} />
             </div>
             <input type="checkbox" className="sr-only" checked={compareLastYear} onChange={e => setCompareLastYear(e.target.checked)} />
@@ -1233,7 +1233,7 @@ function AnimatedCounter({ value, decimals = 0, suffix = '', prefix = '' }) {
 }
 
 // KpiCard — premium gradient + glow shadow + นูน + decoration
-function KpiCard({ icon, label, value, sub, gradient, shadow = 'shadow-violet-500/30' }) {
+function KpiCard({ icon, label, value, sub, gradient, shadow = 'shadow-blue-500/30' }) {
   return (
     <div className={`group relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br ${gradient} shadow-xl ${shadow}
       hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-pointer`}>

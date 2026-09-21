@@ -3,6 +3,11 @@
 
 export const RELIGION_OPTIONS = ['พุทธ', 'อิสลาม', 'คริสต์', 'อื่นๆ']
 
+// สัญชาติ — ต้องเลือกก่อนกรอกเลขประจำตัวประชาชน
+// ไทย = เลขบัตรบังคับกรอก ; อื่นๆ (ระบุ) = ไม่บังคับ
+export const NATIONALITY_THAI = 'ไทย'
+export const NATIONALITY_OPTIONS = [NATIONALITY_THAI, 'อื่นๆ']
+
 export const MARITAL_OPTIONS = ['โสด', 'สมรส', 'แยกกันอยู่', 'หย่า', 'หม้าย', 'ไม่ได้จดทะเบียน']
 
 export const RESIDENT_STATUS_OPTIONS = ['เจ้าบ้าน', 'ผู้อาศัย', 'บ้านเช่า']
@@ -66,10 +71,22 @@ export const PRICE_DRUG_OPTIONS = ['ยาบ้า', 'ไอซ์', 'เฮโ
 // เลือก "ฝากเพื่อนซื้อ" แล้วต้องระบุที่อยู่ของเพื่อนที่ฝากซื้อเพิ่ม (ดู CHANNEL_FRIEND)
 export const BUY_CHANNEL_OPTIONS = ['ซื้อเองจากผู้ขาย', 'ฝากเพื่อนซื้อ']
 export const CHANNEL_FRIEND = 'ฝากเพื่อนซื้อ'
+
+// แหล่งที่ซื้อได้ประจำ — เลือกก่อนว่าอยู่กรุงเทพฯ หรือจังหวัดอื่น (ช่องที่ต้องกรอกต่างกัน)
+// กรุงเทพฯ = เลือกเขต/แขวงจากรายการ + สน./บก.น. ; จังหวัดอื่น = พิมพ์จังหวัด/อำเภอ/ตำบล + สภ.
+export const LOC_BKK = 'กรุงเทพมหานคร'
+export const LOC_SCOPE_OPTIONS = [LOC_BKK, 'จังหวัดอื่น']
 export const SELLER_TYPE_OPTIONS = ['เด็กเดินยา', 'กลุ่มที่ขายประจำ', 'อื่นๆ']
 export const SELLER_ZONE_OPTIONS = ['ในชุมชน', 'นอกชุมชน', 'ทั้งในและนอกชุมชน']
 export const SEX_OPTIONS = ['ชาย', 'หญิง']
+// ช่องทางติดต่อผู้ขาย — เลือกจากรายการเท่านั้น ; เลือก "อื่นๆ" แล้วต้องระบุชื่อช่องทาง
+// (โทรศัพท์มีช่อง "โทรศัพท์ที่ใช้ติดต่อ" ของตัวเองอยู่แล้ว จึงไม่อยู่ในรายการนี้)
+export const SELLER_CONTACT_OPTIONS = ['LINE', 'Facebook', 'Telegram', 'WhatsApp', 'Instagram', 'TikTok', 'X (Twitter)', 'อื่นๆ']
 export const HAS_OPTIONS = ['ไม่มี', 'มี']
+
+// ── ข้อ 1–2 เคยถูกจับ / เคยบำบัด — ต้องเลือกก่อน ถ้า "เคย" ถึงจะกรอกรายละเอียด ──
+export const EVER_YES = 'เคย'
+export const EVER_OPTIONS = ['ไม่เคย', EVER_YES]
 
 // ── ข้อ 1 ประวัติถูกจับ ──
 export const CHARGE_OPTIONS = ['เสพ', 'ครอบครอง', 'ครอบครองเพื่อจำหน่าย', 'จำหน่าย', 'ผลิต', 'นำเข้า', 'ส่งออก']

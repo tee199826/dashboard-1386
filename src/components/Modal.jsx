@@ -12,6 +12,7 @@ import { X } from 'lucide-react'
 //   icon      : ReactNode (optional) — ไอคอนหน้า title
 //   actions   : ReactNode (optional) — ปุ่มท้าย modal
 //   closeOnBackdrop : boolean (default true)
+//   size      : 'md' (default) | 'lg' | 'xl' — ความกว้างสูงสุดของกล่อง
 
 const VARIANTS = {
   default: { bar: 'from-violet-500 to-purple-600', icon: 'text-violet-600' },
@@ -20,9 +21,11 @@ const VARIANTS = {
   warning: { bar: 'from-amber-500 to-orange-600',  icon: 'text-amber-600' },
 }
 
+const SIZES = { md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-2xl' }
+
 export default function Modal({
   open, onClose, title, children,
-  variant = 'default', icon, actions, closeOnBackdrop = true,
+  variant = 'default', icon, actions, closeOnBackdrop = true, size = 'md',
 }) {
   // ปิดด้วย ESC + ล็อค scroll พื้นหลัง
   useEffect(() => {
@@ -50,7 +53,7 @@ export default function Modal({
       aria-modal="true"
     >
       <div
-        className="modal-panel bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden"
+        className={`modal-panel bg-white rounded-2xl shadow-2xl w-full ${SIZES[size] ?? SIZES.md} max-h-[90vh] flex flex-col overflow-hidden`}
         onClick={e => e.stopPropagation()}
       >
         <div className={`h-1 bg-gradient-to-r ${v.bar} flex-shrink-0`} />

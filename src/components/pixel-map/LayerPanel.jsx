@@ -1,13 +1,12 @@
 import { useState } from 'react'
-import { GripVertical, Eye, EyeOff, Trash2 } from 'lucide-react'
+import { GripVertical, Eye, EyeOff, Trash2, Upload } from 'lucide-react'
 import { DATA_SOURCES } from '../../utils/pixelMapData'
 import { ROSE_DEFAULT } from '../../hooks/usePixelMapState'
 import ColorSwatch from './ColorSwatch'
 
 function LayerRow({ layer, draggable, dragOver, onDragStart, onDragOver, onDrop, onDragEnd, onToggleVisible, onUpdate, onRemove }) {
-  const label = layer.type === 'data'
-    ? `${layer.label} (${DATA_SOURCES.find(s => s.id === layer.source)?.label ?? layer.source})`
-    : layer.label
+  const sourceLabel = layer.source === 'import' ? 'ไฟล์นำเข้า' : DATA_SOURCES.find(s => s.id === layer.source)?.label ?? layer.source
+  const label = layer.type === 'data' ? `${layer.label} (${sourceLabel})` : layer.label
   const gradient = layer.type === 'data'
 
   return (
@@ -71,7 +70,7 @@ function CommunityLabelsRow({ labelsConfig, toggleLabelsLevel, updateLabelsConfi
 }
 
 export default function LayerPanel({
-  layers, updateLayer, toggleLayerVisible, addDataLayer, removeDataLayer, reorderDataLayers,
+  layers, updateLayer, toggleLayerVisible, addDataLayer, onImport, removeDataLayer, reorderDataLayers,
   labelsConfig, toggleLabelsLevel, updateLabelsConfig,
 }) {
   const [dragOverId, setDragOverId] = useState(null)
@@ -96,10 +95,16 @@ export default function LayerPanel({
         <CommunityLabelsRow labelsConfig={labelsConfig} toggleLabelsLevel={toggleLabelsLevel} updateLabelsConfig={updateLabelsConfig} />
       </div>
 
-      <div className="flex items-center justify-between pt-1">
+      <div className="flex items-center justify-between pt-1 gap-1">
         <div className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">ข้อมูล</div>
-        <button type="button" onClick={addDataLayer}
-          className="h-7 px-2 rounded-md ring-1 ring-slate-200 text-[11px] font-medium text-slate-600 hover:bg-slate-50">+ ข้อมูล</button>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => onImport?.('new')} title="นำเข้าไฟล์ Excel/CSV เป็น data overlay"
+            className="h-7 px-2 rounded-md ring-1 ring-slate-200 text-[11px] font-medium text-slate-600 hover:bg-slate-50 inline-flex items-center gap-1">
+            <Upload size={11} /> นำเข้าไฟล์
+          </button>
+          <button type="button" onClick={addDataLayer}
+            className="h-7 px-2 rounded-md ring-1 ring-slate-200 text-[11px] font-medium text-slate-600 hover:bg-slate-50">+ ข้อมูล</button>
+        </div>
       </div>
 
       <div className="space-y-1.5">

@@ -21,6 +21,12 @@ export function dateToFiscalYear(isoDate) {
   return ceYear + 543                             // คืนเป็น พ.ศ.
 }
 
+// Date → 'YYYY-MM-DD' ตามเวลาเครื่อง (ไม่ใช่ UTC)
+// ใช้แทน toISOString().slice(0, 10) ซึ่งเป็น UTC — ในไทยช่วง 00:00–06:59 จะได้วันของเมื่อวาน
+export function localDateISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 // ปีงบ (พ.ศ.) + เดือน (1-12) → ช่วงวันที่ ISO ของเดือนนั้น
 export function getMonthRange(buddhistYear, monthNum) {
   const ceYear = buddhistYear - 543

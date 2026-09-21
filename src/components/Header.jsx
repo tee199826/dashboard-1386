@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { LogOut, LogIn, AlertTriangle, Settings } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import logoOncb from '../assets/logo-oncb.png'
 import { supabase } from '../lib/supabase'
 
@@ -20,8 +20,6 @@ const isStaleDate = (iso) => (Date.now() - new Date(iso).getTime()) > 30 * 24 * 
 export default function Header() {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
-  const { pathname } = useLocation()
-  const isSubstanceUsers = pathname.startsWith('/substance-users')
   const [lastUpdate, setLastUpdate] = useState(undefined)
 
   useEffect(() => {
@@ -56,14 +54,12 @@ export default function Header() {
   }, [])
 
   const handleLogout = async () => {
-    await signOut()
+    await signOut()   // ร่างแบบซักผู้เสพถูกลบใน AuthContext เมื่อ session สิ้นสุด
     navigate('/')
   }
 
   return (
-    <header className={`bg-gradient-to-r text-white shadow-lg min-w-0 w-full transition-colors duration-500 ${
-      isSubstanceUsers ? 'from-purple-900 via-violet-800 to-purple-900' : 'from-slate-900 via-blue-900 to-blue-800'
-    }`}>
+    <header className="bg-gradient-to-r from-slate-900 via-blue-900 to-blue-800 text-white shadow-lg min-w-0 w-full">
       <div className="w-full px-3 sm:px-6 py-3 flex items-center justify-between gap-2 min-w-0">
         <div className="flex items-center gap-0 min-w-0 flex-1">
           {/* โลโก้ + 1386 Dashboard */}

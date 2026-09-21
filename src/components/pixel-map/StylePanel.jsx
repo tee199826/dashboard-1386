@@ -1,4 +1,4 @@
-import { Palette, Download, Hash, Database } from 'lucide-react'
+import { Palette, Download, Hash, Database, Upload, FileSpreadsheet, Loader2 } from 'lucide-react'
 import FilterPill from '../FilterPill'
 import { DATA_SOURCES, DRUG_SUBSTANCES, BEHAVIOR_FLAGS, BKN_FILTER_OPTIONS, METRIC_OPTIONS } from '../../utils/pixelMapData'
 import { SHAPES } from '../../utils/pixelMapStyle'
@@ -31,18 +31,46 @@ function Field({ label, children }) {
   )
 }
 
+// layer ที่มาจากไฟล์นำเข้า — ไม่มี filter ของฐานข้อมูลให้ปรับ โชว์ที่มาของข้อมูลกับปุ่มเปลี่ยนไฟล์แทน
+function ImportLayerInfo({ layer, onImport }) {
+  const m = layer.importMeta ?? {}
+  return (
+    <div className="space-y-2">
+      <div className="flex items-start gap-1.5 text-[11px] text-slate-500">
+        <FileSpreadsheet size={13} className="shrink-0 mt-0.5 text-slate-400" />
+        <span className="min-w-0 break-words">
+          {m.fileName ?? 'ไฟล์นำเข้า'}{m.sheetName ? ` · ${m.sheetName}` : ''}
+          <br />
+          {m.valueCol ? `รวมค่าใน "${m.valueCol}"` : 'นับจำนวนแถว'} · จับคู่ได้ {m.districtCount ?? 0} เขต
+          {m.unmatchedCount ? ` · ข้าม ${m.unmatchedCount} ชื่อที่ไม่ใช่เขต กทม.` : ''}
+        </span>
+      </div>
+      <button type="button" onClick={() => onImport?.(layer.id)}
+        className="h-8 px-2.5 rounded-lg ring-1 ring-slate-200 text-[11px] font-medium text-slate-600 hover:bg-slate-50 inline-flex items-center gap-1">
+        <Upload size={11} /> เปลี่ยนไฟล์
+      </button>
+    </div>
+  )
+}
+
 export default function StylePanel({
   style, updateStyle,
   labelsConfig, updateLabelsConfig, toggleLabelsVisible, toggleLabelsLevel,
-  dataLayers, updateLayer, fiscalYearsBySource,
+  dataLayers, updateLayer, fiscalYearsBySource, onImport,
   onExportSvg, onExportPng, onCopyEmbed, compareActive,
   zoomTransform, onZoomChange,
   exportFullMap, setExportFullMap,
   showExportNumbers, setShowExportNumbers,
+  showExportDetail, setShowExportDetail,
+  onExportExcel, excelBusy, excelError,
+  sections = 'all', // 'design' = รูปแบบ/ข้อมูลซ้อน/ป้ายชื่อ · 'export' = ส่งออก — แยกไว้คนละแท็บในแผงขวา
 }) {
+  const showDesign = sections === 'all' || sections === 'design'
+  const showExport = sections === 'all' || sections === 'export'
   return (
     <>
-      <AccordionSection title="Style" icon={<Palette size={14} className="text-slate-400" />}>
+      {showDesign && (<>
+      <AccordionSection title="รูปแบบแผนที่" icon={<Palette size={14} className="text-slate-400" />} defaultOpen>
         <Field label="การแสดงผล data overlay">
           <Seg options={[['dot', 'จุด'], ['fill', 'เต็มพื้นที่']]} value={style.displayMode} onChange={v => updateStyle({ displayMode: v })} />
         </Field>
@@ -111,45 +139,55 @@ export default function StylePanel({
         </Field>
       </AccordionSection>
 
-      <AccordionSection title="Data" icon={<Database size={14} className="text-slate-400" />}>
+      <AccordionSection title="ข้อมูลซ้อนทับ" icon={<Database size={14} className="text-slate-400" />}>
+        <button type="button" onClick={() => onImport?.('new')}
+          className="w-full h-9 rounded-lg ring-1 ring-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center justify-center gap-1.5">
+          <Upload size={13} /> นำเข้าไฟล์ Excel/CSV
+        </button>
         {dataLayers.length === 0 && (
-          <p className="text-xs text-slate-400">ยังไม่มี data overlay — กด "+ ข้อมูล" ในส่วน Layers ด้านบนก่อน</p>
+          <p className="text-xs text-slate-400">ยังไม่มี data overlay — นำเข้าไฟล์ของคุณ หรือกด "+ ข้อมูล" ในส่วน Layers ด้านบนเพื่อใช้ข้อมูลในระบบ</p>
         )}
         {dataLayers.map(layer => (
           <div key={layer.id} className="space-y-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
             <div className="text-xs font-semibold text-slate-600">{layer.label}</div>
-            <Field label="แหล่งข้อมูล">
-              <FilterPill value={layer.source} onChange={v => updateLayer(layer.id, { source: v, substance: null, behavior: null, fiscalYear: 'all' })}
-                options={DATA_SOURCES.map(s => [s.id, s.label])} />
-            </Field>
-            {layer.source === 'drug_incidents' && (
+            {layer.source === 'import' ? (
+              <ImportLayerInfo layer={layer} onImport={onImport} />
+            ) : (
               <>
-                <Field label="ชนิดยา">
-                  <FilterPill value={layer.substance ?? 'all'} onChange={v => updateLayer(layer.id, { substance: v === 'all' ? null : v })}
-                    options={[['all', 'ทั้งหมด'], ...DRUG_SUBSTANCES.map(([col, lbl]) => [col, lbl])]} />
+                <Field label="แหล่งข้อมูล">
+                  <FilterPill value={layer.source} onChange={v => updateLayer(layer.id, { source: v, substance: null, behavior: null, fiscalYear: 'all' })}
+                    options={DATA_SOURCES.map(s => [s.id, s.label])} />
                 </Field>
-                <Field label="พฤติการณ์">
-                  <FilterPill value={layer.behavior ?? 'all'} onChange={v => updateLayer(layer.id, { behavior: v === 'all' ? null : v })}
-                    options={[['all', 'ทั้งหมด'], ...BEHAVIOR_FLAGS.map(([col, lbl]) => [col, lbl])]} />
+                {layer.source === 'drug_incidents' && (
+                  <>
+                    <Field label="ชนิดยา">
+                      <FilterPill value={layer.substance ?? 'all'} onChange={v => updateLayer(layer.id, { substance: v === 'all' ? null : v })}
+                        options={[['all', 'ทั้งหมด'], ...DRUG_SUBSTANCES.map(([col, lbl]) => [col, lbl])]} />
+                    </Field>
+                    <Field label="พฤติการณ์">
+                      <FilterPill value={layer.behavior ?? 'all'} onChange={v => updateLayer(layer.id, { behavior: v === 'all' ? null : v })}
+                        options={[['all', 'ทั้งหมด'], ...BEHAVIOR_FLAGS.map(([col, lbl]) => [col, lbl])]} />
+                    </Field>
+                  </>
+                )}
+                {layer.source !== 'bkn_summary' && (
+                  <Field label="ปีงบประมาณ">
+                    <FilterPill value={String(layer.fiscalYear)} onChange={v => updateLayer(layer.id, { fiscalYear: v })}
+                      options={[['all', 'ทุกปี'], ...(fiscalYearsBySource[layer.source] ?? []).map(y => [String(y), String(y)])]} />
+                  </Field>
+                )}
+                <Field label="บก.น.">
+                  <FilterPill value={layer.bkn} onChange={v => updateLayer(layer.id, { bkn: v })}
+                    options={[['all', 'ทั้งหมด'], ...BKN_FILTER_OPTIONS.map(b => [b, b])]} />
                 </Field>
               </>
             )}
-            {layer.source !== 'bkn_summary' && (
-              <Field label="ปีงบประมาณ">
-                <FilterPill value={String(layer.fiscalYear)} onChange={v => updateLayer(layer.id, { fiscalYear: v })}
-                  options={[['all', 'ทุกปี'], ...(fiscalYearsBySource[layer.source] ?? []).map(y => [String(y), String(y)])]} />
-              </Field>
-            )}
-            <Field label="บก.น.">
-              <FilterPill value={layer.bkn} onChange={v => updateLayer(layer.id, { bkn: v })}
-                options={[['all', 'ทั้งหมด'], ...BKN_FILTER_OPTIONS.map(b => [b, b])]} />
-            </Field>
             <p className="text-[11px] text-slate-400">ปรับสีไล่โทน (min → max) ได้ที่แถว layer นี้ใน Layers</p>
           </div>
         ))}
       </AccordionSection>
 
-      <AccordionSection title="Labels" icon={<Hash size={14} className="text-slate-400" />}>
+      <AccordionSection title="ป้ายชื่อพื้นที่" icon={<Hash size={14} className="text-slate-400" />}>
         <Field label="ชื่อเขตบนแผนที่">
           <Seg options={[['off', 'ปิด'], ['selected', 'ที่เลือก'], ['all', 'ทุกเขต']]}
             value={labelsConfig.districtNames} onChange={v => updateLabelsConfig({ districtNames: v })} />
@@ -194,7 +232,10 @@ export default function StylePanel({
         </label>
       </AccordionSection>
 
-      <AccordionSection title="Export" icon={<Download size={14} className="text-slate-400" />}>
+      </>)}
+
+      {showExport && (
+      <AccordionSection title="ส่งออกภาพ" icon={<Download size={14} className="text-slate-400" />} defaultOpen>
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={exportFullMap} onChange={e => setExportFullMap(e.target.checked)} className="accent-violet-600" />
           ส่งออกเต็มแผนที่ (รีเซ็ตซูมก่อน) — ปิด = ตามมุมมองที่เห็น
@@ -203,6 +244,13 @@ export default function StylePanel({
           <input type="checkbox" checked={showExportNumbers} onChange={e => setShowExportNumbers(e.target.checked)} className="accent-violet-600" />
           แสดงตัวเลขจำนวนเรื่องของพื้นที่ที่เลือก
         </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={showExportDetail} onChange={e => setShowExportDetail(e.target.checked)} className="accent-violet-600" />
+          แนบการ์ด &quot;รายละเอียดพื้นที่&quot; ลงในรูป
+        </label>
+        <p className="text-[11.5px] leading-relaxed text-slate-400 -mt-1">
+          วางเป็นแผงข้างขวาของแผนที่ ไม่ทับแผนที่ (รูปกว้างขึ้น) — ใช้พื้นที่ที่คลิกเลือกไว้ ถ้าไม่ได้เลือกใช้เขตกลางแผนที่ (ไม่ใช้ในโหมดเทียบหลายแผนที่)
+        </p>
         <div className="grid grid-cols-3 gap-1.5">
           <button type="button" onClick={() => onExportPng(1)} className="h-9 rounded-lg ring-1 ring-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50">PNG 1x</button>
           <button type="button" onClick={() => onExportPng(2)} className="h-9 rounded-lg ring-1 ring-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50">PNG 2x</button>
@@ -212,8 +260,21 @@ export default function StylePanel({
           <button type="button" onClick={onExportSvg} className="h-9 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700">Export SVG</button>
           <button type="button" onClick={onCopyEmbed} className="h-9 rounded-lg ring-1 ring-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50">คัดลอก HTML</button>
         </div>
-        {compareActive && <p className="text-[11px] text-slate-400">โหมด Compare: SVG export ได้เฉพาะ panel แรก — PNG export ได้ทั้ง grid</p>}
+        {compareActive && <p className="text-[11px] text-slate-400">โหมดเทียบหลายแผนที่: SVG ได้เฉพาะแผนที่แรก — PNG ได้ครบทุกแผนที่</p>}
+
+        <div className="pt-3 border-t border-slate-100 space-y-1.5">
+          <button type="button" onClick={onExportExcel} disabled={excelBusy}
+            className="w-full h-9 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-wait inline-flex items-center justify-center gap-1.5">
+            {excelBusy ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
+            {excelBusy ? 'กำลังสร้างไฟล์…' : 'Export Excel (.xlsx)'}
+          </button>
+          <p className="text-[11.5px] leading-relaxed text-slate-400">
+            ข้อมูลรายเขต / รายแขวง / รายชุมชน ตามช่วงเวลาที่เลือก + รายละเอียดพื้นที่ในแผง
+          </p>
+          {excelError && <p className="text-[11.5px] text-rose-600">{excelError}</p>}
+        </div>
       </AccordionSection>
+      )}
     </>
   )
 }

@@ -45,6 +45,13 @@ export function formatNationalId(v) {
   return parts.join('-')
 }
 
+// แสดงผลเลขประจำตัว — เลขไทยครบ 13 หลักจัดเป็น x-xxxx-xxxxx-xx-x
+// เลขเอกสารอื่น (สัญชาติอื่น มีตัวอักษร/ไม่ครบ 13 หลัก) แสดงตามที่กรอก ไม่ตัดตัวอักษรทิ้ง
+export function displayNationalId(v) {
+  const s = String(v ?? '').trim()
+  return /^\d{13}$/.test(s) ? formatNationalId(s) : s
+}
+
 // hash สั้น ๆ สำหรับ record_uid (รูปแบบเดียวกับ importEngine ที่ใช้ 'h:' + hash)
 export function simpleHash(str) {
   let h = 5381

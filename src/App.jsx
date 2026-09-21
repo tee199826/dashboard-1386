@@ -68,7 +68,7 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/radar" element={<MainLayout><SubstanceRadar /></MainLayout>} />
-            <Route path="/pixel-map" element={<MainLayout><PixelMap /></MainLayout>} />
+            <Route path="/pixel-map" element={<MainLayout><FilterProvider><PixelMap /></FilterProvider></MainLayout>} />
 
             <Route path="/" element={<MainLayout><FilterProvider><Overview /></FilterProvider></MainLayout>} />
             <Route path="/districts" element={<MainLayout><FilterProvider><AllDistricts /></FilterProvider></MainLayout>} />
