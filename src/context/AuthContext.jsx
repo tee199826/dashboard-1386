@@ -26,35 +26,21 @@ export function AuthProvider({ children }) {
     const gen = ++profileGen.current
     setUser(nextUser)
     setProfile(null)
-    if (!nextUser) { setLoading(false); return }
+    if (!nextUser) {
+      // ไม่มี session แล้ว (กดออกจากระบบ / session หมดอายุ / ออกจากระบบจากแท็บอื่น)
+      // → ลบร่างแบบซักผู้เสพที่ค้างในแท็บนี้ เพราะมีข้อมูลส่วนบุคคล
+      clearAllDrafts()
+      setLoading(false)
+      return
+    }
     setLoading(true)
     loadProfile(nextUser.id, gen)
   }
 
   useEffect(() => {
-<<<<<<< HEAD
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user || null)
-      if (data.session?.user) loadProfile(data.session.user.id)
-      else setLoading(false)
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null)
-      if (session?.user) loadProfile(session.user.id)
-      else {
-        // ไม่มี session แล้ว (กดออกจากระบบ / session หมดอายุ / ออกจากระบบจากแท็บอื่น)
-        // → ลบร่างแบบซักผู้เสพที่ค้างในแท็บนี้ เพราะมีข้อมูลส่วนบุคคล
-        clearAllDrafts()
-        setProfile(null); setLoading(false)
-      }
-    })
-
-=======
     supabase.auth.getSession().then(({ data }) => applySession(data.session))
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) =>
       applySession(session, { force: event === 'USER_UPDATED' }))
->>>>>>> origin/fix/security-audit
     return () => subscription.unsubscribe()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
