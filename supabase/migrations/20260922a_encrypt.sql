@@ -1,4 +1,4 @@
--- เข้ารหัส interview_records_pii + ปิดทางเข้าตารางตรง
+-- เฟส 1/2 — เข้ารหัส interview_records_pii + ปิดทางเข้าตารางตรง (ยังไม่ drop plaintext)
 --
 -- ที่มา: ตรวจสิทธิ์กับฐานจริง 22 ก.ย. 2569 พบว่า interview_records_pii เปิดให้ role
 --        anon เข้าถึงได้ ตารางนี้เก็บชื่อ เลขบัตรประชาชน ที่อยู่ เบอร์โทร และข้อมูล
@@ -6,28 +6,38 @@
 --        ถ้าสิทธิ์หลุดอีกครั้ง หรือ backup/replica หลุด ก็อ่านได้ทันที
 --
 --        rpt_records_pii เจอสถานการณ์เดียวกันแต่ไม่เสี่ยง เพราะเก็บเป็น ciphertext
---        migration นี้ยกโมเดลเดียวกันมาใช้กับ interview
+--        งานนี้ยกโมเดลเดียวกันมาใช้กับ interview
 --
--- ทำอะไร:
---   1. เพิ่ม enc bytea + enc_version แล้วย้ายข้อมูลจากคอลัมน์ plaintext เข้าไป
---      จากนั้น drop คอลัมน์ plaintext ทิ้ง — ในตารางไม่เหลือ plaintext
---   2. เขียน RPC ของ interview ใหม่ให้ถอดรหัสตอนอ่าน (แนวเดียวกับ rpt_entry_*)
---   3. ถอนสิทธิ์ตารางออกจาก anon/authenticated เหลือทางเข้าเดียวคือ RPC
+-- ═══════ แบ่งสองเฟสเพราะโปรเจกต์อยู่บน free plan ไม่มี backup อัตโนมัติ ═══════
 --
--- ⚠️ ข้อที่ 3 ไม่ใช่แค่การเพิ่มความแน่นหนา แต่เป็นการ "แก้ของที่พังอยู่"
+--   เฟส 1 = ไฟล์นี้        เข้ารหัสลง enc + เปลี่ยน RPC เป็น definer
+--                          คอลัมน์ plaintext ยังอยู่ครบ ไม่แตะเลย
+--   เฟส 2 = 20260922b      drop คอลัมน์ plaintext — รันหลังทดสอบเฟส 1 ผ่านแล้ว
+--
+--   ไฟล์นี้ไม่ทำลายข้อมูลอะไรเลย ถ้าเข้ารหัสพลาดหรือ RPC มีปัญหา ข้อมูลเดิมยัง
+--   อยู่ครบทุกคอลัมน์ ย้อนกลับได้ด้วยการคืน RPC ชุดเดิม (ดูวิธีท้ายไฟล์)
+--
+-- ⚠️ สิ่งที่ต้องเข้าใจระหว่างอยู่เฟส 1
+--    ตั้งแต่วินาทีที่รันไฟล์นี้ RPC จะอ่านและเขียนที่ enc เท่านั้น
+--    คอลัมน์ plaintext จะ "หยุดนิ่ง" เป็นภาพ ณ เวลาที่รัน ไม่อัปเดตตามอีกต่อไป
+--    → ถ้ามีคนแก้ข้อมูลหลังรันไฟล์นี้ แล้วย้อนกลับไปใช้ RPC ชุดเดิม
+--      การแก้ช่วงนั้นจะหาย เพราะ plaintext ยังเป็นค่าเก่า
+--    → จึงควรทดสอบให้จบแล้วรันเฟส 2 ในเวลาใกล้กัน อย่าทิ้งช่วงยาว
+--      และถ้าเป็นไปได้ ให้รันไฟล์นี้ตอนที่ไม่มีคนใช้งานหน้าแบบสัมภาษณ์
+--
+-- ⚠️ ไฟล์นี้ยังแก้ของที่พังอยู่ด้วย
 --    RPC ชุดเดิมประกาศเป็น security invoker คือรันด้วยสิทธิ์ของผู้เรียก
 --    เมื่อ revoke สิทธิ์ตารางออกจาก authenticated ไปแล้วเมื่อ 22 ก.ย.
 --    RPC ทั้งห้าตัวที่แตะ PII จะ error permission denied ทันที
---    → หน้าแบบสัมภาษณ์ใช้งานไม่ได้อยู่ตอนนี้ migration นี้แก้ด้วยการเปลี่ยนเป็น
+--    → หน้าแบบสัมภาษณ์ใช้งานไม่ได้อยู่ตอนนี้ ไฟล์นี้แก้ด้วยการเปลี่ยนเป็น
 --      security definer ซึ่งมี is_admin() กันอยู่แล้วทุกตัว (โมเดลเดียวกับ rpt)
 --
 -- 🔑 ใช้กุญแจร่วมกับ rpt (rpt_pii_key) ตามที่ตกลงไว้ ผลที่ตามมาคือถ้าจะหมุนกุญแจ
 --    ต้อง re-encrypt ทั้งสองตารางพร้อมกัน ถ้าต้องการแยกกุญแจในอนาคต ให้สร้าง
 --    secret ใหม่แล้วทำ interview_pii_encrypt/decrypt คู่ของตัวเอง
 --
--- ✅ idempotent — รันซ้ำได้ ไม่เข้ารหัสซ้อนและไม่ทำข้อมูลหาย
--- ⚠️ รันบน staging ก่อน แล้วทดสอบ: บันทึกแบบซัก / ค้นหา / เปิดดูรายคน / ส่งออก / ลบ
--- ⚠️ สำรองฐานก่อนรัน — ขั้นตอนนี้ drop คอลัมน์ ถ้าพลาดกู้จาก backup อย่างเดียว
+-- ✅ idempotent — รันซ้ำได้ ไม่เข้ารหัสซ้อน
+-- ⚠️ รันบน staging ก่อน แล้วทดสอบให้ครบตามรายการท้ายไฟล์
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0) ต้องมีกลไกเข้ารหัสของ rpt ก่อน
@@ -47,48 +57,32 @@ returns boolean language sql stable security definer set search_path = public as
 $$;
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 1) ย้าย plaintext เข้า enc แล้ว drop คอลัมน์เดิม
+-- 1) เข้ารหัสลง enc — ไม่แตะคอลัมน์ plaintext
 -- ═══════════════════════════════════════════════════════════════════════════
 alter table interview_records_pii add column if not exists enc         bytea;
 alter table interview_records_pii add column if not exists enc_version int not null default 1;
 
--- ทั้งก้อนอยู่ใน DO เดียว — ถ้า migration รันซ้ำ คอลัมน์ plaintext จะไม่มีแล้ว
--- เงื่อนไข if exists จึงเป็น false และข้ามทั้งบล็อกไป ไม่เข้ารหัสซ้อน
+-- เข้ารหัสเฉพาะแถวที่ยังไม่มี enc — รันซ้ำจึงไม่เข้ารหัสซ้อน และถ้ารอบก่อนค้าง
+-- กลางทางก็ทำต่อจากจุดเดิมได้
+-- ห่อด้วย if exists เพื่อให้ไฟล์นี้ยังรันผ่านหลังเฟส 2 ลบคอลัมน์ไปแล้ว
 do $$ begin
   if exists (
     select 1 from information_schema.columns
      where table_schema = 'public' and table_name = 'interview_records_pii'
        and column_name = 'full_name'
   ) then
-
-    -- เข้ารหัสเฉพาะแถวที่ยังไม่มี enc — เผื่อรอบก่อนค้างกลางทาง
     update interview_records_pii set enc = rpt_pii_encrypt(jsonb_strip_nulls(jsonb_build_object(
-      'full_name',     full_name,
-      'alias',         alias,
-      'national_id',   national_id,
-      'birth_date',    birth_date,
-      'phone',         phone,
-      'contact_phone', contact_phone,
-      'address',       address,
-      'sellers',       sellers,
-      'interviewer',   interviewer,
+      'full_name',      full_name,
+      'alias',          alias,
+      'national_id',    national_id,
+      'birth_date',     birth_date,
+      'phone',          phone,
+      'contact_phone',  contact_phone,
+      'address',        address,
+      'sellers',        sellers,
+      'interviewer',    interviewer,
       'friend_address', friend_address
     ))) where enc is null;
-
-    -- index เดิมชี้คอลัมน์ที่กำลังจะหาย และ index บน plaintext เองก็รั่วข้อมูลได้
-    drop index if exists idx_interview_pii_name;
-
-    alter table interview_records_pii
-      drop column if exists full_name,
-      drop column if exists alias,
-      drop column if exists national_id,
-      drop column if exists birth_date,
-      drop column if exists phone,
-      drop column if exists contact_phone,
-      drop column if exists address,
-      drop column if exists sellers,
-      drop column if exists interviewer,
-      drop column if exists friend_address;
   end if;
 end $$;
 
@@ -96,11 +90,13 @@ comment on column interview_records_pii.enc is
   'ciphertext ของ {full_name, alias, national_id, birth_date, phone, contact_phone, address, sellers, interviewer, friend_address} — ถอดผ่าน rpt_pii_decrypt() เท่านั้น';
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 2) RPC — เขียนใหม่เป็น security definer + ถอดรหัสตอนอ่าน
+-- 2) RPC — เขียนใหม่เป็น security definer + อ่าน/เขียนที่ enc
 --    ลายเซ็นและรูปแบบผลลัพธ์เหมือนเดิมทุกตัว ฝั่ง React ไม่ต้องแก้
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- 2.1 บันทึกแบบซัก + PII ในธุรกรรมเดียว
+--     เขียนลง enc อย่างเดียว ไม่เขียน plaintext — ตั้งใจ เพราะจุดประสงค์ของงานนี้
+--     คือเลิกเก็บ plaintext ถ้าเขียนทั้งสองที่ก็เท่ากับยังสร้าง plaintext ใหม่ต่อไป
 create or replace function interview_save(p_record jsonb, p_pii jsonb default null)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
@@ -283,22 +279,53 @@ begin
 end $$;
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 4) ตรวจหลังรัน — ทั้งสามควรคืนผลว่าง
+-- 4) ตรวจหลังรัน — ทำให้ครบก่อนไปเฟส 2
 -- ═══════════════════════════════════════════════════════════════════════════
--- -- 4.1 ไม่เหลือคอลัมน์ plaintext
--- select column_name from information_schema.columns
---  where table_schema = 'public' and table_name = 'interview_records_pii'
---    and column_name in ('full_name','alias','national_id','birth_date','phone',
---                        'contact_phone','address','sellers','interviewer','friend_address');
---
--- -- 4.2 ไม่มีแถวไหนเข้ารหัสไม่สำเร็จ
+-- ── 4.1 ทุกแถวมี enc แล้ว (ควรว่าง) ───────────────────────────────────────
 -- select record_uid from interview_records_pii where enc is null;
 --
--- -- 4.3 ไม่มี grant ค้างกับ anon/authenticated
+-- ── 4.2 ถอดรหัสกลับมาได้ทุกแถว (ควรว่าง) ──────────────────────────────────
+-- select record_uid from interview_records_pii
+--  where jsonb_typeof(rpt_pii_decrypt(enc)) is distinct from 'object';
+--
+-- ── 4.3 ⭐ สำคัญสุด: ค่าที่ถอดออกมาตรงกับ plaintext เดิมทุกช่อง (ควรว่าง) ──
+--     นี่คือข้อที่พิสูจน์ว่าเข้ารหัสไม่ผิดเพี้ยน ทำข้อนี้ก่อนตัดสินใจรันเฟส 2
+-- select record_uid
+--   from interview_records_pii p, lateral (select rpt_pii_decrypt(p.enc) d) x
+--  where (x.d->>'full_name')      is distinct from p.full_name
+--     or (x.d->>'alias')          is distinct from p.alias
+--     or (x.d->>'national_id')    is distinct from p.national_id
+--     or (x.d->>'birth_date')     is distinct from p.birth_date::text
+--     or (x.d->>'phone')          is distinct from p.phone
+--     or (x.d->>'contact_phone')  is distinct from p.contact_phone
+--     or (x.d->>'friend_address') is distinct from p.friend_address
+--     or (x.d->'address')         is distinct from p.address
+--     or (x.d->'sellers')         is distinct from p.sellers
+--     or (x.d->'interviewer')     is distinct from p.interviewer;
+--
+--     หมายเหตุ: ถ้ามีคนแก้ข้อมูลผ่านหน้าเว็บ "หลัง" รันไฟล์นี้ แถวนั้นจะโผล่มา
+--     เป็นเรื่องปกติ เพราะ plaintext หยุดนิ่งแล้ว ให้ดูว่า record_uid ที่โผล่มา
+--     ตรงกับที่เพิ่งแก้ไหม ถ้าใช่ข้ามได้ ถ้าไม่ใช่แปลว่าเข้ารหัสมีปัญหา — อย่ารันเฟส 2
+--
+-- ── 4.4 ไม่มี grant ค้างกับ anon/authenticated (ควรว่าง) ─────────────────
 -- select table_name, grantee, privilege_type
 --   from information_schema.role_table_grants
 --  where table_schema = 'public' and grantee in ('anon','authenticated')
 --    and table_name like 'interview_%';
 --
--- -- 4.4 สุ่มตรวจว่าถอดรหัสกลับมาได้จริง (ควรได้ค่าเท่ากับจำนวนแถวที่มี PII)
--- select count(*) from interview_records_pii where rpt_pii_decrypt(enc) ? 'full_name';
+-- ── 4.5 ทดสอบผ่านหน้าเว็บด้วยบัญชีแอดมินจริง ให้ครบทั้งห้าอย่าง ──────────
+--     บันทึกแบบซักใหม่ / ค้นหาด้วยชื่อ / ค้นหาด้วยเลขบัตร / เปิดดูรายคน / ส่งออก
+--     แล้วเช็คว่า audit_logs มีรายการ view ของ interview_records_pii เพิ่มขึ้นจริง
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 5) ถ้าต้องย้อนกลับ (ยังทำได้ตราบที่ยังไม่รันเฟส 2)
+-- ═══════════════════════════════════════════════════════════════════════════
+-- คอลัมน์ plaintext ยังอยู่ครบ จึงย้อนได้ด้วยการคืน RPC ชุดเดิมกับสิทธิ์ตาราง
+--   1. รัน 20260915_security_baseline.sql ส่วน 5.1-5.5 ใหม่ (RPC แบบ invoker)
+--   2. grant select, insert, update, delete on interview_records_pii to authenticated;
+--      grant select, insert, update, delete on interview_records     to authenticated;
+--   3. ข้อมูลที่ถูกแก้ระหว่างอยู่เฟส 1 จะหาย เพราะการแก้นั้นลงที่ enc ไม่ใช่ plaintext
+--      กู้คืนรายแถวได้ด้วย
+--        update interview_records_pii p set
+--          full_name = x.d->>'full_name', alias = x.d->>'alias', ...
+--          from lateral (select rpt_pii_decrypt(p.enc) d) x where p.record_uid = '<uid>';

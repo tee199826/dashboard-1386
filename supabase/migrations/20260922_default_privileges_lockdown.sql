@@ -13,7 +13,7 @@
 --
 --          ตารางจึงปลอดภัยเฉพาะตัวที่ migration เขียน revoke ไว้เอง ที่ผ่านมามีแค่
 --            rpt_records_pii       — 20260918_rpt_field_entry.sql
---            interview_records_pii — 20260922_interview_pii_encrypt.sql (เพิ่งแก้)
+--            interview_records_pii — 20260922a_encrypt.sql (เพิ่งแก้)
 --          ตัวที่ไม่มีใคร revoke ก็เปิดอยู่เงียบ ๆ ตั้งแต่วันที่สร้าง
 --
 --          นี่คือเหตุผลว่าทำไมต้องแก้ที่ default ไม่ใช่ไล่ revoke ทีละตาราง
