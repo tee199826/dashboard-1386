@@ -10,7 +10,7 @@ import assert from 'node:assert/strict'
 import ExcelJS from 'exceljs'
 import {
   buildExportWorkbook, ALL_COLUMNS, REPORT_COLUMNS, ENTRY_COLUMNS, HEADER_ROW,
-} from '../src/utils/rptExportSheet.js'
+} from '../src/features/rpt/rptExportSheet.js'
 
 // แถวตัวอย่างในรูปแบบเดียวกับที่ rpt_export_rows คืนมา (รวม 3 ตารางเป็นก้อนเดียว)
 const ROW = {

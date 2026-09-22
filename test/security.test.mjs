@@ -2,8 +2,8 @@
 // รัน: npm test
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { escapeHtml } from '../src/utils/escapeHtml.js'
-import { checkUploadFile, assertUploadFile, MAX_UPLOAD_BYTES } from '../src/utils/uploadLimits.js'
+import { escapeHtml } from '../src/shared/security/escapeHtml.js'
+import { checkUploadFile, assertUploadFile, MAX_UPLOAD_BYTES } from '../src/shared/security/uploadLimits.js'
 
 // ── SEC-09: ค่าจากฐานข้อมูลที่ต่อเป็น HTML ให้ Leaflet ต้องถูก escape ──
 test('SEC-09 escapeHtml: marker tag กลายเป็นข้อความ ไม่ใช่ element', () => {

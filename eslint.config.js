@@ -18,4 +18,22 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+
+  // Shared infrastructure must not depend on a feature or the application shell.
+  {
+    files: ['src/shared/**/*.{js,jsx}'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [
+        { group: ['**/features/**', '**/app/**'], message: 'Shared modules must not import features or app modules.' },
+      ] }],
+    },
+  },
+  {
+    files: ['src/features/**/*.{js,jsx}'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [
+        { group: ['**/app/**'], message: 'Features must not import the application shell.' },
+      ] }],
+    },
+  },
 ])

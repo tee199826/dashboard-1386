@@ -11,7 +11,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import * as XLSX from 'xlsx'
-import { parseRptWorkbook, thaiDateToISO, splitRecord } from '../src/utils/rptParser.js'
+import { parseRptWorkbook, thaiDateToISO, splitRecord } from '../src/features/rpt/rptParser.js'
 
 // สร้าง .xlsx จาก array-of-arrays + รายการ merge แล้วคืนเป็น ArrayBuffer
 function buildWorkbook(aoa, merges = [], sheetName = 'SHEET') {
@@ -189,7 +189,7 @@ test('thaiDateToISO: ช่วงปีของวันเกิดกว้�
 
 // ── หัวข้อกลุ่ม 1-5 ที่หน้านำเข้าใช้เรียงช่อง ──────────────────────────────
 test('REPORT_ORDER เรียงตามเลขกลุ่ม 1-5 และมีข้อมูลหัวข้อครบทุกกลุ่ม', async () => {
-  const { REPORT_GROUPS, REPORT_ORDER } = await import('../src/utils/rptParser.js')
+  const { REPORT_GROUPS, REPORT_ORDER } = await import('../src/features/rpt/rptParser.js')
   assert.deepEqual(REPORT_ORDER.map((id) => REPORT_GROUPS[id].no), [1, 2, 3, 4, 5])
   assert.deepEqual(REPORT_ORDER, ['73_1', '73_2', '73_3', '111_4', '111_5'])
   for (const id of REPORT_ORDER) {
@@ -264,7 +264,7 @@ test('ไฟล์ที่ไม่มีหัวรายงาน (RPT_111_5
 // ที่ FIELD_MAP อ่านออกแต่ไม่อยู่ใน BASE_FIELDS จึงไม่เคยถูกบันทึกลงฐาน
 test('ทุกฟิลด์ที่ FIELD_MAP อ่านได้ ต้องถูกเก็บลงฐาน (BASE_FIELDS หรือ PII_FIELDS)', async () => {
   const fs = await import('node:fs')
-  const url = new URL('../src/utils/rptParser.js', import.meta.url)
+  const url = new URL('../src/features/rpt/rptParser.js', import.meta.url)
   const src = fs.readFileSync(url, 'utf8')
 
   const mapped = new Set(
@@ -274,7 +274,7 @@ test('ทุกฟิลด์ที่ FIELD_MAP อ่านได้ ต้�
     src.match(/const BASE_FIELDS = \[([\s\S]*?)\n\]/)[1]
       .match(/'(\w+)'/g).map((x) => x.replace(/'/g, '')),
   )
-  const { PII_FIELDS } = await import('../src/utils/rptParser.js')
+  const { PII_FIELDS } = await import('../src/features/rpt/rptParser.js')
   const stored = new Set([...base, ...PII_FIELDS])
 
   const missing = [...mapped].filter((f) => !stored.has(f))

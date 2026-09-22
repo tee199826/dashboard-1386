@@ -13,7 +13,7 @@ globalThis.fetch = async (url) => ({
   json: async () => JSON.parse(GEOJSON),
 })
 
-const { assignDrugIncidentDistricts } = await import('../src/utils/importEngine.js')
+const { assignDrugIncidentDistricts } = await import('../src/features/upload/importEngine.js')
 
 // mock 5 แถว (จำลองหลัง mapColumns + buildBatch → มี lat/lng + district + row_index)
 const rows = [

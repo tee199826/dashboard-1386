@@ -1,6 +1,6 @@
 // Sanity: detection ไฟล์ wide (title แถวแรก, header แถว 3) ต้องได้ drug_incidents >=80%
 import XLSX from 'xlsx'
-import { detectTypeScored } from '../src/utils/importEngine.js'
+import { detectTypeScored } from '../src/features/upload/importEngine.js'
 const W = 70, blank = () => Array(W).fill(null)
 const set = (a, o) => { for (const k in o) a[k] = o[k]; return a }
 const H = blank()

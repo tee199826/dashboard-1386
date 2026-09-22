@@ -2,7 +2,7 @@
 // header layout จำลองตามไฟล์จริง (col positions ที่ inspect มา)
 // รัน: node --import ./scripts/register.mjs scripts/test-parse-fixtures.mjs
 import XLSX from 'xlsx'
-import { parseDrugIncidents } from '../src/utils/importEngine.js'
+import { parseDrugIncidents } from '../src/features/upload/importEngine.js'
 
 const W = 70
 const blank = () => Array(W).fill(null)
