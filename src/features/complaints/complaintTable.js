@@ -1,4 +1,4 @@
-import { fetchAllPages } from "../../shared/data/supabasePagination.js"
+import { fetchAllPages } from '../../shared/data/supabasePagination.js'
 
 export const SORT_OPTIONS = [
   { v: 'created_at_desc',    label: 'เพิ่มล่าสุดก่อน',             col: 'created_at',    asc: false },

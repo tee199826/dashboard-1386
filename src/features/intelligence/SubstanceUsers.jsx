@@ -1,20 +1,19 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useAsyncResource } from '../../shared/data/useAsyncResource.js'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { flushSync } from 'react-dom'
-import {
-  BarChart, Bar, ComposedChart, Area, Line, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList, ReferenceDot, Label,
-} from 'recharts'
-import {
-  Users, Activity, Clock, Shield, Heart, AlertTriangle, MapPin, Search, LayoutGrid, Maximize2,
-} from 'lucide-react'
-import { fetchAllPages } from "../../shared/data/supabasePagination.js"
-import { supabase } from "../../shared/data/supabase.js"
-import { filterByDateColumn } from "../../shared/filters/filterRows.js"
-import { escapeHtml } from "../../shared/security/escapeHtml.js"
-import { dateToFiscalYear } from "../../shared/utils/fiscalYear.js"
-import { useFilter } from "../../shared/state/FilterContext.jsx"
-import IncidentMap from "../../shared/geo/IncidentMap.jsx"
-import HeroActions from "../../shared/ui/HeroActions.jsx"
-import DateFilter from "../../shared/filters/DateFilter.jsx"
+import { BarChart, Bar, ComposedChart, Area, Line, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList, ReferenceDot, Label } from 'recharts'
+import { Users, Activity, Clock, Shield, Heart, AlertTriangle, MapPin, Search, LayoutGrid, Maximize2 } from 'lucide-react'
+import { fetchAllPages } from '../../shared/data/supabasePagination.js'
+import { supabase } from '../../shared/data/supabase.js'
+import { filterByDateColumn } from '../../shared/filters/filterRows.js'
+import { escapeHtml } from '../../shared/security/escapeHtml.js'
+import { dateToFiscalYear } from '../../shared/utils/fiscalYear.js'
+import { useFilter } from '../../shared/state/contexts.js'
+import IncidentMap from '../../shared/geo/IncidentMap.jsx'
+import HeroActions from '../../shared/ui/HeroActions.jsx'
+import DateFilter from '../../shared/filters/DateFilter.jsx'
+
+const loadRows = () => fetchAllPages('substance_users', FIELDS)
 
 // rainbow palette — หมุนตาม index ทุก bar chart
 const CHART_COLORS = [
@@ -102,9 +101,7 @@ const fmtPeriod = iso => {
 }
 
 export default function SubstanceUsers() {
-  const [rows, setRows] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const { data: rows, loading, error, reload: load } = useAsyncResource(loadRows, undefined, 'ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่')
 
   const [search, setSearch] = useState('')
   const [sortDesc, setSortDesc] = useState(true)
@@ -155,7 +152,7 @@ export default function SubstanceUsers() {
   // print: force all sections into the DOM so PDF exports are complete,
   // then restore the previous view mode afterwards
   const viewModeRef = useRef(viewMode)
-  viewModeRef.current = viewMode
+  useEffect(() => { viewModeRef.current = viewMode }, [viewMode])
   const printPrevMode = useRef('tabs')
   useEffect(() => {
     const before = () => {
@@ -170,19 +167,6 @@ export default function SubstanceUsers() {
       window.removeEventListener('afterprint', after)
     }
   }, [])
-
-  const load = useCallback(async () => {
-    setLoading(true); setError(null)
-    try {
-      const data = await fetchAllPages('substance_users', FIELDS)
-      setRows(data)
-    } catch {
-      setError('ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-  useEffect(() => { load() }, [load])
 
   // วันที่อัปโหลดล่าสุดของชุดข้อมูลผู้เสพ (ใช้ใน modal แหล่งข้อมูล)
   const [lastUpload, setLastUpload] = useState(null)

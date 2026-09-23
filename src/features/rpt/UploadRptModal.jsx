@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { supabase } from "../../shared/data/supabase.js"
+import { supabase } from '../../shared/data/supabase.js'
 import { CheckCircle2, XCircle, FileSpreadsheet, Upload, AlertTriangle, X } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { parse114 } from "../upload/importEngine.js"
-import { checkUploadFile, MAX_SHEET_ROWS } from "../../shared/security/uploadLimits.js"
-import { upsertRpt114 } from "../upload/uploadService.js"
+import { parse114 } from '../upload/importEngine.js'
+import { checkUploadFile, MAX_SHEET_ROWS } from '../../shared/security/uploadLimits.js'
+import { upsertRpt114 } from '../upload/uploadService.js'
 
 function formatFileSize(bytes) {
   if (bytes < 1024) return bytes + ' B'
@@ -57,7 +57,7 @@ function ConfirmModal({ title, message, detail, onConfirm, onCancel, confirmLabe
   )
 }
 
-export default function UploadRptModal({ onClose, onSaved, showToast }) {
+export default function UploadRptModal({ onClose, onSaved }) {
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
   const [error, setError] = useState('')

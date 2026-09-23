@@ -1,3 +1,5 @@
+
+
 // pixelMapStyle.js — ค่าคงที่/helper style ของ /pixel-map
 export const SHAPES = ['circle', 'square', 'diamond', 'triangle']
 

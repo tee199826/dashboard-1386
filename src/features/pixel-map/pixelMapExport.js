@@ -1,7 +1,8 @@
+import { toPng } from 'html-to-image'
+
 // pixelMapExport.js — export PNG/SVG/embed จาก /pixel-map
 // PNG ใช้ html-to-image (capture DOM node ตรงๆ) เพราะต้อง flatten compare-grid (2-4 <svg> เรียงกัน)
 // เป็นภาพเดียว ซึ่ง canvas.drawImage บน <svg> ที่ serialize เดี่ยวๆ ทำไม่ได้
-import { toPng } from 'html-to-image'
 
 function serializeSvg(svgEl) {
   const clone = svgEl.cloneNode(true)

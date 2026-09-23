@@ -1,8 +1,7 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import { supabase } from "../data/supabase.js"
-import { clearAllDrafts } from "../security/interviewDraft.js"
-
-const AuthContext = createContext(null)
+import { AuthContext } from './contexts.js'
+import { useEffect, useRef, useState } from 'react'
+import { supabase } from '../data/supabase.js'
+import { clearAllDrafts } from '../security/interviewDraft.js'
 
 // audit ตอน logout ไม่ควรค้าง signOut ไม่สิ้นสุด (SEC-10) — รอได้ไม่เกินเท่านี้แล้วออกจากระบบต่อ
 const LOGOUT_AUDIT_TIMEOUT_MS = 3000
@@ -102,10 +101,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be inside AuthProvider')
-  return ctx
 }

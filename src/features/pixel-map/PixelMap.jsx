@@ -1,22 +1,22 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Layers as LayersIcon, Users, Info, SlidersHorizontal, Download, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
-import { loadDistrictGeoJSON, loadSubdistrictIndex, loadCommunityIndex } from "./pixelMapGeometry.js"
-import { getDistrictCounts, getCommunityHierarchy, getAvailableFiscalYears, getLevelMaxes, sameArea } from "../../shared/geo/pixelMapData.js"
-import { exportSvg, exportPng, copyEmbedHtml } from "./pixelMapExport.js"
-import { exportPixelMapExcel } from "./pixelMapExcel.js"
-import { usePixelMapState } from "./usePixelMapState.js"
-import SelectionTree from "./SelectionTree.jsx"
-import LayerPanel from "./LayerPanel.jsx"
-import StylePanel from "./StylePanel.jsx"
-import MapCanvas from "./MapCanvas.jsx"
-import CompareGrid from "./CompareGrid.jsx"
-import ImportDataModal from "./ImportDataModal.jsx"
-import CommunityPanel from "./CommunityPanel.jsx"
-import AreaDetailPanel from "./AreaDetailPanel.jsx"
-import AccordionSection from "./AccordionSection.jsx"
-import DateFilter from "../../shared/filters/DateFilter.jsx"
-import { useFilter } from "../../shared/state/FilterContext.jsx"
-import { describeDateFilterLong } from "../../shared/filters/dateFilterLabel.js"
+import { loadDistrictGeoJSON, loadSubdistrictIndex, loadCommunityIndex } from './pixelMapGeometry.js'
+import { getDistrictCounts, getCommunityHierarchy, getAvailableFiscalYears, getLevelMaxes, sameArea } from '../../shared/geo/pixelMapData.js'
+import { exportSvg, exportPng, copyEmbedHtml } from './pixelMapExport.js'
+import { exportPixelMapExcel } from './pixelMapExcel.js'
+import { usePixelMapState } from './usePixelMapState.js'
+import SelectionTree from './SelectionTree.jsx'
+import LayerPanel from './LayerPanel.jsx'
+import StylePanel from './StylePanel.jsx'
+import MapCanvas from './MapCanvas.jsx'
+import CompareGrid from './CompareGrid.jsx'
+import ImportDataModal from './ImportDataModal.jsx'
+import CommunityPanel from './CommunityPanel.jsx'
+import AreaDetailPanel from './AreaDetailPanel.jsx'
+import AccordionSection from './AccordionSection.jsx'
+import DateFilter from '../../shared/filters/DateFilter.jsx'
+import { useFilter } from '../../shared/state/contexts.js'
+import { describeDateFilterLong } from '../../shared/filters/dateFilterLabel.js'
 
 const CANVAS_W = 900
 const CANVAS_H = 700

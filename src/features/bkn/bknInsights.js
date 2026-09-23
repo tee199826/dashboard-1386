@@ -1,10 +1,11 @@
+import { getBknByDistrict } from '../../shared/geo/bknMapping.js'
+
 // ============================================================
 // bknInsights.js — pure insight engine for /bkn Executive Summary
 // ไม่มีการ fetch — รับ rows ที่ fetch มาแล้ว แล้วคืน headline + ledger
 // threshold rules: URGENT = ค้าง% สูงสุด · EXCELLENT = เสร็จ% สูงสุด
 // district delta = month-over-month จาก drug_incidents ภายใน บก.น. นั้น
 // ============================================================
-import { getBknByDistrict } from "../../shared/geo/bknMapping.js"
 
 const isSpw = b => b?.includes('สปพ')
 

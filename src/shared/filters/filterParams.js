@@ -1,3 +1,5 @@
+
+
 // filterParams — แปลง state ของ FilterContext ↔ query params บน URL
 // ใช้ส่งต่อ "ช่วงเวลา + พื้นที่ที่เลือกอยู่" ข้ามหน้า (เช่น /situation → /situation/drug-evidence)
 // ให้ตัวเลขบนหน้าปลายทางตรงกับหน้าที่กดมา

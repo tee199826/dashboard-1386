@@ -1,25 +1,70 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
-import { useAuth } from "../../shared/state/AuthContext.jsx"
-import { useData } from "../../shared/state/DataContext.jsx"
-import { supabase } from "../../shared/data/supabase.js"
+import { useCallback, useState, useMemo, useEffect, useRef } from 'react'
+import { useAsyncResource } from '../../shared/data/useAsyncResource.js'
+import { useAuth, useData, usePresentation, useFilter } from '../../shared/state/contexts.js'
+import { supabase } from '../../shared/data/supabase.js'
 import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { AlertCircle, CheckCircle2, Search as SearchIcon, XCircle, FileQuestion, X, Upload, AlertTriangle } from 'lucide-react'
-import Toast from "../../shared/ui/Toast.jsx"
-import Rpt114Dashboard from "../rpt/Rpt114Dashboard.jsx"
-import { usePresentation } from "../../shared/state/PresentationContext.jsx"
-import PresentationBar, { PresentationEnterButton } from "../../shared/ui/PresentationBar.jsx"
-import PresentationSlides from "../../shared/ui/PresentationSlides.jsx"
-import { thaiDateRange } from "../../shared/utils/formatDate.js"
-import PeriodBadge from "../../shared/ui/PeriodBadge.jsx"
-import UploadRptModal from "../rpt/UploadRptModal.jsx"
-import { BigCard, SourceCard, KpiToggleCard } from "./OperationsCards.jsx"
-import OperationsSourceModal from "./OperationsSourceModal.jsx"
-import { THAI_MONTHS } from "../../shared/utils/constants.js"
-import UnifiedHero from "../../shared/ui/UnifiedHero.jsx"
-import DateFilter from "../../shared/filters/DateFilter.jsx"
-import { formatThaiDate as fmtHeroDate, getLastUploadDate } from "../../shared/utils/heroMeta.js"
-import { useFilter } from "../../shared/state/FilterContext.jsx"
-import { dateToFiscalYear } from "../../shared/utils/fiscalYear.js"
+import Toast from '../../shared/ui/Toast.jsx'
+import Rpt114Dashboard from '../rpt/Rpt114Dashboard.jsx'
+import PresentationBar from '../../shared/ui/PresentationBar.jsx'
+import PresentationSlides from '../../shared/ui/PresentationSlides.jsx'
+import { thaiDateRange } from '../../shared/utils/formatDate.js'
+import PeriodBadge from '../../shared/ui/PeriodBadge.jsx'
+import UploadRptModal from '../rpt/UploadRptModal.jsx'
+import { BigCard, SourceCard, KpiToggleCard } from './OperationsCards.jsx'
+import OperationsSourceModal from './OperationsSourceModal.jsx'
+import { THAI_MONTHS } from '../../shared/utils/constants.js'
+import UnifiedHero from '../../shared/ui/UnifiedHero.jsx'
+import DateFilter from '../../shared/filters/DateFilter.jsx'
+import { formatThaiDate as fmtHeroDate, getLastUploadDate } from '../../shared/utils/heroMeta.js'
+import { dateToFiscalYear } from '../../shared/utils/fiscalYear.js'
+
+async function loadRptSummary(year) {
+  const years = rptYearList(year)
+  if (years && years.length === 0) {   // no_date
+    return null
+  }
+  let query = supabase
+    .from('report_114')
+    .select('complaints,processed,found,not_found,not_in_area,investigating,deceased,arrested,more_invest,rehab,framed,closed,action_other,fiscal_year')
+    .is('group_no', null)
+
+  if (years) query = years.length === 1 ? query.eq('fiscal_year', years[0]) : query.in('fiscal_year', years)
+
+  const { data, error } = await query
+  if (error) throw error
+
+  if (data && data.length > 0) {
+    const sum = key => data.reduce((s, r) => s + Number(r[key] ?? 0), 0)
+    const fys = [...new Set(data.map(r => r.fiscal_year))].filter(Boolean).sort((a, b) => a - b)
+    const contiguous = fys.every((y, i) => i === 0 || y === fys[i - 1] + 1)
+    const period = fys.length <= 1
+      ? `ปีงบ ${fys[0] ?? ''}`
+      : contiguous
+        ? `ปีงบ ${fys[0]}–${fys[fys.length - 1]} (สะสม)`
+        : `ปีงบ ${fys.join(', ')} (สะสม)`
+
+    return {
+      'รวมทั้งหมด':        sum('complaints'),
+      'ดำเนินการแล้ว':     sum('processed'),
+      'พบพฤติการณ์':       sum('found'),
+      'ไม่พบพฤติการณ์':    sum('not_found'),
+      'ไม่พบตัวในพื้นที่':  sum('not_in_area'),
+      'อยู่ระหว่างสืบสวน': sum('investigating'),
+      'เสียชีวิต':          sum('deceased'),
+      'จับกุม':            sum('arrested'),
+      'สืบสวนเพิ่มเติม':   sum('more_invest'),
+      'บำบัด':             sum('rehab'),
+      'กลั่นแกล้ง':        sum('framed'),
+      'ยุติเรื่อง':        sum('closed'),
+      'อื่นๆ':             sum('action_other'),
+      period,
+    }
+  } else {
+    return null
+  }
+
+}
 
 const OPS_SOURCE_INFO = {
   title: 'แหล่งข้อมูล · ผลการดำเนินงาน',
@@ -35,13 +80,6 @@ const CHANNEL_DISPLAY = {
   'สายด่วน 1386':  'สายด่วน 1386',
   'ทางรัฐ':        'ทางรัฐ',
   'อื่นๆ':         'ช่องทางอื่นๆ',
-}
-const CATEGORIES = ['จับกุม', 'บำบัด', 'กลั่นแกล้ง', 'อื่นๆ']
-const CATEGORY_COLORS = {
-  'จับกุม':    '#EF4444',
-  'บำบัด':     '#F59E0B',
-  'กลั่นแกล้ง': '#991B1B',
-  'อื่นๆ':     '#94A3B8',
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -81,10 +119,7 @@ export default function Operations() {
   const { records, isLoading } = useData()
   const { isPresentation } = usePresentation()
 
-  const [rptData, setRptData] = useState(null)
-  const [rptLoading, setRptLoading] = useState(true)
-  const [rptError, setRptError] = useState(null)
-  const [rptYear, setRptYear] = useState('all')   // ฝั่งขวา (RPT_114) – 'all' = ทุกปีสะสม
+  const [rptOverride, setRptOverride] = useState(null)
   const [rptAllYears, setRptAllYears] = useState([])
   const [opsLastUpload, setOpsLastUpload] = useState(null)
 
@@ -94,15 +129,11 @@ export default function Operations() {
   // DateFilter (ปีงบ) ↔ rptYear sync สองทาง — รองรับ ทุกปี ([]) / ปีเดียว / หลายปี
   // 'no_date' มีเฉพาะฝั่ง select (DateFilter แทนค่านี้ไม่ได้ จึงไม่ push กลับ)
   const { state: dfState, setFiscalYears: dfSetFiscalYears } = useFilter()
-  useEffect(() => {
-    const ys = (dfState.fiscalYears || []).map(Number).sort((a, b) => b - a)
-    setRptYear(ys.length === 0 ? 'all' : ys.join(','))
-  }, [dfState.fiscalYears])
-  const changeRptYear = (v) => {
-    setRptYear(v)
-    const cur = (dfState.fiscalYears || []).map(Number)
-    if (v === 'all') { if (cur.length) dfSetFiscalYears([]) }
-    else if (v !== 'no_date') { if (!(cur.length === 1 && cur[0] === Number(v))) dfSetFiscalYears([Number(v)]) }
+  const dfYearKey = (dfState.fiscalYears || []).map(Number).sort((a, b) => b - a).join(',') || 'all'
+  const rptYear = rptOverride?.years === dfState.fiscalYears ? rptOverride.value : dfYearKey
+  const changeRptYear = value => {
+    setRptOverride(value === 'no_date' ? { years: dfState.fiscalYears, value } : null)
+    if (value !== 'no_date') dfSetFiscalYears(value === 'all' ? [] : String(value).split(',').map(Number))
   }
   const rptYears = useMemo(() => rptYearList(rptYear), [rptYear])
 
@@ -117,101 +148,24 @@ export default function Operations() {
 
   // ── data loading ────────────────────────────────────────────────────────────
 
-  // reqId กันผลลัพธ์ค้าง — เปลี่ยนปีเร็วๆ แล้ว response เก่ามาทีหลังจะถูกทิ้ง
-  const reqIdRef = useRef(0)
-  const loadRpt = async (silent = false, year = rptYear) => {
-    const reqId = ++reqIdRef.current
-    if (!silent) setRptLoading(true)
-    setRptError(null)
-    try {
-      const years = rptYearList(year)
-      if (years && years.length === 0) {   // no_date
-        setRptData(null)
-        return
-      }
-      let query = supabase
-        .from('report_114')
-        .select('complaints,processed,found,not_found,not_in_area,investigating,deceased,arrested,more_invest,rehab,framed,closed,action_other,fiscal_year')
-        .is('group_no', null)
-
-      if (years) query = years.length === 1 ? query.eq('fiscal_year', years[0]) : query.in('fiscal_year', years)
-
-      const { data, error } = await query
-      if (reqId !== reqIdRef.current) return   // stale
-      if (error) throw error
-
-      if (data && data.length > 0) {
-        const sum = key => data.reduce((s, r) => s + Number(r[key] ?? 0), 0)
-        const fys = [...new Set(data.map(r => r.fiscal_year))].filter(Boolean).sort((a, b) => a - b)
-        const contiguous = fys.every((y, i) => i === 0 || y === fys[i - 1] + 1)
-        const period = fys.length <= 1
-          ? `ปีงบ ${fys[0] ?? ''}`
-          : contiguous
-            ? `ปีงบ ${fys[0]}–${fys[fys.length - 1]} (สะสม)`
-            : `ปีงบ ${fys.join(', ')} (สะสม)`
-
-        setRptData({
-          'รวมทั้งหมด':        sum('complaints'),
-          'ดำเนินการแล้ว':     sum('processed'),
-          'พบพฤติการณ์':       sum('found'),
-          'ไม่พบพฤติการณ์':    sum('not_found'),
-          'ไม่พบตัวในพื้นที่':  sum('not_in_area'),
-          'อยู่ระหว่างสืบสวน': sum('investigating'),
-          'เสียชีวิต':          sum('deceased'),
-          'จับกุม':            sum('arrested'),
-          'สืบสวนเพิ่มเติม':   sum('more_invest'),
-          'บำบัด':             sum('rehab'),
-          'กลั่นแกล้ง':        sum('framed'),
-          'ยุติเรื่อง':        sum('closed'),
-          'อื่นๆ':             sum('action_other'),
-          period,
-        })
-      } else {
-        setRptData(null)
-      }
-    } catch (err) {
-      if (reqId === reqIdRef.current) setRptError(err?.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่')
-    } finally {
-      // ปิด spinner เฉพาะเมื่อ request ล่าสุดเสร็จ (request เก่าที่ถูกแซงจะไม่ปิดก่อนเวลา)
-      if (reqId === reqIdRef.current) setRptLoading(false)
-    }
-  }
-
-  // โหลดรายการปีงบที่มีในตาราง (ครั้งเดียว) สำหรับ dropdown ฝั่งขวา
   const [yearsLoaded, setYearsLoaded] = useState(false)
-  const loadRptYears = async () => {
-    try {
-      const { data } = await supabase
-        .from('report_114')
-        .select('fiscal_year')
-        .is('group_no', null)
-      if (data) {
-        const ys = [...new Set(data.map(r => r.fiscal_year))].filter(Boolean).sort((a, b) => b - a)
-        setRptAllYears(ys)
-        // ตั้งปี default = ปีล่าสุด ที่นี่ (ไม่รอ DateFilter — ตอนนี้หน้ายังเป็น spinner DateFilter ยังไม่ mount)
-        if (ys.length && !(dfState.fiscalYears?.length)) dfSetFiscalYears([ys[0]])
-      }
-    } catch { /* non-fatal */ }
-    finally { setYearsLoaded(true) }
-  }
-
-  useEffect(() => { loadRptYears() }, [])
-  // โหลด/รีโหลดข้อมูลฝั่งขวาเมื่อปีเปลี่ยน — spinner เต็มหน้าเฉพาะครั้งแรก
-  // ครั้งถัดไป silent: หน้าไม่ถูกแทนด้วย spinner → DateFilter ไม่ unmount/remount (ไม่ reset ปีกลับเป็นปีล่าสุด)
-  // โหลดเฉพาะเมื่อ rptYear ตรงกับ DateFilter แล้ว (sync effect ด้านบนตามมาอีก 1 render)
-  // → ตอนเปิดหน้าไม่ fetch 'all' ทิ้งเปล่าก่อนจะ fetch ปีล่าสุดซ้ำ
-  const firstRptLoad = useRef(true)
-  const dfInitRef = useRef(false)
+  const filterYearsRef = useRef(dfState.fiscalYears)
+  useEffect(() => { filterYearsRef.current = dfState.fiscalYears }, [dfState.fiscalYears])
   useEffect(() => {
-    if (!yearsLoaded) return
-    const ys = (dfState.fiscalYears || []).map(Number).sort((a, b) => b - a)
-    const dfKey = ys.length ? ys.join(',') : 'all'
-    if (rptYear !== 'no_date' && rptYear !== dfKey) return          // รอ sync
-    if (rptAllYears.length > 0 && ys.length === 0 && !dfInitRef.current) return   // รอตั้งปี default
-    dfInitRef.current = true
-    loadRpt(!firstRptLoad.current, rptYear)
-    firstRptLoad.current = false
-  }, [rptYear, yearsLoaded, dfState.fiscalYears])   // eslint-disable-line react-hooks/exhaustive-deps
+    let active = true
+    supabase.from('report_114').select('fiscal_year').is('group_no', null)
+      .then(({ data }) => {
+        if (!active) return
+        const years = [...new Set((data || []).map(row => row.fiscal_year))].filter(Boolean).sort((a, b) => b - a)
+        setRptAllYears(years)
+        if (years.length && !filterYearsRef.current?.length) dfSetFiscalYears([years[0]])
+      }).catch(() => { /* Year options are optional; the summary still reports load errors. */ })
+      .finally(() => { if (active) setYearsLoaded(true) })
+    return () => { active = false }
+  }, [dfSetFiscalYears])
+  const loadSummary = useCallback(() => loadRptSummary(rptYear), [rptYear])
+  const { data: rptData, loading, loaded, error: rptError, reload: loadRpt } = useAsyncResource(loadSummary, null, undefined, yearsLoaded)
+  const rptLoading = loading && !loaded
 
   // ── derived data ────────────────────────────────────────────────────────────
 

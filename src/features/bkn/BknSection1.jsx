@@ -1,13 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
-import { supabase } from "../../shared/data/supabase.js"
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Cell, LabelList, ReferenceLine,
-} from 'recharts'
-import {
-  AlertTriangle, RefreshCw, Calendar, X, ArrowRight, Maximize2,
-} from 'lucide-react'
-import FilterPill from "../../shared/ui/FilterPill.jsx"
+import { supabase } from '../../shared/data/supabase.js'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList, ReferenceLine } from 'recharts'
+import { AlertTriangle, RefreshCw, Calendar, X, ArrowRight, Maximize2 } from 'lucide-react'
+import FilterPill from '../../shared/ui/FilterPill.jsx'
 
 const isSpw = b => b?.includes('สปพ')
 

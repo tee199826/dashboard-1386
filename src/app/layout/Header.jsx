@@ -1,18 +1,10 @@
+import { formatThaiDateLong as toThaiDate } from '../../shared/utils/formatDate.js'
 import { useState, useEffect } from 'react'
 import { LogOut, LogIn, AlertTriangle, Settings } from 'lucide-react'
-import { useAuth } from "../../shared/state/AuthContext.jsx"
+import { useAuth } from '../../shared/state/contexts.js'
 import { useNavigate } from 'react-router-dom'
-import logoOncb from "../../assets/logo-oncb.png"
-import { supabase } from "../../shared/data/supabase.js"
-
-const MONTH_LONG = ['', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
-
-function toThaiDate(iso) {
-  if (!iso) return null
-  const d = new Date(iso)
-  return `${d.getDate()} ${MONTH_LONG[d.getMonth() + 1]} ${d.getFullYear() + 543}`
-}
+import logoOncb from '../../assets/logo-oncb.png'
+import { supabase } from '../../shared/data/supabase.js'
 
 // module scope — เลี่ยง react-hooks/purity ที่ flag Date.now() ตรงๆ ใน render
 const isStaleDate = (iso) => (Date.now() - new Date(iso).getTime()) > 30 * 24 * 3600 * 1000

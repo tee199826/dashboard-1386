@@ -1,11 +1,12 @@
+import { useState, useMemo } from 'react'
+import { DNAME_TO_GROUP } from '../utils/constants.js'
+
 // useAreaCascade — dropdown ซ้อน กลุ่ม→เขต→แขวง→ชุมชน ใช้ร่วมทุก section ของ /situation
 // รับ rows ที่ date-filter แล้ว, คืน rows ที่กรองพื้นที่ครบ + state/options สำหรับ AreaCascadeBar
 // ⚠️ กรอง district ด้วย whitelist 50 เขต กทม. (groupOf) ไม่ใช่แค่ startsWith('เขต') —
 // พบ 6 แถวขยะจากการ import ที่มี prefix "เขต" ติดหน้าชื่ออำเภอต่างจังหวัด (เช่น "เขตอำเภอสนม")
 // ซึ่งผ่าน startsWith('เขต') ได้ ต้องตัดตั้งแต่ก่อนสร้าง options/rows ไม่ใช่แค่ตอน build dropdown
 // (memory: bkn-district-filter)
-import { useState, useMemo } from 'react'
-import { DNAME_TO_GROUP } from "../utils/constants.js"
 
 export const GROUP_ORDER = ['กรุงเทพกลาง', 'กรุงเทพเหนือ', 'กรุงเทพใต้', 'กรุงเทพตะวันออก', 'กรุงธนเหนือ', 'กรุงธนใต้']
 

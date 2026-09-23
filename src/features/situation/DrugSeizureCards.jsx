@@ -1,12 +1,13 @@
+import { useState } from 'react'
+import { Package, Snowflake, Syringe, FlaskConical, Pill, Leaf, Cannabis, Sparkles, Flower2, ChevronRight } from 'lucide-react'
+import Modal from '../../shared/ui/Modal.jsx'
+import { EmptyChart } from '../../shared/ui/ReportUI.jsx'
+
 // DrugSeizureCards — "ของกลางตัวยา" แบบการ์ด grid (แทนโดนัท/bar list เดิม) ตาม mockup ที่ผู้ใช้กำหนด
 // การ์ด 1 = ตัวยาอันดับ 1 (เน้นใหญ่สุด), การ์ด 2-5 = อันดับรองลงมา, การ์ดสุดท้าย = "อื่นๆ" กดเปิด modal ดูที่เหลือทั้งหมด
 // โทนน้ำเงินอ่อน (blue-100/200) เป็นข้อยกเว้นที่ผู้ใช้สั่งไว้เอง — ส่วนอื่นของ /situation ยังคุม palette slate+rose+emerald+amber ตามเดิม
 // data: [{ name, value }] เรียงมาก→น้อยมาแล้ว (arrestDimensionCounts) · total: ฐาน % (ผลรวมทุกตัวยา)
 // นับเป็น "คดี" ต่อตัวยา — dedup (casecode, ตัวยา) มาจาก extract_arrest.py แล้ว แต่ 1 คดีมีหลายตัวยาได้ ผลรวมจึงเกินจำนวนคดีจริง
-import { useState } from 'react'
-import { Package, Snowflake, Syringe, FlaskConical, Pill, Leaf, Cannabis, Sparkles, Flower2, ChevronRight } from 'lucide-react'
-import Modal from "../../shared/ui/Modal.jsx"
-import { EmptyChart } from "../../shared/ui/ReportUI.jsx"
 
 const TOP_N = 5
 

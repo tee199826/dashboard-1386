@@ -1,11 +1,10 @@
-import { createContext, useContext, useState, useCallback, useMemo } from 'react'
-import { getFiscalYearRange, getMonthRange } from "../utils/fiscalYear.js"
+import { FilterContext } from './contexts.js'
+import { useState, useCallback, useMemo } from 'react'
+import { getFiscalYearRange, getMonthRange } from '../utils/fiscalYear.js'
 
 // FilterContext — 1 provider ต่อ "ขอบเขต" (page-level หรือ per-chart override = nested provider)
 // state ไม่อยู่ใน URL ; reset คืนค่า default (mode fiscal + initialFiscalYear)
 // ปีงบเลือกได้หลายปี (fiscalYears) — fiscalYear = ปีเดียว (derived) คงไว้ให้ YoY/Operations/label เดิมใช้ต่อ
-
-const FilterContext = createContext(null)
 
 const deriveSingle = (years) => (years.length === 1 ? years[0] : null)
 
@@ -80,10 +79,4 @@ export function FilterProvider({ children, initialFiscalYear = null, initialStat
     setMonthYear, setMonth, setCustomFrom, setCustomTo, reset, getDateRange])
 
   return <FilterContext.Provider value={value}>{children}</FilterContext.Provider>
-}
-
-export function useFilter() {
-  const ctx = useContext(FilterContext)
-  if (!ctx) throw new Error('useFilter must be used inside <FilterProvider>')
-  return ctx
 }

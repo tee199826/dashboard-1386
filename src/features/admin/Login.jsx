@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useAuth } from "../../shared/state/AuthContext.jsx"
+import { useAuth } from '../../shared/state/contexts.js'
 import { useNavigate, Navigate } from 'react-router-dom'
-import { Lock, Mail, Shield, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
-import logoOncb from "../../assets/logo-oncb.png"
+import { Lock, Mail, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
+import logoOncb from '../../assets/logo-oncb.png'
 
 const BG_IMAGE_URL =
   'https://images.unsplash.com/photo-1557597774-9d273605dfa9?auto=format&fit=crop&w=1920&q=80'

@@ -1,9 +1,10 @@
+import { useId } from 'react'
+import { nodeDetail, communityList, resolveAreaNode } from '../../shared/geo/pixelMapData.js'
+import { BEHAVIOR_COLORS } from '../../shared/utils/constants.js'
+
 // ExportDetailCard — การ์ด "รายละเอียดพื้นที่" ที่วาดลงในภาพตอน export
 // วาดเป็น SVG ในตัว <svg> ของแผนที่ (ไม่ใช่ HTML overlay) เพื่อให้ติดไปทั้งใน PNG และไฟล์ .svg
 // เนื้อหาชุดเดียวกับแผงข้างแผนที่ แต่ย่อเหลือเฉพาะที่จำเป็นสำหรับงานนำเสนอ (ชุมชนเอา 3 อันดับแรก)
-import { useId } from 'react'
-import { nodeDetail, communityList, resolveAreaNode } from "../../shared/geo/pixelMapData.js"
-import { BEHAVIOR_COLORS } from "../../shared/utils/constants.js"
 
 const FONT = "Inter, 'Noto Sans Thai', sans-serif"
 const W = 262        // ความกว้างการ์ด (หน่วยเดียวกับ viewBox ของแผนที่)

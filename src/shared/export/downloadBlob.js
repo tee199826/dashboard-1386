@@ -1,3 +1,5 @@
+
+
 // ดาวน์โหลด Blob เป็นไฟล์ — ใช้ร่วมทุกจุด export (Excel/CSV)
 // จุดสำคัญ: ห้าม revokeObjectURL ทันทีหลัง a.click() — Chrome เริ่มดาวน์โหลดแบบ async
 // ถ้า URL ถูกถอนก่อน ไฟล์จะไม่ถูกบันทึกโดยไม่มี error (เจอตอนเทส /districts export: blob สร้างแล้ว แต่ไม่มีไฟล์)

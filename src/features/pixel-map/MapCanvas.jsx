@@ -1,18 +1,14 @@
 import { forwardRef, useMemo, useRef, useEffect, useImperativeHandle, useCallback, useState, useId, memo } from 'react'
 import { select } from 'd3-selection'
 import { zoom as d3zoom, zoomIdentity } from 'd3-zoom'
-import {
-  districtPathD, buildDotGrid, BKK_BBOX, makeProjection,
-  ringPathD, featurePathD, lookupSubdistrict, lookupCommunity, communityCellRing, districtContaining,
-} from "./pixelMapGeometry.js"
-import { interpolateHex, getContrastText, PINNED_STROKES } from "./pixelMapStyle.js"
-
-import { nodeMetricValue, nodeDetail, sameArea, resolveAreaNode } from "../../shared/geo/pixelMapData.js"
-import { subKey, ROSE_DEFAULT } from "./usePixelMapState.js"
-import { fitToBoundsTransform, estimateLabelBox, layoutLabels, boxOf } from "./pixelMapZoom.js"
-import { TILE_SOURCES, visibleTiles } from "./pixelMapTiles.js"
-import ZoomControls from "./ZoomControls.jsx"
-import ExportDetailCard from "./ExportDetailCard.jsx"
+import { districtPathD, buildDotGrid, BKK_BBOX, makeProjection, ringPathD, featurePathD, lookupSubdistrict, lookupCommunity, communityCellRing, districtContaining } from './pixelMapGeometry.js'
+import { interpolateHex, getContrastText, PINNED_STROKES } from './pixelMapStyle.js'
+import { nodeMetricValue, nodeDetail, sameArea, resolveAreaNode } from '../../shared/geo/pixelMapData.js'
+import { subKey, ROSE_DEFAULT } from './usePixelMapState.js'
+import { fitToBoundsTransform, estimateLabelBox, layoutLabels, boxOf } from './pixelMapZoom.js'
+import { TILE_SOURCES, visibleTiles } from './pixelMapTiles.js'
+import ZoomControls from './ZoomControls.jsx'
+import ExportDetailCard from './ExportDetailCard.jsx'
 
 const FONT = "Inter, 'Noto Sans Thai', sans-serif"
 const SCALE_EXTENT = [1, 24] // ซูมเข้าได้ลึกถึงระดับถนน (tile รองรับถึง z18)
@@ -566,7 +562,6 @@ const PixelMapCanvas = forwardRef(function PixelMapCanvas({
     if (e.ctrlKey || !onAreaClick) return
     onAreaClick({ ...area, source: 'pinned' })
   }, [onAreaClick])
-
 
   // ── เลเยอร์รูปทรง (พื้น/เส้นขอบ/พื้นที่เลือก/hover zone) — memo แยกจาก transform ──
   // เดิม strokeWidth ผูกกับ t.k ทำให้ทุก path ต้อง diff attribute ใหม่ทุกเฟรมที่ซูม = หน่วง

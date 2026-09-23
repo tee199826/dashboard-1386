@@ -1,5 +1,5 @@
 import { Maximize2, Minimize2 } from 'lucide-react'
-import { usePresentation } from "../state/PresentationContext.jsx"
+import { usePresentation } from '../state/contexts.js'
 
 export function PresentationEnterButton({ className = '' }) {
   const { enter } = usePresentation()

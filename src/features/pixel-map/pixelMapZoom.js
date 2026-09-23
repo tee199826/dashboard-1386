@@ -1,3 +1,5 @@
+
+
 // pixelMapZoom.js — helper geometry สำหรับ zoom/pan ของ /pixel-map (ไม่ใช้ d3-force — greedy AABB พอสำหรับ label ตัวเลข)
 
 // คำนวณ transform {x,y,k} ที่ fit bbox (data-space) ให้พอดี viewport พร้อม padding — สูตรมาตรฐานของ d3-zoom transform

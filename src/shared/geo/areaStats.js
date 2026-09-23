@@ -1,8 +1,9 @@
+import { DRUG_FLAGS } from '../data/drugFlags.js'
+import { DNAME_TO_GROUP } from '../utils/constants.js'
+
 // areaStats.js — นับ "จำนวนครั้งร้องเรียน" รายพื้นที่ (เขต / แขวง / ชุมชน) จาก drug_incidents (wide one-hot)
 // ใช้ร่วม /radar (panel สถิติพื้นที่ + popup + cluster) และ exportAreaStats
 // 1 แถว = 1 ครั้ง ; พฤติการณ์/ตัวยา นับตาม flag (1 แถวอาจมีหลายตัวยา → ผลรวมตัวยา ≥ จำนวนครั้ง)
-import { DRUG_FLAGS } from "../data/drugFlags.js"
-import { DNAME_TO_GROUP } from "../utils/constants.js"
 
 // label พฤติการณ์ตรงกับ deriveBehaviors ใน drugWide ('เสพ/ค้า' ไม่ใช่ 'ค้าเสพ' ของ /situation)
 export const BEHAVIOR_COLS = [

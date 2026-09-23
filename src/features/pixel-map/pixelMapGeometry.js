@@ -1,7 +1,8 @@
-// pixelMapGeometry.js — projection + dot-grid สำหรับ /pixel-map
-// bbox กทม. ทั้งหมด (จาก public/bangkok-districts.geojson, 50 features, ทุกอันเป็น Polygon)
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon'
 import { point } from '@turf/helpers'
+
+// pixelMapGeometry.js — projection + dot-grid สำหรับ /pixel-map
+// bbox กทม. ทั้งหมด (จาก public/bangkok-districts.geojson, 50 features, ทุกอันเป็น Polygon)
 
 export const BKK_BBOX = { minLng: 100.328, maxLng: 100.939, minLat: 13.484, maxLat: 13.955 } // ครอบขอบเขต BMA_ADMIN_DISTRICT พอดี (ปลายบางขุนเทียนลงถึง ~13.485)
 

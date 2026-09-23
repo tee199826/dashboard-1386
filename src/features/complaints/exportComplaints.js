@@ -1,9 +1,10 @@
-import { createWorksheetWriter } from "../../shared/export/excelReportSheet.js"
-// exportComplaints.js — Excel export ของหน้า /complaints (แถวที่ filter ตาม view ปัจจุบันแล้ว)
+import { createWorksheetWriter, styleExcelHeader as styleHeaderRow } from '../../shared/export/excelReportSheet.js'
 import ExcelJS from 'exceljs'
-import { downloadBlob, XLSX_MIME } from "../../shared/export/downloadBlob.js"
-import { formatThaiDate, formatThaiDateTime } from "../../shared/utils/heroMeta.js"
-import { DNAME_TO_GROUP } from "../../shared/utils/constants.js"
+import { downloadBlob, XLSX_MIME } from '../../shared/export/downloadBlob.js'
+import { formatThaiDate, formatThaiDateTime } from '../../shared/utils/heroMeta.js'
+import { DNAME_TO_GROUP } from '../../shared/utils/constants.js'
+
+// exportComplaints.js — Excel export ของหน้า /complaints (แถวที่ filter ตาม view ปัจจุบันแล้ว)
 
 // DB สะกด "ราษฎร์บูรณะ" ด้วย ฎ ชฎา (ถูกต้อง) แต่ DNAME_TO_GROUP ใช้ ฏ ปฏัก ตาม GeoJSON เดิม
 const DISTRICT_ALIAS = { 'เขตราษฎร์บูรณะ': 'เขตราษฏร์บูรณะ' }
@@ -14,21 +15,9 @@ const DONE_STATUSES = ['จับกุม', 'บำบัด', 'ดำเนิ
 const isDone = (status) => DONE_STATUSES.includes(status)
 const splitMulti = (v) => (v ? String(v).split(',').map((s) => s.trim()).filter(Boolean) : [])
 
-
-
-function styleHeaderRow(row) {
-  row.eachCell((cell) => {
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }
-    cell.alignment = { vertical: 'middle' }
-  })
-}
-
 const PCT_COLUMNS = new Set(['%'])
 const isNumericHeader = (h) => !PCT_COLUMNS.has(h) && ['จำนวน'].includes(h)
 const writeSheet = createWorksheetWriter({ percentColumns: PCT_COLUMNS, isNumericHeader, styleHeaderRow })
-
-
 
 /**
  * สร้าง + ดาวน์โหลด Excel report ของเรื่องร้องเรียน (complaints) — รับแถวที่ filter ตาม view ปัจจุบันแล้ว

@@ -1,29 +1,29 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { MapPin, ArrowLeft, Search, Menu, AlertTriangle, Plus, X, SlidersHorizontal, Lightbulb, Info, BarChart3, Printer, Download, Camera, Table2, RotateCcw } from 'lucide-react'
-import { usePersistedState } from "./usePersistedState.js"
-import MultiSelect from "./MultiSelect.jsx"
-import AreaStatsPanel from "./AreaStatsPanel.jsx"
-import { exportAreaStats } from "../../shared/export/exportAreaStats.js"
-import { summarizeRows, areaName, BEHAVIOR_COLS, DRUG_NAME_TO_COL } from "../../shared/geo/areaStats.js"
+import { usePersistedState } from './usePersistedState.js'
+import MultiSelect from './MultiSelect.jsx'
+import AreaStatsPanel from './AreaStatsPanel.jsx'
+import { exportAreaStats } from '../../shared/export/exportAreaStats.js'
+import { summarizeRows, areaName, BEHAVIOR_COLS, DRUG_NAME_TO_COL } from '../../shared/geo/areaStats.js'
 import { ComposedChart, Area, ReferenceDot, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, Legend } from 'recharts'
-import { THAI_MONTHS, DNAME_TO_GROUP } from "../../shared/utils/constants.js"
-import { fetchAllPages } from "../../shared/data/supabasePagination.js"
-import { enrichDrugRow } from "../../shared/data/drugWide.js"
-import { DRUG_INCIDENT_PUBLIC_COLUMNS } from "../../shared/data/drugFlags.js"
-import { escapeHtml } from "../../shared/security/escapeHtml.js"
-import { thaiDateRange } from "../../shared/utils/formatDate.js"
-import { exportDrugIncidentReport } from "../../shared/export/exportReport.js"
-import { exportMapImage } from "./exportMapImage.js"
-import ExportDialog from "../../shared/export/ExportDialog.jsx"
-import MapExportDialog from "../../shared/geo/MapExportDialog.jsx"
-import { getFiscalYearRange, getMonthRange } from "../../shared/utils/fiscalYear.js"
-import { formatThaiDate } from "../../shared/utils/heroMeta.js"
-import PeriodBadge from "../../shared/ui/PeriodBadge.jsx"
-import IncidentMap from "../../shared/geo/IncidentMap.jsx"
-import { usePresentation } from "../../shared/state/PresentationContext.jsx"
-import PresentationBar, { PresentationEnterButton } from "../../shared/ui/PresentationBar.jsx"
-import PresentationSlides from "../../shared/ui/PresentationSlides.jsx"
+import { THAI_MONTHS, DNAME_TO_GROUP } from '../../shared/utils/constants.js'
+import { fetchAllPages } from '../../shared/data/supabasePagination.js'
+import { enrichDrugRow } from '../../shared/data/drugWide.js'
+import { DRUG_INCIDENT_PUBLIC_COLUMNS } from '../../shared/data/drugFlags.js'
+import { escapeHtml } from '../../shared/security/escapeHtml.js'
+import { thaiDateRange } from '../../shared/utils/formatDate.js'
+import { exportDrugIncidentReport } from '../../shared/export/exportReport.js'
+import { exportMapImage } from './exportMapImage.js'
+import ExportDialog from '../../shared/export/ExportDialog.jsx'
+import MapExportDialog from '../../shared/geo/MapExportDialog.jsx'
+import { getFiscalYearRange, getMonthRange } from '../../shared/utils/fiscalYear.js'
+import { formatThaiDate } from '../../shared/utils/heroMeta.js'
+import PeriodBadge from '../../shared/ui/PeriodBadge.jsx'
+import IncidentMap from '../../shared/geo/IncidentMap.jsx'
+import { usePresentation } from '../../shared/state/contexts.js'
+import PresentationBar, { PresentationEnterButton } from '../../shared/ui/PresentationBar.jsx'
+import PresentationSlides from '../../shared/ui/PresentationSlides.jsx'
 
 const DRUG_CATEGORIES = {
   'Club Drugs': {
@@ -104,7 +104,6 @@ const DISTRICT_GROUPS = {
   'กรุงธนเหนือ':     { border: '#6b21a8', fill: '#d8b4fe', emoji: '🟣', count: 8 },
   'กรุงธนใต้':       { border: '#9f1239', fill: '#fda4af', emoji: '🔴', count: 7 },
 }
-
 
 function PointPopupContent({ p }) {
   const rows = [

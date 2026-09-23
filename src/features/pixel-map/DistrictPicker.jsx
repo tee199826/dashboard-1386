@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { ChevronDown, ChevronRight, Search } from 'lucide-react'
-import { subKey, communityKey } from "./usePixelMapState.js"
-import { buildAreaRows } from "../../shared/geo/pixelMapAreas.js"
+import { subKey, communityKey } from './usePixelMapState.js'
+import { buildAreaRows } from '../../shared/geo/pixelMapAreas.js'
 
 const flip = (set, key) => {
   const next = new Set(set)

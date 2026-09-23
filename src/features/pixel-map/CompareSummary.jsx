@@ -1,3 +1,7 @@
+import { useMemo } from 'react'
+import { X } from 'lucide-react'
+import { sumDistrictMeta, nodeDetail, communityList, resolveAreaNode, BEHAVIOR_FLAGS } from '../../shared/geo/pixelMapData.js'
+
 // CompareSummary — ตารางเทียบตัวเลขของแต่ละแผนที่ในโหมด Compare (อยู่ใต้แผนที่ เปิดเป็นค่าเริ่มต้น ซ่อนได้จาก toolbar)
 // ที่เดียวที่เทียบตัวเลขข้ามแผนที่ — แผงด้านขวาแสดงรายละเอียดของพื้นที่เดียว (แคบเกินกว่าจะวางตารางเทียบให้อ่านสบาย)
 // ตัวเลขมาจาก hierarchy ชุดเดียวกับแผนที่ (ตามช่วงเวลาที่เลือก)
@@ -6,9 +10,6 @@
 //   2) ไม่ได้คลิกไว้ → ใช้เขตที่ติ๊กจากช่องด้านบนของแผนที่ (ได้หลายเขต → รวมกัน)
 // หัวคอลัมน์บอกทุกครั้งว่าตัวเลขมาจากทางไหน จะได้ไม่งงว่าทำไมไม่ตรงกับที่นึกไว้
 // 2 แผนที่: มีคอลัมน์ "ต่าง" (ซ้าย − ขวา) ให้เห็นส่วนต่างทันที ; 3-4 แผนที่: เทียบกันเป็นคอลัมน์ (ไม่มีคอลัมน์ต่าง เพราะเทียบคู่ไหนก็ไม่ชัด)
-import { useMemo } from 'react'
-import { X } from 'lucide-react'
-import { sumDistrictMeta, nodeDetail, communityList, resolveAreaNode, BEHAVIOR_FLAGS } from "../../shared/geo/pixelMapData.js"
 
 const pct = (n, total) => (total > 0 ? Math.round((n / total) * 100) : 0)
 const fmt = (n) => n.toLocaleString()

@@ -1,3 +1,5 @@
+
+
 // areaOptions — รายชื่อ แขวง/ชุมชน ตามเขต สำหรับฟอร์มกรอกพื้นที่
 // แหล่งข้อมูล: GeoJSON ทางการที่ระบบใช้วาดแผนที่อยู่แล้ว → ชื่อที่กรอกจึง join กับแผนที่/สถิติได้ตรง
 //   bangkok-subdistricts.geojson : แขวงครบ 169 แขวง / 50 เขต (properties.district, properties.name)

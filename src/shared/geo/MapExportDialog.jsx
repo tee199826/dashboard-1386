@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Download, Camera } from 'lucide-react'
-import Modal from "../ui/Modal.jsx"
+import Modal from '../ui/Modal.jsx'
 
 const FORMATS = [
   { id: 'jpg', label: 'JPG' },
@@ -16,21 +16,16 @@ const SCALES = [
  * MapExportDialog — modal ตัวเลือกส่งออกภาพแผนที่ (JPG/PNG) ของ /radar
  * props: open, onClose, onConfirm({ format, scale, showDistrictNames, showLegend, showTitle }), busy
  */
-export default function MapExportDialog({ open, onClose, onConfirm, busy = false }) {
+export default function MapExportDialog(props) {
+  return props.open ? <MapExportOptions {...props} /> : null
+}
+
+function MapExportOptions({ open, onClose, onConfirm, busy = false }) {
   const [format, setFormat] = useState('jpg')
   const [scale, setScale] = useState(2)
   const [showDistrictNames, setShowDistrictNames] = useState(true)
   const [showLegend, setShowLegend] = useState(true)
   const [showTitle, setShowTitle] = useState(true)
-
-  useEffect(() => {
-    if (!open) return
-    setFormat('jpg')
-    setScale(2)
-    setShowDistrictNames(true)
-    setShowLegend(true)
-    setShowTitle(true)
-  }, [open])
 
   const handleConfirm = () => {
     if (busy) return

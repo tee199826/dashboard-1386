@@ -1,3 +1,5 @@
+
+
 /* ─── Excel row → record schema ─── */
 export function mapRowToRecord(row, groupNumber) {
   const get = (...keys) => {

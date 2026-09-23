@@ -1,10 +1,11 @@
-// TreatmentSection — ส่วน "บำบัด" ของหน้า /situation (ยกเนื้อจาก TreatmentPage เดิม)
 import { useState, useMemo } from 'react'
-import { groupOf } from "../../shared/filters/useAreaCascade.js"
-import { formatThaiDate } from "../../shared/utils/heroMeta.js"
-import { DRUG_FLAGS, drugCounts, rowsWithAnyDrug } from "../../shared/data/drugFlags.js"
-import { exportTreatmentReport } from "./exportSituation.js"
-import { Panel, SectionHead, Metric, RankedBarChart, EmptyChart, PlaceholderCard, ActionBar, TablePager } from "../../shared/ui/ReportUI.jsx"
+import { groupOf } from '../../shared/filters/useAreaCascade.js'
+import { formatThaiDate } from '../../shared/utils/heroMeta.js'
+import { DRUG_FLAGS, drugCounts, rowsWithAnyDrug } from '../../shared/data/drugFlags.js'
+import { exportTreatmentReport } from './exportSituation.js'
+import { Panel, SectionHead, Metric, RankedBarChart, EmptyChart, PlaceholderCard, ActionBar, TablePager } from '../../shared/ui/ReportUI.jsx'
+
+// TreatmentSection — ส่วน "บำบัด" ของหน้า /situation (ยกเนื้อจาก TreatmentPage เดิม)
 
 const PAGE_SIZE = 50
 // ข้อมูลรายบุคคลที่ระบบยังไม่มีระดับ กทม. — รอ re-export ไฟล์บำบัดพร้อม filter กทม. จากระบบ บสต.

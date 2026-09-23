@@ -1,6 +1,6 @@
 import React from 'react'
 import { Plus, X } from 'lucide-react'
-import PeriodBadge from "../../shared/ui/PeriodBadge.jsx"
+import PeriodBadge from '../../shared/ui/PeriodBadge.jsx'
 
 export function BigCard({ icon, label, value, pct, sub, color, period }) {
   const configs = {

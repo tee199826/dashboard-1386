@@ -1,8 +1,9 @@
+import { useMemo, useState } from 'react'
+import { communityList } from '../../shared/geo/pixelMapData.js'
+import { subKey, communityKey } from './usePixelMapState.js'
+
 // CommunityPanel — รายชื่อชุมชนทั้งหมดในพื้นที่ที่ติ๊กไว้ (tooltip บนแผนที่โชว์ได้แค่ 5 อันดับแรก)
 // เรียงตามจำนวนเรื่องมาก→น้อย ติ๊กในรายการนี้ = ติ๊กชุมชนบนแผนที่ (ชุด checkedCommunities เดียวกับ SelectionTree)
-import { useMemo, useState } from 'react'
-import { communityList } from "../../shared/geo/pixelMapData.js"
-import { subKey, communityKey } from "./usePixelMapState.js"
 
 export default function CommunityPanel({ hierarchy, checkedDistricts, checkedSubdistricts, checkedCommunities, toggleCommunity }) {
   const [q, setQ] = useState('')

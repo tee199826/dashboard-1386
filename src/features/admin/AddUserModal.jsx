@@ -1,7 +1,7 @@
-import { useState } from "react"
-import { supabase } from "../../shared/data/supabase.js"
-import { X } from "lucide-react"
-import { ConfirmModal } from "../../shared/ui/ConfirmModal.jsx"
+import { useState } from 'react'
+import { supabase } from '../../shared/data/supabase.js'
+import { X } from 'lucide-react'
+import { ConfirmModal } from '../../shared/ui/ConfirmModal.jsx'
 
 export function AddUserModal({ onClose, onAdded, showToast }) {
   const [email, setEmail] = useState('')

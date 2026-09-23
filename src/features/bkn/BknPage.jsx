@@ -1,31 +1,33 @@
-﻿import { useState, useEffect, useMemo, useCallback } from 'react'
-import { supabase } from "../../shared/data/supabase.js"
+import { useAsyncResource } from '../../shared/data/useAsyncResource.js'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { supabase } from '../../shared/data/supabase.js'
 import { AlertTriangle } from 'lucide-react'
-import IncidentMap from "../../shared/geo/IncidentMap.jsx"
-import BknSection1 from "./BknSection1.jsx"
-import BknDrilldown from "./BknDrilldown.jsx"
-import { getBknByDistrict, BKN_ORDER, BKN_COLORS } from "../../shared/geo/bknMapping.js"
-import { fetchAllPages } from "../../shared/data/supabasePagination.js"
-import { enrichDrugRow } from "../../shared/data/drugWide.js"
-import { DRUG_INCIDENT_PUBLIC_COLUMNS } from "../../shared/data/drugFlags.js"
-import { escapeHtml } from "../../shared/security/escapeHtml.js"
-import { formatThaiDateShort as formatThaiDate } from "../../shared/utils/formatDate.js"
-import { usePresentation } from "../../shared/state/PresentationContext.jsx"
-import PresentationBar from "../../shared/ui/PresentationBar.jsx"
-import PresentationSlides from "../../shared/ui/PresentationSlides.jsx"
-import BknSummarySection from "./BknSummarySection.jsx"
-import BknDrugStats from "./BknDrugStats.jsx"
-import BknExecutiveHeader from "./BknExecutiveHeader.jsx"
-import BknExecutiveSummary from "./BknExecutiveSummary.jsx"
-import { formatThaiDate as fmtHeroDate, minMaxDate } from "../../shared/utils/heroMeta.js"
-import { exportDrugIncidentReport } from "../../shared/export/exportReport.js"
-import ExportDialog from "../../shared/export/ExportDialog.jsx"
+import IncidentMap from '../../shared/geo/IncidentMap.jsx'
+import BknSection1 from './BknSection1.jsx'
+import BknDrilldown from './BknDrilldown.jsx'
+import { getBknByDistrict, BKN_ORDER, BKN_COLORS } from '../../shared/geo/bknMapping.js'
+import { fetchAllPages } from '../../shared/data/supabasePagination.js'
+import { enrichDrugRow } from '../../shared/data/drugWide.js'
+import { DRUG_INCIDENT_PUBLIC_COLUMNS } from '../../shared/data/drugFlags.js'
+import { escapeHtml } from '../../shared/security/escapeHtml.js'
+import { formatThaiDateShort as formatThaiDate } from '../../shared/utils/formatDate.js'
+import { usePresentation } from '../../shared/state/contexts.js'
+import PresentationBar from '../../shared/ui/PresentationBar.jsx'
+import PresentationSlides from '../../shared/ui/PresentationSlides.jsx'
+import BknSummarySection from './BknSummarySection.jsx'
+import BknDrugStats from './BknDrugStats.jsx'
+import BknExecutiveHeader from './BknExecutiveHeader.jsx'
+import BknExecutiveSummary from './BknExecutiveSummary.jsx'
+import { formatThaiDate as fmtHeroDate, minMaxDate } from '../../shared/utils/heroMeta.js'
+import { exportDrugIncidentReport } from '../../shared/export/exportReport.js'
+import ExportDialog from '../../shared/export/ExportDialog.jsx'
+
+const loadIncidents = async () => (await fetchAllPages('drug_incidents', DRUG_INCIDENT_PUBLIC_COLUMNS)).map(enrichDrugRow)
+
 
 export default function BknPage() {
   const { isPresentation } = usePresentation()
-  const [incidents, setIncidents] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(null)
+  const { data: incidents, loading, error: loadError, reload: reloadIncidents } = useAsyncResource(loadIncidents, undefined, 'ไม่สามารถโหลดข้อมูลได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือลองใหม่')
   const [selectedBkn, setSelectedBkn] = useState(null)
   const [drilldownBkn, setDrilldownBkn] = useState(null)   // Phase 4: drill-down ระดับ สน.
   const [viewMode, setViewMode] = useState('choropleth')
@@ -33,21 +35,18 @@ export default function BknPage() {
   const [bannerPeriod, setBannerPeriod] = useState(null)
   const [dealerRows, setDealerRows] = useState([])
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setLoadError(null)
-    try {
-      const all = await fetchAllPages('drug_incidents', DRUG_INCIDENT_PUBLIC_COLUMNS)
-      setIncidents(all.map(enrichDrugRow))  // wide one-hot → primary_drug/behaviors/primary_action
-    } catch {
-      setLoadError('ไม่สามารถโหลดข้อมูลได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือลองใหม่')
-    } finally {
-      setLoading(false)
-    }
-    fetchAllPages('substance_users', 'dealer_locations, surveyed_at').then(setDealerRows).catch(() => setDealerRows([]))
+  useEffect(() => {
+    let active = true
+    fetchAllPages('substance_users', 'dealer_locations, surveyed_at')
+      .then(rows => { if (active) setDealerRows(rows) }).catch(() => { if (active) setDealerRows([]) })
+    return () => { active = false }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  const load = useCallback(async () => {
+    await reloadIncidents()
+    const dealers = await fetchAllPages('substance_users', 'dealer_locations, surveyed_at').catch(() => [])
+    setDealerRows(dealers)
+  }, [reloadIncidents])
 
   // ── drill-down + URL state (?drilldown=4) → back/forward ใช้งานได้ ──
   const goDrilldown = useCallback((bkn) => {

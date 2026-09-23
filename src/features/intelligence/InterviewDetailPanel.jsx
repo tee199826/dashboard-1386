@@ -1,6 +1,6 @@
-import { Trash2, X } from "lucide-react"
-import { formatThaiDate } from "../../shared/utils/heroMeta.js"
-import { displayNationalId } from "./intelOptions.js"
+import { Trash2, X } from 'lucide-react'
+import { formatThaiDate } from '../../shared/utils/heroMeta.js'
+import { displayNationalId } from './intelOptions.js'
 
 // ── แผงรายละเอียดเต็ม ────────────────────────────────────────────────────────
 function Row({ label, value }) {

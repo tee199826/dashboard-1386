@@ -1,8 +1,9 @@
+import { MapPin, ChevronRight } from 'lucide-react'
+import FilterPill from '../ui/FilterPill.jsx'
+import { GROUP_ORDER } from './useAreaCascade.js'
+
 // AreaCascadeBar — แถว pill กลุ่ม→เขต→แขวง→ชุมชน ใช้ร่วมกับ useAreaCascade()
 // แสดงเป็นลำดับชั้นเจาะลึกซ้าย→ขวา (มี › คั่น) ให้เห็นความสัมพันธ์ชัด
-import { MapPin, ChevronRight } from 'lucide-react'
-import FilterPill from "../ui/FilterPill.jsx"
-import { GROUP_ORDER } from "./useAreaCascade.js"
 
 const Sep = () => <ChevronRight size={15} className="text-slate-300 shrink-0" />
 

@@ -1,10 +1,11 @@
+import ExcelJS from 'exceljs'
+import { downloadBlob, XLSX_MIME } from './downloadBlob.js'
+import { formatThaiDate } from '../utils/heroMeta.js'
+import { DRUG_FLAGS } from '../data/drugFlags.js'
+import { aggregateAreas, BEHAVIOR_LABELS, isBkkDistrict } from '../geo/areaStats.js'
+
 // exportAreaStats.js — Excel "สถิติรายพื้นที่" ของ /radar (เขต / แขวง / ชุมชน) — 1 ครั้ง = 1 แถว drug_incidents
 // รับแถวที่กรองตาม view ปัจจุบันแล้ว (ตัวเลขตรงกับ panel บนจอ) ; จัด format ให้อ่านง่าย: header เข้ม, freeze, filter, เรียงมาก→น้อย
-import ExcelJS from 'exceljs'
-import { downloadBlob, XLSX_MIME } from "./downloadBlob.js"
-import { formatThaiDate } from "../utils/heroMeta.js"
-import { DRUG_FLAGS } from "../data/drugFlags.js"
-import { aggregateAreas, BEHAVIOR_LABELS, isBkkDistrict } from "../geo/areaStats.js"
 
 const DRUG_NAMES = DRUG_FLAGS.map(([, name]) => name)
 const HEADER_FILL = 'FF1E293B'   // slate-800

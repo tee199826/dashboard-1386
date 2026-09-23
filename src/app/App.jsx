@@ -1,30 +1,30 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
-import { DataProvider } from "../shared/state/DataContext.jsx"
-import { AuthProvider } from "../shared/state/AuthContext.jsx"
-import { PresentationProvider } from "../shared/state/PresentationContext.jsx"
-import { FilterProvider } from "../shared/state/FilterContext.jsx"
-import { ProtectedRoute } from "../shared/security/ProtectedRoute.jsx"
-import Overview from "../features/overview/Overview.jsx"
-import AllDistricts from "../features/districts/AllDistricts.jsx"
-import BehaviorTable from "../features/districts/BehaviorTable.jsx"
-import DataTable from "../features/complaints/DataTable.jsx"
-import Login from "../features/admin/Login.jsx"
-import AuditLogs from "../features/admin/AuditLogs.jsx"
-import UserManagement from "../features/admin/UserManagement.jsx"
-import Operations from "../features/operations/Operations.jsx"
-import SubstanceRadar from "../features/radar/SubstanceRadar.jsx"
-import PixelMap from "../features/pixel-map/PixelMap.jsx"
-import UploadPage from "../features/upload/UploadPage.jsx"
-import BknPage from "../features/bkn/BknPage.jsx"
-import SubstanceUsers from "../features/intelligence/SubstanceUsers.jsx"
-import ComplaintsPage from "../features/complaints/ComplaintsPage.jsx"
-import SituationPage from "../features/situation/SituationPage.jsx"
-import DrugEvidence from "../features/situation/DrugEvidence.jsx"
-import InterviewForm from "../features/intelligence/InterviewForm.jsx"
-import InterviewSearch from "../features/intelligence/InterviewSearch.jsx"
-import Admin from "../features/admin/Admin.jsx"
-import RptFieldEntry from "../features/rpt/RptFieldEntry.jsx"
-import { MainLayout, ScrollToTop } from "./layout/MainLayout.jsx"
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { DataProvider } from '../shared/state/DataContext.jsx'
+import { AuthProvider } from '../shared/state/AuthContext.jsx'
+import { PresentationProvider } from '../shared/state/PresentationContext.jsx'
+import { FilterProvider } from '../shared/state/FilterContext.jsx'
+import { ProtectedRoute } from '../shared/security/ProtectedRoute.jsx'
+import Overview from '../features/overview/Overview.jsx'
+import AllDistricts from '../features/districts/AllDistricts.jsx'
+import BehaviorTable from '../features/districts/BehaviorTable.jsx'
+import DataTable from '../features/complaints/DataTable.jsx'
+import Login from '../features/admin/Login.jsx'
+import AuditLogs from '../features/admin/AuditLogs.jsx'
+import UserManagement from '../features/admin/UserManagement.jsx'
+import Operations from '../features/operations/Operations.jsx'
+import SubstanceRadar from '../features/radar/SubstanceRadar.jsx'
+import PixelMap from '../features/pixel-map/PixelMap.jsx'
+import UploadPage from '../features/upload/UploadPage.jsx'
+import BknPage from '../features/bkn/BknPage.jsx'
+import SubstanceUsers from '../features/intelligence/SubstanceUsers.jsx'
+import ComplaintsPage from '../features/complaints/ComplaintsPage.jsx'
+import SituationPage from '../features/situation/SituationPage.jsx'
+import DrugEvidence from '../features/situation/DrugEvidence.jsx'
+import InterviewForm from '../features/intelligence/InterviewForm.jsx'
+import InterviewSearch from '../features/intelligence/InterviewSearch.jsx'
+import Admin from '../features/admin/Admin.jsx'
+import RptFieldEntry from '../features/rpt/RptFieldEntry.jsx'
+import { MainLayout, ScrollToTop } from './layout/MainLayout.jsx'
 
 export default function App() {
   return (

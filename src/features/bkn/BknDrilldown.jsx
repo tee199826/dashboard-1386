@@ -1,11 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
-} from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts'
 import { ArrowLeft, ChevronLeft, ChevronRight, BarChart2, Activity, AlertTriangle, MapPin } from 'lucide-react'
-import { supabase } from "../../shared/data/supabase.js"
-import { BKN_COLORS, getBknByDistrict, getDistricts, BKN_AREA_GROUP } from "../../shared/geo/bknMapping.js"
-import BknDrugStats from "./BknDrugStats.jsx"
+import { supabase } from '../../shared/data/supabase.js'
+import { BKN_COLORS, getBknByDistrict, getDistricts, BKN_AREA_GROUP } from '../../shared/geo/bknMapping.js'
+import BknDrugStats from './BknDrugStats.jsx'
 
 const bknNo = bkn => parseInt(String(bkn).replace(/\D+/g, '')) || 1
 const wrap = n => ((n - 1 + 9) % 9) + 1

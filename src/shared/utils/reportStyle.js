@@ -1,3 +1,5 @@
+
+
 // reportStyle.js — style constants ใช้ร่วมทุก section ของ /situation (แยกจาก ReportUI.jsx เพื่อไม่ให้ fast-refresh พัง)
 // palette เรียบ/ทางการ: accent น้ำเงินกรมเดียว + สีมีความหมาย (เขียว/แดง) เฉพาะกราฟ split
 export const COLORS = {

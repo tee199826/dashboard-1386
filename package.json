@@ -8,7 +8,8 @@
     "build": "node scripts/check-public-assets.mjs && vite build",
     "test": "node --test \"test/**/*.test.mjs\"",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:safe": "node scripts/test-safe.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",

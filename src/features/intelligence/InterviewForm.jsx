@@ -1,3 +1,18 @@
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { RotateCcw, User, Gavel, HeartPulse, History, Pill, Banknote, MapPin, ClipboardList, Clock } from 'lucide-react'
+import { draftKeyOf, readDraft, writeDraft, removeDraft } from '../../shared/security/interviewDraft.js'
+import { supabase } from '../../shared/data/supabase.js'
+import { useAuth } from '../../shared/state/contexts.js'
+import { dateToFiscalYear, localDateISO } from '../../shared/utils/fiscalYear.js'
+import { Field, Input, Select, ChipGroup, RepeatList, SaveBar } from './FormUI.jsx'
+import { FormLayout, SectionCard, SubSection } from './FormLayout.jsx'
+import { DISTRICTS, UNIT_FALLBACK, YEAR_OPTIONS, formatNationalId } from './intelOptions.js'
+import { loadAreaOptions, loadCommunitiesFromData, mergeCommunities } from '../../shared/geo/areaOptions.js'
+import { loadThaiAddress } from './thaiAddress.js'
+import { STATION_TO_BKN } from '../../shared/geo/bknMapping.js'
+import { RELIGION_OPTIONS, MARITAL_OPTIONS, RESIDENT_STATUS_OPTIONS, EDUCATION_OPTIONS, OCCUPATION_OPTIONS, INCOME_OPTIONS, FIRST_DRUG_OPTIONS, FIRST_SOURCE_OPTIONS, FIRST_REASON_OPTIONS, USE_METHOD_OPTIONS, USE_STYLE_OPTIONS, AFTER_FIRST_OPTIONS, MAIN_DRUG_OPTIONS, USAGE_TYPE_OPTIONS, SUBSTITUTE_OPTIONS, FREQUENCY_OPTIONS, USE_PLACE_OPTIONS, AVAILABILITY_OPTIONS, PRICE_DRUG_OPTIONS, BUY_CHANNEL_OPTIONS, SELLER_TYPE_OPTIONS, SELLER_ZONE_OPTIONS, SEX_OPTIONS, HAS_OPTIONS, CHARGE_OPTIONS, CHANNEL_FRIEND, NATIONALITY_OPTIONS, NATIONALITY_THAI, EVER_OPTIONS, EVER_YES, LOC_BKK, LOC_SCOPE_OPTIONS, SELLER_CONTACT_OPTIONS } from './interviewOptions.js'
+
 // บันทึกแบบซักผู้เสพ — โครงตาม "แบบเก็บข้อมูลจากผู้เสพ (แบบเก็บข้อมูลบุคคล ๑-๑)" ปปส.กทม.
 //
 // ⚠️ เก็บแยกจากชุดข้อมูลนำเข้า Excel (substance_users) — มีตารางของตัวเอง 2 ตาราง:
@@ -5,29 +20,6 @@
 //   interview_records_pii  — ข้อมูลส่วนบุคคล
 // ทั้งคู่ล็อก RLS ให้ผู้ดูแลระบบเท่านั้น แต่ยังแยก PII คนละตาราง
 // เผื่อวันหน้าเปิดสถิติแบบซักให้อ่านสาธารณะโดยที่ชื่อ/เลขบัตรไม่หลุดไปด้วย
-import { useState, useEffect, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import {
-  RotateCcw, User, Gavel, HeartPulse, History, Pill, Banknote, MapPin, ClipboardList, Clock,
-} from 'lucide-react'
-import { draftKeyOf, readDraft, writeDraft, removeDraft } from "../../shared/security/interviewDraft.js"
-import { supabase } from "../../shared/data/supabase.js"
-import { useAuth } from "../../shared/state/AuthContext.jsx"
-import { dateToFiscalYear, localDateISO } from "../../shared/utils/fiscalYear.js"
-import { Field, Input, Select, ChipGroup, RepeatList, SaveBar } from "./FormUI.jsx"
-import { FormLayout, SectionCard, SubSection } from "./FormLayout.jsx"
-import { DISTRICTS, UNIT_FALLBACK, YEAR_OPTIONS, formatNationalId } from "./intelOptions.js"
-import { loadAreaOptions, loadCommunitiesFromData, mergeCommunities } from "../../shared/geo/areaOptions.js"
-import { loadThaiAddress } from "./thaiAddress.js"
-import { STATION_TO_BKN } from "../../shared/geo/bknMapping.js"
-import {
-  RELIGION_OPTIONS, MARITAL_OPTIONS, RESIDENT_STATUS_OPTIONS, EDUCATION_OPTIONS, OCCUPATION_OPTIONS,
-  INCOME_OPTIONS, FIRST_DRUG_OPTIONS, FIRST_SOURCE_OPTIONS, FIRST_REASON_OPTIONS, USE_METHOD_OPTIONS,
-  USE_STYLE_OPTIONS, AFTER_FIRST_OPTIONS, MAIN_DRUG_OPTIONS, USAGE_TYPE_OPTIONS, SUBSTITUTE_OPTIONS,
-  FREQUENCY_OPTIONS, USE_PLACE_OPTIONS, AVAILABILITY_OPTIONS, PRICE_DRUG_OPTIONS, BUY_CHANNEL_OPTIONS,
-  SELLER_TYPE_OPTIONS, SELLER_ZONE_OPTIONS, SEX_OPTIONS, HAS_OPTIONS, CHARGE_OPTIONS, CHANNEL_FRIEND,
-  NATIONALITY_OPTIONS, NATIONALITY_THAI, EVER_OPTIONS, EVER_YES, LOC_BKK, LOC_SCOPE_OPTIONS, SELLER_CONTACT_OPTIONS,
-} from "./interviewOptions.js"
 
 // วันที่วันนี้ตามเวลาเครื่อง (ไทย) — toISOString() เป็น UTC ช่วง 00:00–06:59 จะได้วันของเมื่อวาน
 const todayISO = () => localDateISO(new Date())
@@ -320,7 +312,6 @@ function InterviewFormBody({ draftKey, onClear }) {
   // เตือนสีแดงหลังกดบันทึกครั้งแรกเท่านั้น — ไม่งั้นเปิดหน้ามาฟอร์มแดงทั้งใบ
   const [showErrors, setShowErrors] = useState(false)
   const err = (k) => showErrors && bad[k]
-
 
   // ── auto save ──────────────────────────────────────────────────────────────
   // เขียนร่างหลังหยุดพิมพ์ 0.8 วินาที ; ยังไม่ได้แก้อะไรเลย (ตรงกับตอนเปิดหน้า) → ไม่สร้างร่าง

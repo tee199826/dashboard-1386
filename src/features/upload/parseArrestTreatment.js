@@ -1,10 +1,10 @@
+import * as XLSX from 'xlsx'
+import { DNAME_TO_GROUP } from '../../shared/utils/constants.js'
+
 // ─── parseArrestTreatment.js ────────────────────────────────────────────────
 // Parser สำหรับไฟล์สรุป "จับกุม" และ "บำบัด" (pivot เขต × ปีงบ, merged header)
 //   ไฟล์จริงเป็นชีตเดียว: row0 = ปี พ.ศ. (merge ต่อปี) ; row1 = sub-header ; col0 = เขต
 //   ยืดหยุ่น: หา column ด้วย pattern ข้อความ ไม่ผูกตำแหน่งตายตัว (เหมือน parse115B)
-
-import * as XLSX from 'xlsx'
-import { DNAME_TO_GROUP } from "../../shared/utils/constants.js"
 
 // hash สั้นๆ (เหมือน importEngine.js) — ใช้ทำ content_hash จาก natural key
 function simpleHash(str) {

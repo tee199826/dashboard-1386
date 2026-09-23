@@ -1,3 +1,5 @@
+import { useState, useCallback } from 'react'
+
 // usePixelMapState.js — state ศูนย์กลางของ /pixel-map
 // selection (multi mode) = tree เดียว (checkedDistricts/checkedSubdistricts/checkedCommunities)
 // layers[] = [เขต, แขวง, ...dataLayers] — ชุมชนไม่มี "รูปทรง" ของตัวเอง (มีแต่ตัวเลข) จึงย้ายไปอยู่ใน labelsConfig แทน ไม่นับเป็น layer
@@ -5,7 +7,6 @@
 // compare mode: หลายเขตต่อ panel ได้ (compareSlots[i].districts) — แขวง/ชุมชนใช้ชุดเดียวกับโหมด multi-select (checkedSubdistricts/checkedCommunities)
 //   แล้วกรองเฉพาะที่อยู่ในเขตของ panel นั้นตอนวาด (ดู CompareGrid.jsx)
 // key แขวง/ชุมชน composite เสมอ "district|subdistrict"(|community) กันชื่อซ้ำข้ามเขต (พบจริงในข้อมูล 59 กรณี)
-import { useState, useCallback } from 'react'
 
 export const subKey = (district, subdistrict) => `${district}|${subdistrict}`
 export const communityKey = (district, subdistrict, community) => `${district}|${subdistrict}|${community}`

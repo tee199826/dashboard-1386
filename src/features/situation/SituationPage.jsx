@@ -1,20 +1,21 @@
-// /situation — ข้อมูลยาเสพติด (รวม จับกุม/บำบัด/ร้องเรียน เดิม /arrest /incidents /treatment)
-// filter เวลา+พื้นที่ ใช้ร่วมกันทุกส่วน (state เดียว) — เลือกส่วนที่แสดงด้วยแท็บ
-// แต่ละแท็บมาจากคนละชุดข้อมูล: จับกุม = arrest_* (CRIMES กทม.) · บำบัด/ร้องเรียน = drug_incidents (ระบบ 1386)
 import { useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
-import { useDrugIncidents } from "../../shared/data/useDrugIncidents.js"
-import { useArrestData } from "./useArrestData.js"
-import { useAreaCascade } from "../../shared/filters/useAreaCascade.js"
-import { useFilter } from "../../shared/state/FilterContext.jsx"
-import DateFilter from "../../shared/filters/DateFilter.jsx"
-import AreaCascadeBar from "../../shared/filters/AreaCascadeBar.jsx"
-import { filterByDateColumn } from "../../shared/filters/filterRows.js"
-import { filterArrestRows, arrestSubdistrictOptions } from "./arrestData.js"
-import ArrestSection from "./ArrestSection.jsx"
-import TreatmentSection from "./TreatmentSection.jsx"
-import IncidentsSection from "./IncidentsSection.jsx"
+import { useDrugIncidents } from '../../shared/data/useDrugIncidents.js'
+import { useArrestData } from './arrestData.js'
+import { useAreaCascade } from '../../shared/filters/useAreaCascade.js'
+import { useFilter } from '../../shared/state/contexts.js'
+import DateFilter from '../../shared/filters/DateFilter.jsx'
+import AreaCascadeBar from '../../shared/filters/AreaCascadeBar.jsx'
+import { filterByDateColumn } from '../../shared/filters/filterRows.js'
+import { filterArrestRows, arrestSubdistrictOptions } from './arrestData.js'
+import ArrestSection from './ArrestSection.jsx'
+import TreatmentSection from './TreatmentSection.jsx'
+import IncidentsSection from './IncidentsSection.jsx'
+
+// /situation — ข้อมูลยาเสพติด (รวม จับกุม/บำบัด/ร้องเรียน เดิม /arrest /incidents /treatment)
+// filter เวลา+พื้นที่ ใช้ร่วมกันทุกส่วน (state เดียว) — เลือกส่วนที่แสดงด้วยแท็บ
+// แต่ละแท็บมาจากคนละชุดข้อมูล: จับกุม = arrest_* (CRIMES กทม.) · บำบัด/ร้องเรียน = drug_incidents (ระบบ 1386)
 
 const SECTIONS = [
   ['arrest', 'จับกุม', 'คดี'],

@@ -1,11 +1,12 @@
+import { useState } from 'react'
+import { Globe2, ChevronRight } from 'lucide-react'
+import Modal from '../../shared/ui/Modal.jsx'
+import { RankedBarChart, EmptyChart } from '../../shared/ui/ReportUI.jsx'
+
 // NationalityBreakdown — รายการสัญชาติต่างชาติของผู้ต้องหา (ตัดไทย/ไม่ระบุออกมาแล้ว)
 // เดิมพล็อตทุกสัญชาติในกราฟเดียว (~25 หมวด) — หางยาวเหลือชาติละ 1-2 คน อ่านไม่ออกและกินพื้นที่มาก
 // ใหม่: กราฟโชว์ top 5 + ปุ่ม "แสดงข้อมูลเพิ่มเติม" เปิด modal ดูที่เหลือทั้งหมด (pattern เดียวกับการ์ด "อื่นๆ" ของ DrugSeizureCards)
 // data: [{ name, value }] เรียงมาก→น้อยมาแล้ว (topForeignNationalities) · หน่วยเป็น "คน"
-import { useState } from 'react'
-import { Globe2, ChevronRight } from 'lucide-react'
-import Modal from "../../shared/ui/Modal.jsx"
-import { RankedBarChart, EmptyChart } from "../../shared/ui/ReportUI.jsx"
 
 const TOP_N = 5
 

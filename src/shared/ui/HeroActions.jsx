@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Info, RefreshCw, Maximize2, X } from 'lucide-react'
-import { usePresentation } from "../state/PresentationContext.jsx"
+import { usePresentation } from '../state/contexts.js'
 
 // ปุ่ม 3 ตัวมุมขวาบนของ Hero banner — ใช้ร่วมกันได้หลายหน้า
 // [ⓘ แหล่งข้อมูล] [↻ refresh] [↗ fullscreen]
@@ -106,4 +106,8 @@ function SourceInfoModal({ info, onClose }) {
       </div>
     </div>
   )
+}
+
+export function HeroChip({ icon, children }) {
+  return <span className="inline-flex items-center gap-1.5 text-xs text-white/90 bg-white/10 backdrop-blur-md ring-1 ring-white/20 rounded-full px-3 py-1.5">{icon}{children}</span>
 }

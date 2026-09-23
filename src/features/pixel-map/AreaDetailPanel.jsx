@@ -1,10 +1,11 @@
+import { useMemo } from 'react'
+import { MousePointerClick, X } from 'lucide-react'
+import { nodeDetail, communityList, resolveAreaNode } from '../../shared/geo/pixelMapData.js'
+import { BEHAVIOR_COLORS } from '../../shared/utils/constants.js'
+
 // AreaDetailPanel — การ์ดสรุปพื้นที่ที่เมาส์ชี้อยู่บนแผนที่
 // อยู่ข้างแผนที่ (ไม่ใช่ tooltip ลอยตามเมาส์) จึงอ่านได้สบาย ไม่บังแผนที่ และค้างไว้ที่พื้นที่ล่าสุดให้อ่านต่อได้
 // ตัวเลขทั้งหมดมาจากข้อมูลเหตุการณ์ยาเสพติดตามช่วงเวลาที่เลือก (ชุดเดียวกับ tooltip บนแผนที่)
-import { useMemo } from 'react'
-import { MousePointerClick, X } from 'lucide-react'
-import { nodeDetail, communityList, resolveAreaNode } from "../../shared/geo/pixelMapData.js"
-import { BEHAVIOR_COLORS } from "../../shared/utils/constants.js"
 
 const LEVEL_LABEL = { district: 'เขต', subdistrict: 'แขวง', community: 'ชุมชน' }
 

@@ -1,16 +1,7 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { supabase } from "../data/supabase.js"
-
-const CTX = createContext({ isPresentation: false, enter: () => {}, exit: () => {}, lastUpdateLabel: null })
-
-const MONTH_LONG = ['', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
-
-function fmtThaiLong(iso) {
-  if (!iso) return null
-  const d = new Date(iso)
-  return `${d.getDate()} ${MONTH_LONG[d.getMonth() + 1]} ${d.getFullYear() + 543}`
-}
+import { formatThaiDateLong as fmtThaiLong } from '../utils/formatDate.js'
+import { CTX } from './contexts.js'
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '../data/supabase.js'
 
 export function PresentationProvider({ children }) {
   const [isPresentation, setIsPresentation] = useState(false)
@@ -34,7 +25,7 @@ export function PresentationProvider({ children }) {
 
   const enter = useCallback(async () => {
     setIsPresentation(true)
-    try { await document.documentElement.requestFullscreen() } catch {}
+    try { await document.documentElement.requestFullscreen() } catch { /* Fullscreen is optional when unsupported or denied. */ }
   }, [])
 
   const exit = useCallback(() => {
@@ -68,5 +59,3 @@ export function PresentationProvider({ children }) {
     </CTX.Provider>
   )
 }
-
-export const usePresentation = () => useContext(CTX)

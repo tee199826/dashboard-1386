@@ -1,13 +1,11 @@
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { Upload, FileSpreadsheet, AlertTriangle, Loader2 } from 'lucide-react'
+import Modal from '../../shared/ui/Modal.jsx'
+import { readImportFile, detectColumns, buildCounts, layerLabelFromFile, ACCEPT_IMPORT, DISTRICT_TOTAL } from './pixelMapImport.js'
+
 // ImportDataModal — นำเข้าไฟล์ Excel/CSV ของผู้ใช้มาเป็น data overlay ของ /pixel-map
 // ไฟล์ถูกอ่านในเบราว์เซอร์อย่างเดียว ไม่อัปโหลดขึ้น Supabase — ข้อมูลอยู่แค่ใน layer ของหน้านี้
 // จับคู่ชื่อเขตอัตโนมัติ (เติม "เขต" ให้/แก้ตัวสะกดราษฏร์บูรณะ) แล้วโชว์สรุปก่อนยืนยันเสมอ
-import { useCallback, useMemo, useRef, useState } from 'react'
-import { Upload, FileSpreadsheet, AlertTriangle, Loader2 } from 'lucide-react'
-import Modal from "../../shared/ui/Modal.jsx"
-import {
-  readImportFile, detectColumns, buildCounts, layerLabelFromFile,
-  ACCEPT_IMPORT, DISTRICT_TOTAL,
-} from "./pixelMapImport.js"
 
 const COUNT_ROWS = '__count__' // ค่าของตัวเลือก "นับจำนวนแถว" ในช่องค่าที่ใช้
 

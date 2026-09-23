@@ -1,21 +1,16 @@
+import { useState, useMemo } from 'react'
+import { Gavel, Users, ShieldAlert, Shield, Package, Globe2, MapPin, CalendarRange } from 'lucide-react'
+import { topArrestDistricts, arrestDimensionCounts, computeArrestYoy, severityCounts, ageStats, ageHistogram, nationalitySplit, topForeignNationalities } from './arrestData.js'
+import { exportArrestReport } from './exportSituation.js'
+import { Panel, SectionHead, Metric, KpiCard, RankedList, RankedBarChart, SplitBarChart, SplitRatioCard, EmptyChart, PlaceholderCard, Top3List, ActionBar, TablePager } from '../../shared/ui/ReportUI.jsx'
+import DrugSeizureCards from './DrugSeizureCards.jsx'
+import NationalityBreakdown from './NationalityBreakdown.jsx'
+import { COLORS } from '../../shared/utils/reportStyle.js'
+
 // ArrestSection — ส่วน "จับกุม" ของหน้า /situation
 // ดึงจาก arrest_case + arrest_dim + arrest_age_summary (สถิติจับกุมรายคดีจริงจาก CRIMES กทม., เขต×แขวง × ปีงบ)
 // ไม่ใช่ drug_incidents.action_arrest (แค่เรื่องร้องเรียนที่จบด้วยจับกุม ~ไม่กี่ร้อยเรื่อง) — ตัวเลขจึงเป็นสถิติทางการ
 // (~21,800 คดี ปีงบ 2567-2568 เต็มปี) ไม่ใช่ subset ของระบบร้องเรียน
-import { useState, useMemo } from 'react'
-import { Gavel, Users, ShieldAlert, Shield, Package, Globe2, MapPin, CalendarRange } from 'lucide-react'
-import {
-  topArrestDistricts, arrestDimensionCounts, computeArrestYoy,
-  severityCounts, ageStats, ageHistogram, nationalitySplit, topForeignNationalities,
-} from "./arrestData.js"
-import { exportArrestReport } from "./exportSituation.js"
-import {
-  Panel, SectionHead, Metric, KpiCard, RankedList, RankedBarChart,
-  SplitBarChart, SplitRatioCard, EmptyChart, PlaceholderCard, Top3List, ActionBar, TablePager,
-} from "../../shared/ui/ReportUI.jsx"
-import DrugSeizureCards from "./DrugSeizureCards.jsx"
-import NationalityBreakdown from "./NationalityBreakdown.jsx"
-import { COLORS } from "../../shared/utils/reportStyle.js"
 
 const PAGE_SIZE = 50
 const NO_DATA_NOTE = 'ยังไม่มีข้อมูลใน DB — รอ map พิกัด (.shp)'

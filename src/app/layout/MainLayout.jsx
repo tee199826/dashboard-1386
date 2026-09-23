@@ -1,8 +1,8 @@
 import { useLocation } from 'react-router-dom'
-import { useState, useEffect } from "react"
-import { usePresentation } from "../../shared/state/PresentationContext.jsx"
-import PublicSidebar from "./PublicSidebar.jsx"
-import Header from "./Header.jsx"
+import { useState, useEffect } from 'react'
+import { usePresentation } from '../../shared/state/contexts.js'
+import PublicSidebar from './PublicSidebar.jsx'
+import Header from './Header.jsx'
 import { Menu } from 'lucide-react'
 
 // โครง tree เดียวทั้ง 2 โหมด — presentation แค่ซ่อน Header/Sidebar

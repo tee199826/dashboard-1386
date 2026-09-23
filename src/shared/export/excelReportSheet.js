@@ -1,3 +1,5 @@
+
+
 // Shared worksheet writer. Callers keep their own column formats and header style.
 export function createWorksheetWriter({ percentColumns, isNumericHeader, styleHeaderRow }) {
   return function writeSheet(workbook, name, metaLines, header, dataRows) {
@@ -29,4 +31,12 @@ export function createWorksheetWriter({ percentColumns, isNumericHeader, styleHe
   ws.getColumn(1).width = Math.max(ws.getColumn(1).width, 34)
   return ws
 }
+}
+
+export function styleExcelHeader(row, color = 'FF334155') {
+  row.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } }
+    cell.alignment = { vertical: 'middle' }
+  })
 }

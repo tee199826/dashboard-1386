@@ -1,28 +1,25 @@
-import { useEffect, useState } from 'react'
-import { supabase } from "../../shared/data/supabase.js"
-import { UserPlus, Users as UsersIcon } from "lucide-react"
-import Toast from "../../shared/ui/Toast.jsx"
-import { AddUserModal } from "./AddUserModal.jsx"
+import { useAsyncResource } from '../../shared/data/useAsyncResource.js'
+import { useState } from 'react'
+import { supabase } from '../../shared/data/supabase.js'
+import { UserPlus, Users as UsersIcon } from 'lucide-react'
+import Toast from '../../shared/ui/Toast.jsx'
+import { AddUserModal } from './AddUserModal.jsx'
+
+async function loadRows() {
+  const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
 
 export default function UserManagement() {
-  const [users, setUsers] = useState([])
+  const { data: users, loading, error, reload: load } = useAsyncResource(loadRows)
   const [showAdd, setShowAdd] = useState(false)
-  const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
   const showToast = (message, type = 'success') => setToast({ message, type })
 
-  const load = async () => {
-    setLoading(true)
-    const { data } = await supabase
-      .from('profiles').select('*').order('created_at', { ascending: false })
-    setUsers(data || [])
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
-
   return (
     <div className="p-6 md:p-8 max-w-[1200px] mx-auto">
+      {error && <p role="alert" className="text-rose-700 text-sm">ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่</p>}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">

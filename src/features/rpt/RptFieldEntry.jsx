@@ -1,3 +1,13 @@
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { Upload, Search, Download, MapPin, X, Loader2, AlertTriangle, Check, RefreshCw, Wand2, ExternalLink, Trash2, History, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Card, Field, Input, Select, ChipGroup, SaveBar } from '../intelligence/FormUI.jsx'
+import { REPORT_GROUPS, REPORT_ORDER } from './rptParser.js'
+import { importRptFile, listEntries, getEntry, saveEntry, exportEntries, importStatus, importHistory, deleteRecords, PAGE_SIZE } from './rptEntryService.js'
+import { BKN_OPTIONS, AREA_GROUP_OPTIONS, stationsOf, PLACE_TYPE_OPTIONS, PLACE_TYPE_OTHER, PERSON_CATEGORY_OPTIONS, OFFICIAL_TYPE_OPTIONS, OFFICIAL_TYPE_OTHER, latLngError, parseLatLngPaste, suggestEntry, isResultReceived } from './rptEntryOptions.js'
+import { loadAreaOptions, loadCommunitiesFromData, mergeCommunities } from '../../shared/geo/areaOptions.js'
+import { DISTRICTS } from '../intelligence/intelOptions.js'
+import { formatThaiDate } from '../../shared/utils/heroMeta.js'
+
 // /rpt-entry — แสดงเรื่องร้องเรียนจากรายงาน ปปส. (RPT_73_1/2/3, RPT_111_4/5)
 // แล้วให้เจ้าหน้าที่กรอกข้อมูลที่รายงานไม่มี: พิกัด / ชุมชน / NISPA / บก.น. / สน. /
 // กลุ่มพื้นที่ / ประเภทสถานที่ / ประเภทบุคคล (ทั่วไป-เจ้าหน้าที่รัฐ)
@@ -7,25 +17,6 @@
 //
 // ข้อมูลที่กรอกอยู่คนละตารางกับข้อมูลที่นำเข้า (rpt_field_entry vs rpt_records)
 // → อัปโหลดรายงานฉบับใหม่ทับได้ โดยของที่กรอกไว้ไม่หาย
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import {
-  Upload, Search, Download, MapPin, X, Loader2, AlertTriangle, Check,
-  RefreshCw, Wand2, ExternalLink, Trash2, History, ChevronDown, ChevronLeft, ChevronRight,
-} from 'lucide-react'
-import { Card, Field, Input, Select, ChipGroup, SaveBar } from "../intelligence/FormUI.jsx"
-import { REPORT_GROUPS, REPORT_ORDER } from "./rptParser.js"
-import {
-  importRptFile, listEntries, getEntry, saveEntry, exportEntries,
-  importStatus, importHistory, deleteRecords, PAGE_SIZE,
-} from "./rptEntryService.js"
-import {
-  BKN_OPTIONS, AREA_GROUP_OPTIONS, stationsOf, PLACE_TYPE_OPTIONS, PLACE_TYPE_OTHER,
-  PERSON_CATEGORY_OPTIONS, OFFICIAL_TYPE_OPTIONS, OFFICIAL_TYPE_OTHER,
-  latLngError, parseLatLngPaste, suggestEntry, isResultReceived,
-} from "./rptEntryOptions.js"
-import { loadAreaOptions, loadCommunitiesFromData, mergeCommunities } from "../../shared/geo/areaOptions.js"
-import { DISTRICTS } from "../intelligence/intelOptions.js"
-import { formatThaiDate } from "../../shared/utils/heroMeta.js"
 
 const STATUS_LABELS = { empty: 'ยังไม่กรอก', draft: 'กรอกค้าง', done: 'กรอกครบ' }
 const STATUS_STYLES = {

@@ -56,3 +56,11 @@ src/
 `npm run dev`, `npm run build`, `npm run lint`, `npm test`
 
 ตรวจ configuration ก่อนรัน dev เพราะอาจชี้ไปฐานข้อมูลจริง การจัดโครงสร้างนี้ตรวจด้วย offline build และชุดทดสอบข้อมูลสมมติ ไม่ใช่การยืนยันว่า production ปลอดช่องโหว่ทั้งหมด
+
+
+## ส่วนกลางหลัง clean code
+
+- `shared/state/contexts.js` รวม context objects และ consumer hooks; provider components อยู่ในไฟล์ JSX ตามหน้าที่
+- `shared/data/useAsyncResource.js` รวมสถานะโหลด ข้อผิดพลาด การยกเลิก และการกันคำตอบจากคำขอเก่า; แต่ละ consumer มี state แยกกัน
+- `features/situation/arrestData.js` รวม hook โหลดข้อมูลจับกุมกับตัวช่วยจัดการข้อมูลในฟีเจอร์เดียวกัน
+- `shared/geo/IncidentMap.jsx` เก็บตัวสร้าง mask ที่ใช้เฉพาะแผนที่นี้ไว้ภายใน

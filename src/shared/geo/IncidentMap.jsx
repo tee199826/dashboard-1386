@@ -1,16 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import {
-  MapContainer, TileLayer, CircleMarker, Popup, Tooltip as MapTooltip,
-  GeoJSON, useMap, Pane, Marker,
-} from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip as MapTooltip, GeoJSON, useMap, Pane, Marker } from 'react-leaflet'
 import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
-import 'leaflet.heat'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
-import { buildOuterMask } from "./worldMask.js"
-import { escapeHtml } from "../security/escapeHtml.js"
+import { escapeHtml } from '../security/escapeHtml.js'
+import 'leaflet/dist/leaflet.css'
+import 'leaflet.heat'
 
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({ iconUrl: markerIcon, iconRetinaUrl: markerIcon2x, shadowUrl: markerShadow })
@@ -455,4 +451,31 @@ export default function IncidentMap({
       )}
     </MapContainer>
   )
+}
+
+
+
+function buildOuterMask(districtsGeoJSON) {
+  if (!districtsGeoJSON?.features) return null
+
+  const holes = []
+  districtsGeoJSON.features.forEach(f => {
+    const geom = f.geometry
+    if (geom.type === 'Polygon') {
+      holes.push(geom.coordinates[0])
+    } else if (geom.type === 'MultiPolygon') {
+      geom.coordinates.forEach(poly => holes.push(poly[0]))
+    }
+  })
+
+  return {
+    type: 'Feature',
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [[99.0, 12.5], [102.5, 12.5], [102.5, 15.0], [99.0, 15.0], [99.0, 12.5]],
+        ...holes
+      ]
+    }
+  }
 }

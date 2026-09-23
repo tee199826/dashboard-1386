@@ -1,8 +1,9 @@
+import { BKN_ORDER, BKN_TO_STATIONS, BKN_AREA_GROUP, getBknByDistrict } from '../../shared/geo/bknMapping.js'
+import { DNAME_TO_GROUP, BKK_GROUPS } from '../../shared/utils/constants.js'
+
 // rptEntryOptions — ตัวเลือกของช่องที่เจ้าหน้าที่กรอกเพิ่มในหน้า /rpt-entry
 // ตัวเลือกพื้นที่ (บก.น./สน./กลุ่มพื้นที่) ดึงจากตารางกลางที่ระบบใช้อยู่แล้ว
 // จะได้ join กับแผนที่/สถิติหน้าอื่นได้ตรง ไม่ต้องมานั่งเทียบชื่อทีหลัง
-import { BKN_ORDER, BKN_TO_STATIONS, BKN_AREA_GROUP, getBknByDistrict } from "../../shared/geo/bknMapping.js"
-import { DNAME_TO_GROUP, BKK_GROUPS } from "../../shared/utils/constants.js"
 
 // บก.น.1-9 (ตัด 'ไม่ระบุ' ที่มีไว้สำหรับกราฟออก — ช่องกรอกปล่อยว่างแทน)
 export const BKN_OPTIONS = BKN_ORDER.filter((b) => b !== 'ไม่ระบุ')

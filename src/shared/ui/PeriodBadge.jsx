@@ -1,3 +1,5 @@
+
+
 // Badge แสดงช่วงเวลาของข้อมูล — สั้น, เทาจาง, ไม่แย่งสายตา
 // tone='light' (พื้นขาว → เทาจาง) | tone='dark' (พื้นการ์ดสีเข้ม → ขาวจาง)
 export default function PeriodBadge({ period, tone = 'light', className = '' }) {

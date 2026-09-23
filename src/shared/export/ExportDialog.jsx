@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Download } from 'lucide-react'
-import Modal from "../ui/Modal.jsx"
-import { formatThaiDate } from "../utils/heroMeta.js"
+import Modal from '../ui/Modal.jsx'
+import { formatThaiDate } from '../utils/heroMeta.js'
 
 const REPORT_MODES = [
   { id: 'district', label: 'รายเขต (50 เขต)', desc: 'สรุป + รายละเอียด + สถานะ + Top 5 + ข้อหา' },

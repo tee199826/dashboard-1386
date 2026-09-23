@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Search, Plus, AlertTriangle, Loader2, Trash2, X, Download, FileText } from 'lucide-react'
-import { supabase } from "../../shared/data/supabase.js"
-import { formatThaiDate } from "../../shared/utils/heroMeta.js"
-import { downloadBlob, XLSX_MIME } from "../../shared/export/downloadBlob.js"
-import { IntelPage, Card, Field, Input, Select } from "./FormUI.jsx"
-import { DISTRICTS, displayNationalId } from "./intelOptions.js"
-import { DetailPanel } from "./InterviewDetailPanel.jsx"
+import { supabase } from '../../shared/data/supabase.js'
+import { formatThaiDate } from '../../shared/utils/heroMeta.js'
+import { downloadBlob, XLSX_MIME } from '../../shared/export/downloadBlob.js'
+import { IntelPage, Card, Field, Input, Select } from './FormUI.jsx'
+import { DISTRICTS, displayNationalId } from './intelOptions.js'
+import { DetailPanel } from './InterviewDetailPanel.jsx'
 
 const PAGE_SIZE = 50
 

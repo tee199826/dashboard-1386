@@ -7,6 +7,11 @@ export default function PresentationSlides({ children, isPresentation, normalCla
   const containerRef = useRef(null)
   const slideRefs = useRef([])
   const [current, setCurrent] = useState(0)
+  const [previousMode, setPreviousMode] = useState(isPresentation)
+  if (previousMode !== isPresentation) {
+    setPreviousMode(isPresentation)
+    if (isPresentation) setCurrent(0)
+  }
 
   const slides = React.Children.toArray(children)
   const total = slides.length
@@ -14,7 +19,6 @@ export default function PresentationSlides({ children, isPresentation, normalCla
   // Reset to slide 0 when entering presentation mode
   useEffect(() => {
     if (isPresentation) {
-      setCurrent(0)
       if (containerRef.current) containerRef.current.scrollTop = 0
     }
   }, [isPresentation])

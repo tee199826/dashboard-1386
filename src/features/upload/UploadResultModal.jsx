@@ -1,8 +1,8 @@
-import { useState } from "react"
-import { AlertTriangle, CheckCircle2, RefreshCw, LayoutDashboard, MapPin, Circle, Copy } from "lucide-react"
-import Modal from "../../shared/ui/Modal.jsx"
-import { humanizeError } from "./uploadWorkflow.js"
-import { ImpactedPages } from "./UploadWidgets.jsx"
+import { useState } from 'react'
+import { AlertTriangle, CheckCircle2, RefreshCw, LayoutDashboard, MapPin, Circle, Copy } from 'lucide-react'
+import Modal from '../../shared/ui/Modal.jsx'
+import { humanizeError } from './uploadWorkflow.js'
+import { ImpactedPages } from './UploadWidgets.jsx'
 
 // แถวรายละเอียดใน confirm modal
 export function ConfirmRow({ label, value, mono }) {

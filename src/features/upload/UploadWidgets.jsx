@@ -1,7 +1,7 @@
-import { useState, useRef } from "react"
-import { Sparkles, BarChart3, ExternalLink, Clock } from "lucide-react"
-import { ACCEPT, TABLE_TO_PAGES, TABLES } from "./uploadConfig.js"
-import { cn, daysSince, dayLabel } from "./uploadWorkflow.js"
+import { useState, useRef } from 'react'
+import { Sparkles, BarChart3, ExternalLink, Clock } from 'lucide-react'
+import { ACCEPT, TABLE_TO_PAGES, TABLES } from './uploadConfig.js'
+import { cn, daysSince, dayLabel } from './uploadWorkflow.js'
 
 // ─── Impacted Pages — ไฟล์นี้จะอัปเดตหน้าไหนบ้าง (reverse mapping) ────────────────
 export function ImpactedPages({ type }) {

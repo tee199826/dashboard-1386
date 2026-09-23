@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { supabase } from "../../shared/data/supabase.js"
-import { buildBknInsights, fmt, pct1, stripKhet } from "./bknInsights.js"
+import { supabase } from '../../shared/data/supabase.js'
+import { buildBknInsights, fmt, pct1, stripKhet } from './bknInsights.js'
 
 // Executive Summary — editorial headline + KPI band (4/3/3/2) + segment bar + URGENT/EXCELLENT ledger
 // palette: slate + rose (urgent) + emerald (excellent) · ไม่มี gradient/สีจ้า/emoji

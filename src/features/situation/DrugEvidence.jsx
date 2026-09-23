@@ -1,18 +1,20 @@
-// /situation/drug-evidence — ของกลางยาเสพติด (รายละเอียดทั้งหมด)
-// เข้ามาจากการ์ด "ของกลางยาเสพติด" ในแท็บจับกุมของหน้า /situation
-// ช่วงเวลา + พื้นที่ที่เลือกไว้ถูกส่งมาทาง query params จึงได้ตัวเลขตรงกับหน้าที่กดมา
 import { useMemo } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, AlertTriangle, Pill } from 'lucide-react'
-import { useDrugIncidents } from "../../shared/data/useDrugIncidents.js"
-import { useAreaCascade } from "../../shared/filters/useAreaCascade.js"
-import { FilterProvider, useFilter } from "../../shared/state/FilterContext.jsx"
-import DateFilter from "../../shared/filters/DateFilter.jsx"
-import AreaCascadeBar from "../../shared/filters/AreaCascadeBar.jsx"
-import { Panel, SectionHead, Metric, DrugTileGrid, EmptyChart } from "../../shared/ui/ReportUI.jsx"
-import { drugCounts, rowsWithAnyDrug } from "../../shared/data/drugFlags.js"
-import { filterByDateColumn } from "../../shared/filters/filterRows.js"
-import { paramsToFilter, paramsToArea } from "../../shared/filters/filterParams.js"
+import { useDrugIncidents } from '../../shared/data/useDrugIncidents.js'
+import { useAreaCascade } from '../../shared/filters/useAreaCascade.js'
+import { FilterProvider } from '../../shared/state/FilterContext.jsx'
+import { useFilter } from '../../shared/state/contexts.js'
+import DateFilter from '../../shared/filters/DateFilter.jsx'
+import AreaCascadeBar from '../../shared/filters/AreaCascadeBar.jsx'
+import { Panel, SectionHead, Metric, DrugTileGrid, EmptyChart } from '../../shared/ui/ReportUI.jsx'
+import { drugCounts, rowsWithAnyDrug } from '../../shared/data/drugFlags.js'
+import { filterByDateColumn } from '../../shared/filters/filterRows.js'
+import { paramsToFilter, paramsToArea } from '../../shared/filters/filterParams.js'
+
+// /situation/drug-evidence — ของกลางยาเสพติด (รายละเอียดทั้งหมด)
+// เข้ามาจากการ์ด "ของกลางยาเสพติด" ในแท็บจับกุมของหน้า /situation
+// ช่วงเวลา + พื้นที่ที่เลือกไว้ถูกส่งมาทาง query params จึงได้ตัวเลขตรงกับหน้าที่กดมา
 
 export default function DrugEvidence() {
   const [searchParams] = useSearchParams()

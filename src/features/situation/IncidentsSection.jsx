@@ -1,14 +1,15 @@
-// IncidentsSection — ส่วน "ร้องเรียน" ของหน้า /situation (ยกเนื้อจาก IncidentsPage เดิม + เพิ่มตาม infographic template)
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { drugEvidencePath } from "../../shared/filters/filterParams.js"
+import { drugEvidencePath } from '../../shared/filters/filterParams.js'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
-import { formatThaiDate } from "../../shared/utils/heroMeta.js"
-import { BEHAVIOR_FLAGS, DRUG_FLAGS, RESULT_FLAGS, drugCounts, countFlag } from "../../shared/data/drugFlags.js"
-import { computeYoy, top3Districts, pickComparePair, yearRows } from "./situationCompare.js"
-import { exportIncidentsReport } from "./exportSituation.js"
-import { Panel, SectionHead, Metric, RankedBarChart, EmptyChart, Top3List, ActionBar, TablePager } from "../../shared/ui/ReportUI.jsx"
-import { COLORS, barTooltipStyle, labelStyle } from "../../shared/utils/reportStyle.js"
+import { formatThaiDate } from '../../shared/utils/heroMeta.js'
+import { BEHAVIOR_FLAGS, DRUG_FLAGS, RESULT_FLAGS, drugCounts, countFlag } from '../../shared/data/drugFlags.js'
+import { computeYoy, top3Districts, pickComparePair, yearRows } from './situationCompare.js'
+import { exportIncidentsReport } from './exportSituation.js'
+import { Panel, SectionHead, Metric, RankedBarChart, EmptyChart, Top3List, ActionBar, TablePager } from '../../shared/ui/ReportUI.jsx'
+import { COLORS, barTooltipStyle, labelStyle } from '../../shared/utils/reportStyle.js'
+
+// IncidentsSection — ส่วน "ร้องเรียน" ของหน้า /situation (ยกเนื้อจาก IncidentsPage เดิม + เพิ่มตาม infographic template)
 
 const PAGE_SIZE = 50
 

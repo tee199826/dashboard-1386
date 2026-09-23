@@ -1,10 +1,11 @@
+import { supabase } from '../../shared/data/supabase.js'
+import { parseRptWorkbook, splitRecord, REPORT_GROUPS } from './rptParser.js'
+import { downloadBlob, XLSX_MIME } from '../../shared/export/downloadBlob.js'
+import { buildExportWorkbook } from './rptExportSheet.js'
+
 // rptEntryService — คุยกับฐานข้อมูลให้หน้า /rpt-entry
 // ทุกอย่างวิ่งผ่าน RPC ที่ตรวจ is_admin() ฝั่งเซิร์ฟเวอร์ (ดู 20260918_rpt_field_entry.sql)
 // ฝั่งนี้จึงไม่มีการตัดสินใจเรื่องสิทธิ์เอง — แค่ส่งข้อมูลกับแปลง error ให้อ่านรู้เรื่อง
-import { supabase } from "../../shared/data/supabase.js"
-import { parseRptWorkbook, splitRecord, REPORT_GROUPS } from "./rptParser.js"
-import { downloadBlob, XLSX_MIME } from "../../shared/export/downloadBlob.js"
-import { buildExportWorkbook } from "./rptExportSheet.js"
 
 // ส่งทีละก้อน — 1,066 แถวยัดใน request เดียวได้ แต่ถ้าวันหน้ารายงานยาวขึ้นจะชน payload limit
 const IMPORT_CHUNK = 250

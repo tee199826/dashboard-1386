@@ -1,32 +1,22 @@
-import React, { lazy, Suspense, useMemo, useState, useEffect } from 'react'
+import { lazy, Suspense, useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from "../../shared/state/AuthContext.jsx"
-import { supabase } from "../../shared/data/supabase.js"
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell, Legend, LabelList, Sector,
-} from 'recharts'
-import {
-  TrendingUp, CheckCircle2, Clock, MapPin,
-  User, Users, ArrowRightLeft, Ban, ArrowRight, Trophy, ChevronDown, Info, X, Search, RefreshCw, AlertTriangle,
-  BarChart2, FileText, ExternalLink,
-} from 'lucide-react'
-import { useData } from "../../shared/state/DataContext.jsx"
-import * as stats from "../../shared/utils/statistics.js"
-import { usePresentation } from "../../shared/state/PresentationContext.jsx"
-import PresentationBar, { PresentationEnterButton } from "../../shared/ui/PresentationBar.jsx"
-import PresentationSlides from "../../shared/ui/PresentationSlides.jsx"
-import { BEHAVIOR_COLORS, BKK_GROUPS, DNAME_TO_GROUP } from "../../shared/utils/constants.js"
-import { fetchAllPages } from "../../shared/data/supabasePagination.js"
-import { deriveBehaviors } from "../../shared/data/drugWide.js"
-import { thaiDateRange } from "../../shared/utils/formatDate.js"
-import PeriodBadge from "../../shared/ui/PeriodBadge.jsx"
-import UnifiedHero from "../../shared/ui/UnifiedHero.jsx"
-import DateFilter from "../../shared/filters/DateFilter.jsx"
-import { formatThaiDate, formatPeriod, minMaxDate, getLastUploadDate } from "../../shared/utils/heroMeta.js"
-import { dateToFiscalYear } from "../../shared/utils/fiscalYear.js"
-import { filterByDateColumn } from "../../shared/filters/filterRows.js"
-import { useFilter } from "../../shared/state/FilterContext.jsx"
+import { useAuth, useData, usePresentation, useFilter } from '../../shared/state/contexts.js'
+import { supabase } from '../../shared/data/supabase.js'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, LabelList, Sector } from 'recharts'
+import { TrendingUp, CheckCircle2, Clock, MapPin, User, Users, ArrowRightLeft, Ban, ArrowRight, Trophy, ChevronDown, X, Search, AlertTriangle, BarChart2, FileText, ExternalLink } from 'lucide-react'
+import * as stats from '../../shared/utils/statistics.js'
+import PresentationBar from '../../shared/ui/PresentationBar.jsx'
+import PresentationSlides from '../../shared/ui/PresentationSlides.jsx'
+import { BEHAVIOR_COLORS, BKK_GROUPS, DNAME_TO_GROUP } from '../../shared/utils/constants.js'
+import { fetchAllPages } from '../../shared/data/supabasePagination.js'
+import { deriveBehaviors } from '../../shared/data/drugWide.js'
+import { thaiDateRange } from '../../shared/utils/formatDate.js'
+import PeriodBadge from '../../shared/ui/PeriodBadge.jsx'
+import UnifiedHero from '../../shared/ui/UnifiedHero.jsx'
+import DateFilter from '../../shared/filters/DateFilter.jsx'
+import { formatThaiDate, formatPeriod, minMaxDate, getLastUploadDate } from '../../shared/utils/heroMeta.js'
+import { dateToFiscalYear } from '../../shared/utils/fiscalYear.js'
+import { filterByDateColumn } from '../../shared/filters/filterRows.js'
 
 const OVERVIEW_SOURCE_INFO = {
   title: 'แหล่งข้อมูล · ภาพรวม',
@@ -199,7 +189,7 @@ export default function Overview() {
   }, [])
 
   // ── DateFilter (page-level) — กรอง complaints + drug_incidents ที่ source ──
-  const rawData = records ?? []
+  const rawData = records
   const { getDateRange } = useFilter()
   const range = getDateRange()
   const data = useMemo(() => filterByDateColumn(rawData, 'date', range), [rawData, range])
@@ -208,11 +198,11 @@ export default function Overview() {
     const s = new Set()
     rawData.forEach(r => { const fy = dateToFiscalYear(r.date); if (fy) s.add(fy) })
     return [...s].sort((a, b) => b - a)
-  }, [records])
+  }, [rawData])
 
   // ── existing computed values ───────────────────────────────────────────────
-  const heroPeriod = useMemo(() => { const { min, max } = minMaxDate(rawData, 'date'); return formatPeriod(min, max) }, [records])
-  const years = useMemo(() => stats.getYears(rawData), [records])
+  const heroPeriod = useMemo(() => { const { min, max } = minMaxDate(rawData, 'date'); return formatPeriod(min, max) }, [rawData])
+  const years = useMemo(() => stats.getYears(rawData), [rawData])
 
   const filteredRecords = data
 
@@ -1418,7 +1408,7 @@ function StatCard({ icon, label, value, unit, color, onClick }) {
   )
 }
 
-function PieTooltipCard({ label, value, pct, color, total, rank, rankOfTotal, mouseX, mouseY }) {
+function PieTooltipCard({ label, value, pct, color, rank, rankOfTotal, mouseX, mouseY }) {
   const W = 232
   const vw = window.innerWidth, vh = window.innerHeight
   const OFF = 22

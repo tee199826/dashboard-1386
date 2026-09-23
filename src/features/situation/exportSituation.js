@@ -1,12 +1,13 @@
-import { createWorksheetWriter } from "../../shared/export/excelReportSheet.js"
+import { createWorksheetWriter, styleExcelHeader as styleHeaderRow } from '../../shared/export/excelReportSheet.js'
+import ExcelJS from 'exceljs'
+import { downloadBlob, XLSX_MIME } from '../../shared/export/downloadBlob.js'
+import { formatThaiDate, formatThaiDateTime } from '../../shared/utils/heroMeta.js'
+import { DNAME_TO_GROUP } from '../../shared/utils/constants.js'
+import { BEHAVIOR_FLAGS, DRUG_FLAGS, RESULT_FLAGS, countFlag, drugCounts, rowsWithAnyDrug } from '../../shared/data/drugFlags.js'
+import { DIMENSION_LABEL } from './treatmentData.js'
+
 // exportSituation.js — Excel export ของหน้า /situation (จับกุม/บำบัด/ร้องเรียน, ตาราง drug_incidents)
 // รับแถวที่ filter ตาม view ปัจจุบันแล้วจากหน้าที่เรียก (ไม่ query เอง) — ตัวเลขตรงกับที่ user เห็นบนจอเสมอ
-import ExcelJS from 'exceljs'
-import { downloadBlob, XLSX_MIME } from "../../shared/export/downloadBlob.js"
-import { formatThaiDate, formatThaiDateTime } from "../../shared/utils/heroMeta.js"
-import { DNAME_TO_GROUP } from "../../shared/utils/constants.js"
-import { BEHAVIOR_FLAGS, DRUG_FLAGS, RESULT_FLAGS, countFlag, drugCounts, rowsWithAnyDrug } from "../../shared/data/drugFlags.js"
-import { DIMENSION_LABEL } from "./treatmentData.js"
 
 const DISTRICT_ALIAS = { 'เขตราษฎร์บูรณะ': 'เขตราษฏร์บูรณะ' }
 const groupOf = (d) => DNAME_TO_GROUP[DISTRICT_ALIAS[d] || d] || 'ไม่ระบุ'
@@ -21,19 +22,9 @@ function drugLabel(r) {
   return out.length ? out.join(', ') : '-'
 }
 
-function styleHeaderRow(row) {
-  row.eachCell((cell) => {
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }
-    cell.alignment = { vertical: 'middle' }
-  })
-}
-
 const PCT_COLUMNS = new Set(['%'])
 const isNumericHeader = (h) => !PCT_COLUMNS.has(h) && ['จำนวน', 'จำนวนคดี', 'ผู้ต้องหา(คน)', 'จำนวนผู้บำบัด', 'รายเก่า', 'รายใหม่'].includes(h)
 const writeSheet = createWorksheetWriter({ percentColumns: PCT_COLUMNS, isNumericHeader, styleHeaderRow })
-
-
 
 function buildMeta(rows, periodLabel, filterLabel, extraLine) {
   const meta = [

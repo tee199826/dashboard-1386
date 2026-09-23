@@ -1,3 +1,5 @@
+
+
 // pixelMapTiles.js — raster basemap วางใต้ pixel map
 // tile คำนวณจาก standard Web Mercator slippy-map grid แล้ว project มุมแต่ละ tile ผ่าน equirectangular
 // projection เดียวกับ district polygons (makeProjection) — ภาพจึงถูกยืด/บีบเล็กน้อยให้พอดีกรอบเขต

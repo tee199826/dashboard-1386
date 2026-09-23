@@ -1,12 +1,12 @@
-import { createContext, useContext, useState, useEffect, useMemo } from 'react'
-import { loadAllData } from "../data/dataLoader.js"
+import { DataContext } from './contexts.js'
+import { useAsyncResource } from '../data/useAsyncResource.js'
+import { useState, useMemo } from 'react'
+import { loadAllData } from '../data/dataLoader.js'
 
-const DataContext = createContext(null)
+const loadRecords = async () => (await loadAllData()).records
 
 export function DataProvider({ children }) {
-  const [records, setRecords] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const { data: records, loading: isLoading, error, reload } = useAsyncResource(loadRecords)
   const [filters, setFilters] = useState({
     year: 'all',
     month: 'all',
@@ -14,24 +14,6 @@ export function DataProvider({ children }) {
     district: 'all',
     channel: 'all',
   })
-
-  const reload = async () => {
-    setIsLoading(true)
-    setError(null)
-    try {
-      const result = await loadAllData()
-      setRecords(result.records)
-    } catch (err) {
-      console.error(err)
-      setError(err.message)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    reload()
-  }, [])
 
   const filteredRecords = useMemo(() => {
     return records.filter(r => {
@@ -62,10 +44,4 @@ export function DataProvider({ children }) {
       {children}
     </DataContext.Provider>
   )
-}
-
-export function useData() {
-  const ctx = useContext(DataContext)
-  if (!ctx) throw new Error('useData must be inside <DataProvider>')
-  return ctx
 }

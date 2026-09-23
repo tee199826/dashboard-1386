@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { GripVertical, Eye, EyeOff, Trash2, Upload } from 'lucide-react'
-import { DATA_SOURCES } from "../../shared/geo/pixelMapData.js"
-import { ROSE_DEFAULT } from "./usePixelMapState.js"
-import ColorSwatch from "./ColorSwatch.jsx"
+import { DATA_SOURCES } from '../../shared/geo/pixelMapData.js'
+import { ROSE_DEFAULT } from './usePixelMapState.js'
+import ColorSwatch from './ColorSwatch.jsx'
 
 function LayerRow({ layer, draggable, dragOver, onDragStart, onDragOver, onDrop, onDragEnd, onToggleVisible, onUpdate, onRemove }) {
   const sourceLabel = layer.source === 'import' ? 'ไฟล์นำเข้า' : DATA_SOURCES.find(s => s.id === layer.source)?.label ?? layer.source

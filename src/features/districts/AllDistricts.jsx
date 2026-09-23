@@ -1,28 +1,22 @@
+import { HeroChip } from '../../shared/ui/HeroActions.jsx'
 import { cloneElement, useMemo, useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import {
-  ArrowLeft, Search, MapPin, AlertTriangle, Info, ChevronRight, ChevronDown, Trophy, Clock,
-  BarChart3, PieChart as PieIcon, Grid3X3, Layers, CalendarRange, Download, X,
-} from 'lucide-react'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  AreaChart, Area, PieChart, Pie, Cell, Legend, LabelList,
-} from 'recharts'
-import { useData } from "../../shared/state/DataContext.jsx"
-import { fetchAllPages } from "../../shared/data/supabasePagination.js"
-import { deriveBehaviors } from "../../shared/data/drugWide.js"
-import { getDistrictMetrics } from "../../shared/utils/statistics.js"
-import { DNAME_TO_GROUP } from "../../shared/utils/constants.js"
-import { escapeHtml } from "../../shared/security/escapeHtml.js"
-import { supabase } from "../../shared/data/supabase.js"
-import { formatThaiDate, formatPeriod, minMaxDate, getLastUploadDate } from "../../shared/utils/heroMeta.js"
-import { dateToFiscalYear } from "../../shared/utils/fiscalYear.js"
-import { filterByDateColumn } from "../../shared/filters/filterRows.js"
-import { useFilter } from "../../shared/state/FilterContext.jsx"
-import { exportDrugIncidentReport, DRUG_INCIDENT_EXPORT_COLUMNS } from "../../shared/export/exportReport.js"
-import IncidentMap from "../../shared/geo/IncidentMap.jsx"
-import DateFilter from "../../shared/filters/DateFilter.jsx"
-import ExportDialog from "../../shared/export/ExportDialog.jsx"
+import { ArrowLeft, Search, MapPin, AlertTriangle, Info, ChevronRight, ChevronDown, Trophy, Clock, BarChart3, PieChart as PieIcon, Grid3X3, Layers, CalendarRange, Download, X } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell, Legend, LabelList } from 'recharts'
+import { useData, useFilter } from '../../shared/state/contexts.js'
+import { fetchAllPages } from '../../shared/data/supabasePagination.js'
+import { deriveBehaviors } from '../../shared/data/drugWide.js'
+import { getDistrictMetrics } from '../../shared/utils/statistics.js'
+import { DNAME_TO_GROUP } from '../../shared/utils/constants.js'
+import { escapeHtml } from '../../shared/security/escapeHtml.js'
+import { supabase } from '../../shared/data/supabase.js'
+import { formatThaiDate, formatPeriod, minMaxDate, getLastUploadDate } from '../../shared/utils/heroMeta.js'
+import { dateToFiscalYear } from '../../shared/utils/fiscalYear.js'
+import { filterByDateColumn } from '../../shared/filters/filterRows.js'
+import { exportDrugIncidentReport, DRUG_INCIDENT_EXPORT_COLUMNS } from '../../shared/export/exportReport.js'
+import IncidentMap from '../../shared/geo/IncidentMap.jsx'
+import DateFilter from '../../shared/filters/DateFilter.jsx'
+import ExportDialog from '../../shared/export/ExportDialog.jsx'
 
 // ── Palette (จำกัด: violet / emerald / rose / slate / amber) ──
 const C = {
@@ -145,7 +139,7 @@ export default function AllDistricts() {
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState('incidents')
   const [metric, setMetric] = useState('incidents')
-  const [selectedDistrict, setSelectedDistrict] = useState(null)
+  const [selectedDistrict, setSelectedDistrict] = useState(() => searchParams.get('district'))
   const [selectedGroup, setSelectedGroup] = useState(null)        // cross-filter จาก donut / dropdown บนหัวหน้า
   // เขตใน dropdown — จำกัดตามกลุ่มที่เลือก แล้วเรียงตามตัวอักษรไทย
   const districtOptions = useMemo(() => Object.keys(DNAME_TO_GROUP)
@@ -178,7 +172,7 @@ export default function AllDistricts() {
   // deep link จากหน้าอื่น (เช่น /pixel-map bubble tooltip): ?district=เขตประเวศ → เลือก + เลื่อนไปแผนที่ให้ทันที
   useEffect(() => {
     const d = searchParams.get('district')
-    if (d) { setSelectedDistrict(d); mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+    if (d) mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { getDateRange, state } = useFilter()
@@ -801,9 +795,7 @@ function AnimatedCounter({ value, duration = 800 }) {
 }
 
 // ── premium hero — mesh orbs + noise + glass chips ──
-function HeroChip({ icon, children }) {
-  return <span className="inline-flex items-center gap-1.5 text-xs text-white/90 bg-white/10 backdrop-blur-md ring-1 ring-white/20 rounded-full px-3 py-1.5">{icon}{children}</span>
-}
+
 // dropdown บนหัวหน้า — ผูกกับ cross-filter ตัวเดียวกับที่คลิกโดนัท/แผนที่
 function HeroSelect({ label, value, onChange, options, placeholder }) {
   return (

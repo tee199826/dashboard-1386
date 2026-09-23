@@ -1,7 +1,8 @@
+import { DNAME_TO_GROUP } from '../../shared/utils/constants.js'
+import { DRUG_FLAGS } from '../../shared/data/drugFlags.js'
+
 // intelOptions — ค่าคงที่ + helper ของฟอร์มบันทึกข้อมูล (ฐานข้อมูลการข่าว)
 // แยกจากไฟล์ component เพราะไฟล์ component ควร export เฉพาะ component (ไม่งั้น fast-refresh พัง)
-import { DNAME_TO_GROUP } from "../../shared/utils/constants.js"
-import { DRUG_FLAGS } from "../../shared/data/drugFlags.js"
 
 // 50 เขต กทม. เรียงตามตัวอักษรไทย
 export const DISTRICTS = Object.keys(DNAME_TO_GROUP).sort((a, b) => a.localeCompare(b, 'th'))

@@ -1,12 +1,10 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
-import { supabase } from "../../shared/data/supabase.js"
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell,
-} from 'recharts'
+import { useCallback, useState, useEffect, useMemo } from 'react'
+import { useAsyncResource, EMPTY_ROWS } from '../../shared/data/useAsyncResource.js'
+import { supabase } from '../../shared/data/supabase.js'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { AlertCircle, CheckCircle2, TrendingUp, Activity, Clock, BarChart2 } from 'lucide-react'
-import { MONTH_LONG } from "../../shared/utils/constants.js"
-import PeriodBadge from "../../shared/ui/PeriodBadge.jsx"
+import { MONTH_LONG } from '../../shared/utils/constants.js'
+import PeriodBadge from '../../shared/ui/PeriodBadge.jsx'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const fmtThai = iso => {
@@ -199,9 +197,7 @@ export default function Rpt114Dashboard({ years: yearsProp, onYearsChange, yearO
     else setLocalYear(v === 'all' ? 'all' : Number(v))
     if (v === 'all') setCompareOn(false)
   }
-  const [rows,         setRows]         = useState([])
   const [prevRows,     setPrevRows]     = useState([])
-  const [loading,      setLoading]      = useState(true)
   const [ownLastUpdated, setLastUpdated] = useState(null)
   const lastUpdated = lastUpdatedProp !== undefined ? lastUpdatedProp : ownLastUpdated
 
@@ -222,21 +218,17 @@ export default function Rpt114Dashboard({ years: yearsProp, onYearsChange, yearO
   }, [yearOptions, lastUpdatedProp])
 
   // fetch rows (ทุกปี / ปีเดียว / หลายปี) — reqId กัน response เก่ามาทีหลัง
-  const reqIdRef = useRef(0)
-  useEffect(() => {
-    const reqId = ++reqIdRef.current
-    setLoading(true)
-    const doFetch = async () => {
-      let q = supabase.from('report_114').select('*')
-      if (selectedYears?.length === 1) q = q.eq('fiscal_year', selectedYears[0])
-      else if (selectedYears?.length > 1) q = q.in('fiscal_year', selectedYears)
-      const { data } = selectedYears?.length === 0 ? { data: [] } : await q
-      if (reqId !== reqIdRef.current) return
-      setRows(data ?? [])
-      setLoading(false)
-    }
-    doFetch()
+  const loadRows = useCallback(async () => {
+    if (selectedYears?.length === 0) return []
+    let query = supabase.from('report_114').select('*')
+    if (selectedYears?.length === 1) query = query.eq('fiscal_year', selectedYears[0])
+    else if (selectedYears?.length > 1) query = query.in('fiscal_year', selectedYears)
+    const { data, error } = await query
+    if (error) throw error
+    return data ?? []
   }, [selectedYears])
+  const { data: loadedRows, loading, error } = useAsyncResource(loadRows)
+  const rows = error ? EMPTY_ROWS : loadedRows
 
   // ปีก่อนหน้าสำหรับเทียบ — แยกจาก rows จะได้ไม่ refetch rows ตอน years/compareOn เปลี่ยน
   const prevYear = (compareOn && single != null && years.length >= 2) ? (years.find(y => y < single) ?? null) : null

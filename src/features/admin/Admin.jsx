@@ -1,16 +1,15 @@
-/* global __BUILD_HASH__, __BUILD_DATE__ */
+import { HeroChip } from '../../shared/ui/HeroActions.jsx'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Settings, RefreshCw, Upload, Download, Bug, Clock, Database, AlertTriangle,
-  CalendarRange, BarChart3, FileText, Server, ArrowRight,
-} from 'lucide-react'
+import { Settings, RefreshCw, Upload, Download, Bug, Clock, Database, AlertTriangle, CalendarRange, BarChart3, FileText, Server, ArrowRight } from 'lucide-react'
 import { BarChart, Bar, ResponsiveContainer, Tooltip, Cell } from 'recharts'
-import { supabase } from "../../shared/data/supabase.js"
-import { fetchAllPages } from "../../shared/data/supabasePagination.js"
-import { formatThaiDate } from "../../shared/utils/heroMeta.js"
-import { dateToFiscalYear } from "../../shared/utils/fiscalYear.js"
-import { downloadBlob } from "../../shared/export/downloadBlob.js"
+import { supabase } from '../../shared/data/supabase.js'
+import { fetchAllPages } from '../../shared/data/supabasePagination.js'
+import { formatThaiDate } from '../../shared/utils/heroMeta.js'
+import { dateToFiscalYear } from '../../shared/utils/fiscalYear.js'
+import { downloadBlob } from '../../shared/export/downloadBlob.js'
+
+/* global __BUILD_HASH__, __BUILD_DATE__ */
 
 const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : 'dev'
 const BUILD_DATE = typeof __BUILD_DATE__ !== 'undefined' ? __BUILD_DATE__ : ''
@@ -195,10 +194,6 @@ export default function Admin() {
       </div>
     </div>
   )
-}
-
-function HeroChip({ icon, children }) {
-  return <span className="inline-flex items-center gap-1.5 text-xs text-white/90 bg-white/10 backdrop-blur-md ring-1 ring-white/20 rounded-full px-3 py-1.5">{icon}{children}</span>
 }
 
 function Section({ emoji, title, id, children }) {

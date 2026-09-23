@@ -1,10 +1,10 @@
 import { useMemo, useRef, useState } from 'react'
 import { Plus, X, Scale } from 'lucide-react'
-import MapCanvas from "./MapCanvas.jsx"
-import ColorSwatch from "./ColorSwatch.jsx"
-import DistrictPicker from "./DistrictPicker.jsx"
-import CompareSummary from "./CompareSummary.jsx"
-import { PINNED_STROKES } from "./pixelMapStyle.js"
+import MapCanvas from './MapCanvas.jsx'
+import ColorSwatch from './ColorSwatch.jsx'
+import DistrictPicker from './DistrictPicker.jsx'
+import CompareSummary from './CompareSummary.jsx'
+import { PINNED_STROKES } from './pixelMapStyle.js'
 
 const PANEL_ASPECT = 1.29
 const PANEL_GAP = 16

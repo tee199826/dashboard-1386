@@ -1,6 +1,6 @@
-import { useState } from "react"
-import { FileText, ChevronDown, BookOpen, Sparkles } from "lucide-react"
-import { FLOW_COLORS, FLOW_MAP } from "./uploadConfig.js"
+import { useState } from 'react'
+import { FileText, ChevronDown, BookOpen, Sparkles } from 'lucide-react'
+import { FLOW_COLORS, FLOW_MAP } from './uploadConfig.js'
 
 export function DataFlowGuide() {
   // default: เปิดบน tablet+ (≥768px), ปิดบน mobile

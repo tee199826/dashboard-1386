@@ -1,4 +1,4 @@
-import { MONTH_TH_SHORT } from "../../shared/utils/constants.js"
+import { MONTH_TH_SHORT } from '../../shared/utils/constants.js'
 
 export const GROUPS = [
   { v: 1, l: '1 - พบพฤติการณ์' },

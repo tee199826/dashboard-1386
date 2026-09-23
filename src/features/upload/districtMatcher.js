@@ -1,8 +1,8 @@
+import booleanPointInPolygon from '@turf/boolean-point-in-polygon'
+
 // districtMatcher — แมปพิกัด (lat/lng) → ชื่อเขต กทม. ด้วย point-in-polygon
 // โหลด /bangkok-districts.geojson ครั้งเดียว (lazy + cache ระดับ module)
 // field ชื่อเขตใน properties = "dname" (มี prefix "เขต", ยืนยันแล้ว 50 เขต)
-
-import booleanPointInPolygon from '@turf/boolean-point-in-polygon'
 
 const GEOJSON_URL = '/bangkok-districts.geojson'
 const DNAME_KEY = 'dname'

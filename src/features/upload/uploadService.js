@@ -1,6 +1,6 @@
-import { supabase } from "../../shared/data/supabase.js"
-import { flattenSubstanceUserRow } from "./importEngine.js"
-import { clearPixelMapDataCache } from "../../shared/geo/pixelMapData.js"
+import { supabase } from '../../shared/data/supabase.js'
+import { flattenSubstanceUserRow } from './importEngine.js'
+import { clearPixelMapDataCache } from '../../shared/geo/pixelMapData.js'
 
 const UPSERT_BATCH = 500
 

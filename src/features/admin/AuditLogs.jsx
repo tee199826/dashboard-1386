@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react'
-import { supabase } from "../../shared/data/supabase.js"
+import { useAsyncResource } from '../../shared/data/useAsyncResource.js'
+import { supabase } from '../../shared/data/supabase.js'
 import { RefreshCw } from 'lucide-react'
+
+async function loadRows() {
+  const { data, error } = await supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(500)
+  if (error) throw error
+  return data || []
+}
 
 const ACTION_LABELS = {
   login:  { l: 'เข้าสู่ระบบ',   c: 'bg-emerald-50 text-emerald-700' },
@@ -12,24 +18,14 @@ const ACTION_LABELS = {
 }
 
 export default function AuditLogs() {
-  const [logs, setLogs] = useState([])
-  const [loading, setLoading] = useState(true)
-
-  const load = async () => {
-    setLoading(true)
-    const { data } = await supabase
-      .from('audit_logs').select('*').order('created_at', { ascending: false }).limit(500)
-    setLogs(data || [])
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
+  const { data: logs, loading, error, reload: load } = useAsyncResource(loadRows)
 
   const formatTime = ts =>
     new Date(ts).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-[1400px] mx-auto bg-slate-50 min-h-screen space-y-8" style={{ fontFamily: 'Sarabun, sans-serif' }}>
+      {error && <p role="alert" className="text-rose-700 text-sm">ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่</p>}
       <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-blue-800 rounded-2xl px-6 pt-8 pb-10 text-white shadow-2xl overflow-hidden relative">
         <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 80% 50%, white 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
         <div className="relative flex flex-wrap items-center justify-between gap-4">

@@ -1,3 +1,5 @@
+
+
 // เพดานไฟล์นำเข้า (SEC-11) — ตรวจจาก metadata ก่อน file.arrayBuffer() เพื่อไม่ให้ไฟล์ใหญ่/ผิดชนิด
 // ถูกอ่านทั้งก้อนเข้าหน่วยความจำแล้วส่งเข้า parser (XLSX.read ทำงาน synchronous บน main thread)
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024   // 25 MiB — ไฟล์รายงานจริงอยู่หลัก KB–ต้น MB

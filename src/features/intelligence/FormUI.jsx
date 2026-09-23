@@ -1,7 +1,8 @@
-// FormUI — primitives ของฟอร์มบันทึกข้อมูล (ฐานข้อมูลการข่าว)
-// ดีไซน์เข้าชุดกับหน้าอื่น: การ์ดขอบบาง มุมมน ตัวเลข tabular-nums
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Plus, Trash2, Check, AlertTriangle, Loader2 } from 'lucide-react'
+
+// FormUI — primitives ของฟอร์มบันทึกข้อมูล (ฐานข้อมูลการข่าว)
+// ดีไซน์เข้าชุดกับหน้าอื่น: การ์ดขอบบาง มุมมน ตัวเลข tabular-nums
 
 // หมายเหตุ: merge className ไม่ให้ props ทับ — ไม่งั้นส่ง className เข้ามาแล้วสไตล์พื้นฐานหายทั้งหมด
 // ช่องกรอกสูง 40px — ฟอร์มซักผู้เสพยาวเกือบร้อยช่อง ช่องเตี้ยกว่านี้กดพลาด/อ่านยากเวลานั่งกรอกไปคุยไป

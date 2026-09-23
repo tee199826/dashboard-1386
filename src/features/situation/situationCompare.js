@@ -1,7 +1,8 @@
+import { getFiscalYearRange } from '../../shared/utils/fiscalYear.js'
+import { filterByDateColumn } from '../../shared/filters/filterRows.js'
+import { groupOf } from '../../shared/filters/useAreaCascade.js'
+
 // situationCompare.js — เปรียบเทียบปีงบก่อน + เขต top3 ใช้ร่วม ArrestSection/IncidentsSection (หน้า /situation)
-import { getFiscalYearRange } from "../../shared/utils/fiscalYear.js"
-import { filterByDateColumn } from "../../shared/filters/filterRows.js"
-import { groupOf } from "../../shared/filters/useAreaCascade.js"
 
 // แถวผ่านตัวกรองพื้นที่ (กลุ่ม/เขต/แขวง/ชุมชน) ปัจจุบันของ cascade หรือไม่ — ไม่ผ่านตัวกรองเวลา (ใช้เทียบข้ามปีงบ)
 // รับ allRows (raw, ยังไม่ผ่าน bkkRows cleanup ของ useAreaCascade) จึงต้องกัน district ขยะ/ต่างจังหวัดเองที่นี่ด้วย

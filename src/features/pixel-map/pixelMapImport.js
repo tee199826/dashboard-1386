@@ -1,8 +1,9 @@
+import * as XLSX from 'xlsx'
+import { DNAME_TO_GROUP } from '../../shared/utils/constants.js'
+
 // pixelMapImport.js — นำเข้าไฟล์ Excel/CSV ของผู้ใช้มาเป็น data overlay ของ /pixel-map
 // ผลลัพธ์มี shape เดียวกับ getDistrictCounts() คือ { counts: {'เขตXXX': number}, max }
 // MapCanvas จึงวาดได้ทันที ไม่ต้องรู้ว่าข้อมูลมาจาก Supabase หรือจากไฟล์
-import * as XLSX from 'xlsx'
-import { DNAME_TO_GROUP } from "../../shared/utils/constants.js"
 
 export const MAX_IMPORT_BYTES = 10 * 1024 * 1024 // 10 MB — ไฟล์สรุประดับเขตไม่ควรใหญ่กว่านี้
 export const ACCEPT_IMPORT = '.xlsx,.xls,.csv'

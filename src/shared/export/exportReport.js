@@ -1,10 +1,13 @@
-import { createWorksheetWriter } from "./excelReportSheet.js"
+import { createWorksheetWriter, styleExcelHeader } from './excelReportSheet.js'
+import ExcelJS from 'exceljs'
+import { downloadBlob, XLSX_MIME } from './downloadBlob.js'
+import { formatThaiDate, formatThaiDateTime } from '../utils/heroMeta.js'
+import { DNAME_TO_GROUP } from '../utils/constants.js'
+
+const styleHeaderRow = row => styleExcelHeader(row, 'FF7C3AED')
+
 // exportReport.js — multi-sheet Excel export ของรายงาน drug_incidents (ใช้ร่วม /districts, /bkn, /radar)
 // รับ "แถวที่ filter ตาม view ปัจจุบันแล้ว" จากหน้าที่เรียก (ไม่ query เอง) — รับประกันตัวเลขตรงกับที่ user เห็นบนจอ
-import ExcelJS from 'exceljs'
-import { downloadBlob, XLSX_MIME } from "./downloadBlob.js"
-import { formatThaiDate, formatThaiDateTime } from "../utils/heroMeta.js"
-import { DNAME_TO_GROUP } from "../utils/constants.js"
 
 const BEHAVIOR_FLAGS = [
   ['beh_use', 'เสพ'], ['beh_sell', 'ค้า'], ['beh_use_sell', 'เสพ/ค้า'], ['beh_produce', 'ผลิต'],
@@ -94,14 +97,6 @@ function drugLabel(r) {
   const out = DRUG_FLAGS.filter(([col]) => r[col]).map(([, label]) => label)
   if (Array.isArray(r.drug_others)) out.push(...r.drug_others.filter(Boolean))
   return out.length ? out.join(', ') : '-'
-}
-
-function styleHeaderRow(row) {
-  row.eachCell((cell) => {
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7C3AED' } }
-    cell.alignment = { vertical: 'middle' }
-  })
 }
 
 // select string ครบทุก column ที่ derive logic ในไฟล์นี้ต้องใช้ — หน้าไหน fetch แบบ column แคบ (ไม่ใช่ '*')
@@ -322,7 +317,6 @@ const isNumericHeader = (h) => !PCT_COLUMNS.has(h) && [
 const writeSheet = createWorksheetWriter({ percentColumns: PCT_COLUMNS, isNumericHeader, styleHeaderRow })
 
 // ── เขียน 1 sheet: metadata N บรรทัด + header (bold+fill) + data, auto-width + number format ──
-
 
 // ── Sheet 5 "ข้อหา" — layout พิเศษ: note ทางกฎหมาย + ตารางหลัก + ตาราง breakdown รายเขต (2 header ในชีตเดียว) ──
 function writeChargeSheet(workbook, metaLines, { mainRows, districtRows }) {

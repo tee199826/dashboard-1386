@@ -1,13 +1,10 @@
+import ExcelJS from 'exceljs'
+import { REPORT_GROUPS } from './rptParser.js'
+import { BKN_OPTIONS, ALL_STATIONS, AREA_GROUP_OPTIONS, PLACE_TYPE_OPTIONS, PERSON_CATEGORY_OPTIONS, OFFICIAL_TYPE_OPTIONS, isResultReceived } from './rptEntryOptions.js'
+
 // rptExportSheet — ประกอบไฟล์ Excel ของหน้า /rpt-entry
 // แยกจาก rptEntryService เพราะไฟล์นี้ "ไม่ต่อฐานข้อมูล" จึงเทสใน node ได้ตรง ๆ
 // (เทสสร้างไฟล์จริงแล้วเปิดอ่านกลับ ตรวจว่าหัวคอลัมน์ครบและ dropdown ติดจริง)
-import ExcelJS from 'exceljs'
-import { REPORT_GROUPS } from "./rptParser.js"
-import {
-  BKN_OPTIONS, ALL_STATIONS, AREA_GROUP_OPTIONS,
-  PLACE_TYPE_OPTIONS, PERSON_CATEGORY_OPTIONS, OFFICIAL_TYPE_OPTIONS,
-  isResultReceived,
-} from "./rptEntryOptions.js"
 
 // คอลัมน์ "ครบตามหัวรายงาน ปปส." เรียงลำดับเหมือนไฟล์ต้นฉบับ แล้วต่อด้วยช่องที่ต้องกรอกเอง
 // [หัวคอลัมน์, คีย์ในข้อมูล, ตัวเลือก dropdown (ถ้ามี), ความกว้าง]

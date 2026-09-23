@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from 'react'
 import { Search, X, ChevronDown, ChevronRight } from 'lucide-react'
-import { subKey, communityKey } from "./usePixelMapState.js"
-import { buildAreaRows } from "../../shared/geo/pixelMapAreas.js"
+import { subKey, communityKey } from './usePixelMapState.js'
+import { buildAreaRows } from '../../shared/geo/pixelMapAreas.js'
 
 function Chip({ label, tone = 'violet', onRemove }) {
   const tones = {

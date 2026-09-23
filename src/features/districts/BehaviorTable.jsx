@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Download, Layers, Search } from 'lucide-react'
-import { fetchAllPages } from "../../shared/data/supabasePagination.js"
-import { deriveBehaviors } from "../../shared/data/drugWide.js"
-import { filterByDateColumn } from "../../shared/filters/filterRows.js"
-import { dateToFiscalYear } from "../../shared/utils/fiscalYear.js"
-import { useFilter } from "../../shared/state/FilterContext.jsx"
-import { formatThaiDate } from "../../shared/utils/heroMeta.js"
-import { DNAME_TO_GROUP } from "../../shared/utils/constants.js"
-import { exportBehaviorTable } from "../../shared/export/exportReport.js"
-import DateFilter from "../../shared/filters/DateFilter.jsx"
+import { fetchAllPages } from '../../shared/data/supabasePagination.js'
+import { deriveBehaviors } from '../../shared/data/drugWide.js'
+import { filterByDateColumn } from '../../shared/filters/filterRows.js'
+import { dateToFiscalYear } from '../../shared/utils/fiscalYear.js'
+import { useFilter } from '../../shared/state/contexts.js'
+import { formatThaiDate } from '../../shared/utils/heroMeta.js'
+import { DNAME_TO_GROUP } from '../../shared/utils/constants.js'
+import { exportBehaviorTable } from '../../shared/export/exportReport.js'
+import DateFilter from '../../shared/filters/DateFilter.jsx'
 
 const BEHAVIOR_COLS = [
   { key: 'เสพ', header: 'เสพ' },
@@ -52,8 +52,6 @@ export default function BehaviorTable() {
 
   const { getDateRange, state } = useFilter()
   const range = getDateRange()
-  const rFrom = range?.from
-  const rTo = range?.to
 
   const availableYears = useMemo(() => {
     const s = new Set()
@@ -61,7 +59,7 @@ export default function BehaviorTable() {
     return [...s].sort((a, b) => b - a)
   }, [rows])
 
-  const fRows = useMemo(() => filterByDateColumn(rows, 'received_date', range), [rows, rFrom, rTo])
+  const fRows = useMemo(() => filterByDateColumn(rows, 'received_date', range), [rows, range])
 
   // aggregate ทุก 50 เขต กทม. (pre-seed แล้ว filter startsWith('เขต') กันอำเภอนอกเขต/typo หลุดเข้าตาราง)
   const table = useMemo(() => {

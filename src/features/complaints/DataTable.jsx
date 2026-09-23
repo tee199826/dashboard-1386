@@ -1,15 +1,15 @@
-import { useData } from "../../shared/state/DataContext.jsx"
-import { useAuth } from "../../shared/state/AuthContext.jsx"
-import { deleteComplaint } from "../../shared/data/dataLoader.js"
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useAsyncResource } from '../../shared/data/useAsyncResource.js'
+import { useData, useAuth } from '../../shared/state/contexts.js'
+import { deleteComplaint } from '../../shared/data/dataLoader.js'
+import { useState, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Search, Filter, Plus, Download, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, RotateCcw, CheckCircle2, AlertCircle, ArrowUpDown } from "lucide-react"
-import Toast from "../../shared/ui/Toast.jsx"
+import { Search, Filter, Plus, Download, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, RotateCcw, CheckCircle2, AlertCircle, ArrowUpDown } from 'lucide-react'
+import Toast from '../../shared/ui/Toast.jsx'
 import * as XLSX from 'xlsx'
-import { SORT_OPTIONS, fetchSortedComplaints } from "./complaintTable.js"
-import { GROUPS, CHANNELS, formatThaiDate } from "./complaintFields.js"
-import { Modal, ViewModal, EditModal } from "./ComplaintRecordDialogs.jsx"
-import { AddDataModal } from "./AddDataModal.jsx"
+import { SORT_OPTIONS, fetchSortedComplaints } from './complaintTable.js'
+import { GROUPS, CHANNELS, formatThaiDate } from './complaintFields.js'
+import { Modal, ViewModal, EditModal } from './ComplaintRecordDialogs.jsx'
+import { AddDataModal } from './AddDataModal.jsx'
 
 export default function DataTable() {
   const { reload } = useData()
@@ -18,36 +18,23 @@ export default function DataTable() {
 
   // ── Sort state (drives direct Supabase query with .order()) ──────────────
   const [sortOrder, setSortOrder] = useState('created_at_desc')
-  const [tableRecords, setTableRecords] = useState([])
-  const [tableLoading, setTableLoading] = useState(false)
-
-  const fetchData = useCallback(async () => {
-    setTableLoading(true)
-    try {
-      const rows = await fetchSortedComplaints(sortOrder)
-      setTableRecords(rows)
-    } catch {
-      setTableRecords([])
-    } finally {
-      setTableLoading(false)
-    }
-  }, [sortOrder])
-
-  useEffect(() => { fetchData() }, [fetchData])
+  const loadRows = useCallback(() => fetchSortedComplaints(sortOrder).catch(() => []), [sortOrder])
+  const { data: tableRecords, loading: tableLoading, reload: fetchData } = useAsyncResource(loadRows)
 
   // ── Filter state ──────────────────────────────────────────────────────────
   const [filterDate, setFilterDate] = useState('')
   const [filterDistrict, setFilterDistrict] = useState('all')
   const [filterGroup, setFilterGroup] = useState('all')
   const [filterChannel, setFilterChannel] = useState('all')
-  const [filterStatus, setFilterStatus] = useState('all')
+  const statusParam = searchParams.get('status')
+  const [statusSelection, setStatusSelection] = useState({ query: statusParam, value: statusParam || 'all' })
+  const filterStatus = statusSelection.value
+  const setFilterStatus = value => setStatusSelection({ query: statusParam, value })
+  if (statusSelection.query !== statusParam) {
+    setStatusSelection({ query: statusParam, value: statusParam || statusSelection.value })
+  }
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
-
-  useEffect(() => {
-    const statusParam = searchParams.get('status')
-    if (statusParam) setFilterStatus(statusParam)
-  }, [searchParams])
 
   const [viewRow, setViewRow] = useState(null)
   const [editRow, setEditRow] = useState(null)

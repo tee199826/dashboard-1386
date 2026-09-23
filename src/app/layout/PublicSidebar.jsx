@@ -1,6 +1,6 @@
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { LogIn, Upload, Database, ScrollText, Users, Lock } from 'lucide-react'
-import { useAuth } from "../../shared/state/AuthContext.jsx"
+import { useAuth } from '../../shared/state/contexts.js'
 
 // โครงเมนูตาม mockup — section (หัวข้อใหญ่) → group (หัวข้อย่อย, label ไม่บังคับ) → item (ลิงก์)
 // item ที่ไม่มี `to` = ยังไม่มีหน้า (soon) แสดงเป็นสีจางกดไม่ได้ ไม่ใช่ลิงก์ตาย

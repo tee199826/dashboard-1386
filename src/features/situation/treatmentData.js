@@ -1,9 +1,10 @@
+import { groupOf } from '../../shared/filters/useAreaCascade.js'
+import { DONUT_SEQUENCE, DONUT_OTHER_COLOR } from '../../shared/utils/reportStyle.js'
+
 // treatmentData.js — filter/aggregate helpers สำหรับ treatment_summary + treatment_dim (บสต. กทม.)
 // ต่างจาก drug_incidents.action_treatment (เหตุการณ์ในระบบร้องเรียนที่จบด้วยบำบัด ~201 เรื่อง) — นี่คือสถิติบำบัดทางการจาก บสต. (5,996 ราย ปีงบ 2569)
 // district ในทั้ง 2 ตารางไม่มี "เขต" นำหน้า (เหมือน arrest_summary/arrest_drug) — ต้องเติมก่อนเทียบกับ cascade/groupOf
 // ไม่มี subdistrict/community ในระดับข้อมูลนี้ — matchesTreatmentArea เช็คแค่ กลุ่ม/เขต (แขวง/ชุมชน ถูก disable ที่ UI)
-import { groupOf } from "../../shared/filters/useAreaCascade.js"
-import { DONUT_SEQUENCE, DONUT_OTHER_COLOR } from "../../shared/utils/reportStyle.js"
 
 export const DIMENSION_LABEL = {
   drug: 'ตัวยา', section: 'มาตรา', occupation: 'อาชีพ', education: 'การศึกษา', status: 'สถานะ', sex: 'เพศ',

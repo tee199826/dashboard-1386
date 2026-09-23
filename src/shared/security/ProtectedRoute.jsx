@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom'
-import { useAuth } from "../state/AuthContext.jsx"
+import { useAuth } from '../state/contexts.js'
 import { Loader2 } from 'lucide-react'
 
 export function ProtectedRoute({ children }) {

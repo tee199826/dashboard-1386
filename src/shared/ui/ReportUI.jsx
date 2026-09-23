@@ -1,8 +1,9 @@
-// ReportUI — presentational primitives ของ /situation (จับกุม/บำบัด/ร้องเรียน)
-// ดีไซน์เรียบ/ทางการ: hairline card + accent น้ำเงินกรมเดียว · bar เป็น CSS (ไม่ใช้ Recharts) · tabular-nums ทุกตัวเลข
 import { useState, useRef } from 'react'
 import { Download, Table2, Image as ImageIcon, Scale } from 'lucide-react'
-import { COLORS, readableOn } from "../utils/reportStyle.js"
+import { COLORS, readableOn } from '../utils/reportStyle.js'
+
+// ReportUI — presentational primitives ของ /situation (จับกุม/บำบัด/ร้องเรียน)
+// ดีไซน์เรียบ/ทางการ: hairline card + accent น้ำเงินกรมเดียว · bar เป็น CSS (ไม่ใช้ Recharts) · tabular-nums ทุกตัวเลข
 
 const CARD = 'rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,22,38,0.05)]'
 

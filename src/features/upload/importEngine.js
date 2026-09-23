@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
-import { getDistrictFromLatLng } from "./districtMatcher.js"
-import { assertUploadFile, MAX_SHEET_ROWS } from "../../shared/security/uploadLimits.js"
+import { getDistrictFromLatLng } from './districtMatcher.js'
+import { assertUploadFile, MAX_SHEET_ROWS } from '../../shared/security/uploadLimits.js'
 
 // ─── Mapping ชื่อ header ภาษาไทย → ชื่อคอลัมน์ DB ───────────────────────────
 

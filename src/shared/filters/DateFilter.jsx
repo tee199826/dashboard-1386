@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { Calendar, ChevronDown, RotateCcw, Check } from 'lucide-react'
-import { useFilter } from "../state/FilterContext.jsx"
-import { getFiscalYearRange, dateToFiscalYear, localDateISO } from "../utils/fiscalYear.js"
-import { describeDateFilter } from "./dateFilterLabel.js"
+import { useFilter } from '../state/contexts.js'
+import { getFiscalYearRange, dateToFiscalYear, localDateISO } from '../utils/fiscalYear.js'
+import { describeDateFilter } from './dateFilterLabel.js'
 
 // DateFilter — secondary control, compact-first (pill + popover)
 // default = pill h-8 ; compact = pill h-7 (ใน chart card) ; popover เดียวกัน
@@ -21,7 +21,6 @@ const POPOVER_W = 288   // = w-72 ของ popover — ใช้คำนวณ
 // วันที่ตามเวลาเครื่อง (ไทย) — toISOString() เป็น UTC ช่วง 00:00–06:59 จะได้วันของเมื่อวาน
 const todayISO = () => localDateISO(new Date())
 const shiftDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return localDateISO(d) }
-
 
 function Popover({ availableYears, disabledModes, onClose, align = 'left' }) {
   const { state, setMode, setFiscalYears, toggleFiscalYear, setMonthYear, setMonth, setCustomFrom, setCustomTo, reset } = useFilter()

@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react"
-import { Upload, AlertTriangle, Sparkles } from "lucide-react"
-import Modal from "../../shared/ui/Modal.jsx"
-import { supabase } from "../../shared/data/supabase.js"
-import { TYPE_LABELS, TABLES } from "./uploadConfig.js"
-import { nowMs, fetchTableStat, detectFileType, uploadParsedFor, previewCount, recordWord } from "./uploadWorkflow.js"
-import { UploadResultModal } from "./UploadResultModal.jsx"
-import { ImpactedPages, FileDropzone, StatsBanner, RecentUploads } from "./UploadWidgets.jsx"
+import { useState, useEffect } from 'react'
+import { Upload, AlertTriangle, Sparkles } from 'lucide-react'
+import Modal from '../../shared/ui/Modal.jsx'
+import { supabase } from '../../shared/data/supabase.js'
+import { TYPE_LABELS, TABLES } from './uploadConfig.js'
+import { nowMs, fetchTableStat, detectFileType, uploadParsedFor, previewCount, recordWord } from './uploadWorkflow.js'
+import { UploadResultModal } from './UploadResultModal.jsx'
+import { ImpactedPages, FileDropzone, StatsBanner, RecentUploads } from './UploadWidgets.jsx'
 
 export function GuidedUpload({ navigate, reload }) {
   const [dbStats, setDbStats] = useState({})                 // table -> { count, lastUpload }

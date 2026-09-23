@@ -1,11 +1,12 @@
+import ExcelJS from 'exceljs'
+import { BEHAVIOR_FLAGS, nodeDetail, communityList, resolveAreaNode } from '../../shared/geo/pixelMapData.js'
+import { localDateISO } from '../../shared/utils/fiscalYear.js'
+import { formatThaiDate } from '../../shared/utils/heroMeta.js'
+import { DNAME_TO_GROUP } from '../../shared/utils/constants.js'
+
 // pixelMapExcel.js — Export Excel ของหน้า /pixel-map
 // ตัวเลขมาจาก hierarchy ชุดเดียวกับที่แผนที่และแผงรายละเอียดใช้ (ตามช่วงเวลาที่เลือก) จึงตรงกับบนจอเสมอ
 // ชีท: รายละเอียดพื้นที่ (พื้นที่ในแผง = ที่คลิกเลือกไว้ หรือเขตกลางแผนที่) / รายเขต / รายแขวง / รายชุมชน
-import ExcelJS from 'exceljs'
-import { BEHAVIOR_FLAGS, nodeDetail, communityList, resolveAreaNode } from "../../shared/geo/pixelMapData.js"
-import { localDateISO } from "../../shared/utils/fiscalYear.js"
-import { formatThaiDate } from "../../shared/utils/heroMeta.js"
-import { DNAME_TO_GROUP } from "../../shared/utils/constants.js"
 
 const LEVEL_LABEL = { district: 'เขต', subdistrict: 'แขวง', community: 'ชุมชน' }
 const HEADER_FILL = 'FF334155'

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, Crosshair, Download, Search, X } from 'lucide-react'
-import { aggregateAreas, areaName, AREA_LEVELS, BEHAVIOR_LABELS, isBkkDistrict } from "../../shared/geo/areaStats.js"
+import { aggregateAreas, areaName, AREA_LEVELS, BEHAVIOR_LABELS, isBkkDistrict } from '../../shared/geo/areaStats.js'
 
 const PAGE = 60
 
